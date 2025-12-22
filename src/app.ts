@@ -24,23 +24,18 @@ let strokeHistory: Stroke[] = [];
 
 // Two-finger drawing state
 let primaryPointerId: number | null = null;  // First finger
-let secondaryPointerId: number | null = null; // Second finger (triggers drawing)
 let primaryPos: Point | null = null;  // Current position of first finger
 let currentStroke: Stroke | null = null;  // Stroke being drawn
+let isDrawing = false;  // True once second finger has triggered drawing
 
 // Initialize custom color picker
 const colorPicker = createColorPicker(colorPickerEl, () => {});
 
-// Get vertical offset (1/10th of canvas height)
-function getOffset(): number {
-    return canvas.height / 10;
-}
-
-// Get offset position (above the actual touch)
+// Get offset position (up and left by 1/8th of canvas dimensions)
 function getOffsetPos(pos: Point): Point {
     return {
-        x: pos.x,
-        y: pos.y - getOffset()
+        x: pos.x - canvas.width / 8,
+        y: pos.y - canvas.height / 8
     };
 }
 
@@ -69,7 +64,7 @@ function redraw() {
     }
 
     // Draw preview dot if first finger is down but not drawing
-    if (primaryPos && !secondaryPointerId) {
+    if (primaryPos && !isDrawing) {
         const offsetPos = getOffsetPos(primaryPos);
         const size = parseInt(strokeSize.value);
         ctx.fillStyle = colorPicker.getColor();
@@ -116,7 +111,7 @@ function getPointerPos(e: PointerEvent): Point {
 function handlePointerDown(e: PointerEvent) {
     e.preventDefault();
 
-    // First finger
+    // First finger - track it as primary
     if (primaryPointerId === null) {
         primaryPointerId = e.pointerId;
         primaryPos = getPointerPos(e);
@@ -124,9 +119,9 @@ function handlePointerDown(e: PointerEvent) {
         return;
     }
 
-    // Second finger - start drawing
-    if (secondaryPointerId === null && primaryPos) {
-        secondaryPointerId = e.pointerId;
+    // Any additional finger while primary is down - start drawing (if not already)
+    if (!isDrawing && primaryPos) {
+        isDrawing = true;
         const offsetPos = getOffsetPos(primaryPos);
         currentStroke = {
             color: colorPicker.getColor(),
@@ -134,10 +129,9 @@ function handlePointerDown(e: PointerEvent) {
             points: [offsetPos]
         };
         redraw();
-        return;
     }
 
-    // Third+ fingers - ignore
+    // Additional fingers after drawing started - ignore
 }
 
 // Handle pointer move
@@ -149,8 +143,8 @@ function handlePointerMove(e: PointerEvent) {
 
     primaryPos = getPointerPos(e);
 
-    // If drawing (second finger is down), add point to stroke
-    if (secondaryPointerId !== null && currentStroke) {
+    // If drawing, add point to stroke
+    if (isDrawing && currentStroke) {
         const offsetPos = getOffsetPos(primaryPos);
         currentStroke.points.push(offsetPos);
     }
@@ -162,33 +156,19 @@ function handlePointerMove(e: PointerEvent) {
 function handlePointerUp(e: PointerEvent) {
     e.preventDefault();
 
-    // Primary finger lifted
-    if (e.pointerId === primaryPointerId) {
-        // Save stroke if we were drawing
-        if (currentStroke && currentStroke.points.length > 0) {
-            strokeHistory.push(currentStroke);
-            updateUndoButton();
-        }
-        // Reset everything
-        primaryPointerId = null;
-        secondaryPointerId = null;
-        primaryPos = null;
-        currentStroke = null;
-        redraw();
-        return;
-    }
+    // Only care about primary finger lifting
+    if (e.pointerId !== primaryPointerId) return;
 
-    // Secondary finger lifted - stop drawing but keep preview
-    if (e.pointerId === secondaryPointerId) {
-        if (currentStroke && currentStroke.points.length > 0) {
-            strokeHistory.push(currentStroke);
-            updateUndoButton();
-        }
-        secondaryPointerId = null;
-        currentStroke = null;
-        redraw(); // Will show preview dot again
-        return;
+    // Primary finger lifted - save stroke and reset everything
+    if (currentStroke && currentStroke.points.length > 0) {
+        strokeHistory.push(currentStroke);
+        updateUndoButton();
     }
+    primaryPointerId = null;
+    primaryPos = null;
+    currentStroke = null;
+    isDrawing = false;
+    redraw();
 }
 
 // Update undo button state
@@ -209,9 +189,9 @@ function undo() {
 function clearCanvas() {
     strokeHistory = [];
     primaryPointerId = null;
-    secondaryPointerId = null;
     primaryPos = null;
     currentStroke = null;
+    isDrawing = false;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     updateUndoButton();
 }
