@@ -63,21 +63,25 @@ function redraw() {
         drawStroke(currentStroke);
     }
 
-    // Draw preview dot if first finger is down but not drawing
-    if (primaryPos && !isDrawing) {
+    // Draw preview/indicator rings if first finger is down
+    if (primaryPos) {
         const offsetPos = getOffsetPos(primaryPos);
         const size = parseInt(strokeSize.value);
+        const drawColor = colorPicker.getColor();
+        const isWhite = drawColor.toUpperCase() === '#FFFFFF';
+        const outerColor = isWhite ? 'black' : drawColor;
 
-        // Draw dot with black and white outlines for visibility on any background
+        // Inner ring (white)
         ctx.beginPath();
         ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 2, 0, Math.PI * 2);
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
         ctx.stroke();
 
+        // Outer ring (draw color, or black if white)
         ctx.beginPath();
         ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = 'black';
+        ctx.strokeStyle = outerColor;
         ctx.lineWidth = 2;
         ctx.stroke();
     }
