@@ -67,10 +67,19 @@ function redraw() {
     if (primaryPos && !isDrawing) {
         const offsetPos = getOffsetPos(primaryPos);
         const size = parseInt(strokeSize.value);
-        ctx.fillStyle = colorPicker.getColor();
+
+        // Draw dot with black and white outlines for visibility on any background
         ctx.beginPath();
-        ctx.arc(offsetPos.x, offsetPos.y, size / 2, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 2, 0, Math.PI * 2);
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.stroke();
     }
 }
 
