@@ -1,6 +1,8 @@
+import { createColorPicker } from './colorPicker';
+
 const canvas = document.getElementById('drawingCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
-const colorPicker = document.getElementById('colorPicker') as HTMLInputElement;
+const colorPickerEl = document.getElementById('colorPicker') as HTMLElement;
 const strokeSize = document.getElementById('strokeSize') as HTMLInputElement;
 const sizeValue = document.getElementById('sizeValue') as HTMLSpanElement;
 const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
@@ -26,7 +28,9 @@ const activePointers = new Map<number, ActiveStroke>();
 
 // History for undo functionality
 let strokeHistory: Stroke[] = [];
-let currentStroke: ActiveStroke | null = null;
+
+// Initialize custom color picker
+const colorPicker = createColorPicker(colorPickerEl, () => {});
 
 // Resize canvas to fill window
 function resizeCanvas() {
@@ -73,7 +77,7 @@ function startDrawing(e: PointerEvent) {
     const pos = getPointerPos(e);
     const stroke = {
         pointerId: e.pointerId,
-        color: colorPicker.value,
+        color: colorPicker.getColor(),
         size: parseInt(strokeSize.value),
         points: [pos]
     };
