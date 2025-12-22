@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Multi-Touch Drawing App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="toolbar">
+        <div class="tool-group">
+            <label>Color:</label>
+            <input type="color" id="colorPicker" value="#000000">
+        </div>
+        <div class="tool-group">
+            <label>Size: <span id="sizeValue">5</span></label>
+            <input type="range" id="strokeSize" min="1" max="50" value="5">
+        </div>
+        <button id="undoBtn">Undo</button>
+        <button id="clearBtn">Clear</button>
+    </div>
+    <canvas id="drawingCanvas"></canvas>
+	<script type="module" src="src/app.ts"></script>
+</body>
+</html>
