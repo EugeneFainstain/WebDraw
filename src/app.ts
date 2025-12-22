@@ -1,10 +1,10 @@
-const canvas = document.getElementById('drawingCanvas');
-const ctx = canvas.getContext('2d');
-const colorPicker = document.getElementById('colorPicker');
-const strokeSize = document.getElementById('strokeSize');
-const sizeValue = document.getElementById('sizeValue');
-const undoBtn = document.getElementById('undoBtn');
-const clearBtn = document.getElementById('clearBtn');
+const canvas = document.getElementById('drawingCanvas') as HTMLCanvasElement;
+const ctx = canvas.getContext('2d')!;
+const colorPicker = document.getElementById('colorPicker') as HTMLInputElement;
+const strokeSize = document.getElementById('strokeSize') as HTMLInputElement;
+const sizeValue = document.getElementById('sizeValue') as HTMLSpanElement;
+const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
+const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 
 // Track active pointers for multi-touch
 const activePointers = new Map();
