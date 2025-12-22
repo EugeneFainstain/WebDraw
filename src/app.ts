@@ -1,10 +1,10 @@
 import { createColorPicker } from './colorPicker';
+import { createSizePicker } from './sizePicker';
 
 const canvas = document.getElementById('drawingCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const colorPickerEl = document.getElementById('colorPicker') as HTMLElement;
-const strokeSize = document.getElementById('strokeSize') as HTMLInputElement;
-const sizeValue = document.getElementById('sizeValue') as HTMLSpanElement;
+const sizePickerEl = document.getElementById('sizePicker') as HTMLElement;
 const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 
@@ -30,6 +30,11 @@ let isDrawing = false;  // True once second finger has triggered drawing
 
 // Initialize custom color picker
 const colorPicker = createColorPicker(colorPickerEl, () => {});
+
+// Initialize custom size picker
+const sizePicker = createSizePicker(sizePickerEl, () => {
+    redraw(); // Update preview dot size
+});
 
 // Get offset position (up and left by 1/8th of canvas dimensions)
 function getOffsetPos(pos: Point): Point {
@@ -66,7 +71,7 @@ function redraw() {
     // Draw preview/indicator rings if first finger is down
     if (primaryPos) {
         const offsetPos = getOffsetPos(primaryPos);
-        const size = parseInt(strokeSize.value);
+        const size = sizePicker.getSize();
         const drawColor = colorPicker.getColor();
         const isWhite = drawColor.toUpperCase() === '#FFFFFF';
         const outerColor = isWhite ? 'black' : drawColor;
@@ -138,7 +143,7 @@ function handlePointerDown(e: PointerEvent) {
         const offsetPos = getOffsetPos(primaryPos);
         currentStroke = {
             color: colorPicker.getColor(),
-            size: parseInt(strokeSize.value),
+            size: sizePicker.getSize(),
             points: [offsetPos]
         };
         redraw();
@@ -221,11 +226,6 @@ canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false 
 canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
 // UI controls
-strokeSize.addEventListener('input', () => {
-    sizeValue.textContent = strokeSize.value;
-    redraw(); // Update preview dot size
-});
-
 undoBtn.addEventListener('click', undo);
 clearBtn.addEventListener('click', clearCanvas);
 
