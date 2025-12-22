@@ -7,6 +7,7 @@ const colorPickerEl = document.getElementById('colorPicker') as HTMLElement;
 const sizePickerEl = document.getElementById('sizePicker') as HTMLElement;
 const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
+const liftModeCheckbox = document.getElementById('liftMode') as HTMLInputElement;
 
 interface Point {
     x: number;
@@ -24,9 +25,10 @@ let strokeHistory: Stroke[] = [];
 
 // Two-finger drawing state
 let primaryPointerId: number | null = null;  // First finger
+let secondaryPointerId: number | null = null;  // Second finger
 let primaryPos: Point | null = null;  // Current position of first finger
 let currentStroke: Stroke | null = null;  // Stroke being drawn
-let isDrawing = false;  // True once second finger has triggered drawing
+let isDrawing = false;  // True when actively drawing
 
 // Initialize custom color picker
 const colorPicker = createColorPicker(colorPickerEl, () => {});
@@ -137,19 +139,24 @@ function handlePointerDown(e: PointerEvent) {
         return;
     }
 
-    // Any additional finger while primary is down - start drawing (if not already)
-    if (!isDrawing && primaryPos) {
-        isDrawing = true;
-        const offsetPos = getOffsetPos(primaryPos);
-        currentStroke = {
-            color: colorPicker.getColor(),
-            size: sizePicker.getSize(),
-            points: [offsetPos]
-        };
+    // Second finger - track it and start drawing
+    if (secondaryPointerId === null && primaryPos) {
+        secondaryPointerId = e.pointerId;
+
+        if (!isDrawing) {
+            isDrawing = true;
+            const offsetPos = getOffsetPos(primaryPos);
+            currentStroke = {
+                color: colorPicker.getColor(),
+                size: sizePicker.getSize(),
+                points: [offsetPos]
+            };
+        }
         redraw();
+        return;
     }
 
-    // Additional fingers after drawing started - ignore
+    // Third+ fingers - ignore
 }
 
 // Handle pointer move
@@ -161,10 +168,13 @@ function handlePointerMove(e: PointerEvent) {
 
     primaryPos = getPointerPos(e);
 
-    // If drawing, add point to stroke
-    if (isDrawing && currentStroke) {
+    // Determine if we should add points to the stroke
+    const liftMode = liftModeCheckbox.checked;
+    const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
+
+    if (shouldDraw) {
         const offsetPos = getOffsetPos(primaryPos);
-        currentStroke.points.push(offsetPos);
+        currentStroke!.points.push(offsetPos);
     }
 
     redraw();
@@ -174,19 +184,37 @@ function handlePointerMove(e: PointerEvent) {
 function handlePointerUp(e: PointerEvent) {
     e.preventDefault();
 
-    // Only care about primary finger lifting
-    if (e.pointerId !== primaryPointerId) return;
+    const liftMode = liftModeCheckbox.checked;
+
+    // Secondary finger lifted
+    if (e.pointerId === secondaryPointerId) {
+        secondaryPointerId = null;
+
+        // In non-lift mode, save stroke when second finger lifts (but keep preview)
+        if (!liftMode && currentStroke && currentStroke.points.length > 0) {
+            strokeHistory.push(currentStroke);
+            updateUndoButton();
+            currentStroke = null;
+            isDrawing = false;
+        }
+
+        redraw();
+        return;
+    }
 
     // Primary finger lifted - save stroke and reset everything
-    if (currentStroke && currentStroke.points.length > 0) {
-        strokeHistory.push(currentStroke);
-        updateUndoButton();
+    if (e.pointerId === primaryPointerId) {
+        if (currentStroke && currentStroke.points.length > 0) {
+            strokeHistory.push(currentStroke);
+            updateUndoButton();
+        }
+        primaryPointerId = null;
+        secondaryPointerId = null;
+        primaryPos = null;
+        currentStroke = null;
+        isDrawing = false;
+        redraw();
     }
-    primaryPointerId = null;
-    primaryPos = null;
-    currentStroke = null;
-    isDrawing = false;
-    redraw();
 }
 
 // Update undo button state
@@ -207,6 +235,7 @@ function undo() {
 function clearCanvas() {
     strokeHistory = [];
     primaryPointerId = null;
+    secondaryPointerId = null;
     primaryPos = null;
     currentStroke = null;
     isDrawing = false;
