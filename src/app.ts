@@ -6,12 +6,27 @@ const sizeValue = document.getElementById('sizeValue') as HTMLSpanElement;
 const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 
+interface Point {
+    x: number;
+    y: number;
+}
+
+interface Stroke {
+    color: string;
+    size: number;
+    points: Point[];
+}
+
+interface ActiveStroke extends Stroke {
+    pointerId: number;
+}
+
 // Track active pointers for multi-touch
-const activePointers = new Map();
+const activePointers = new Map<number, ActiveStroke>();
 
 // History for undo functionality
-let history = [];
-let currentStroke = null;
+let strokeHistory: Stroke[] = [];
+let currentStroke: ActiveStroke | null = null;
 
 // Resize canvas to fill window
 function resizeCanvas() {
@@ -27,7 +42,7 @@ function redraw() {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    history.forEach(stroke => {
+    strokeHistory.forEach(stroke => {
         if (stroke.points.length < 2) return;
 
         ctx.strokeStyle = stroke.color;
@@ -43,7 +58,7 @@ function redraw() {
 }
 
 // Get pointer position relative to canvas
-function getPointerPos(e) {
+function getPointerPos(e: PointerEvent): Point {
     const rect = canvas.getBoundingClientRect();
     return {
         x: e.clientX - rect.left,
@@ -52,7 +67,7 @@ function getPointerPos(e) {
 }
 
 // Start drawing
-function startDrawing(e) {
+function startDrawing(e: PointerEvent) {
     e.preventDefault();
 
     const pos = getPointerPos(e);
@@ -67,7 +82,7 @@ function startDrawing(e) {
 }
 
 // Continue drawing
-function draw(e) {
+function draw(e: PointerEvent) {
     e.preventDefault();
 
     const stroke = activePointers.get(e.pointerId);
@@ -92,13 +107,13 @@ function draw(e) {
 }
 
 // Stop drawing
-function stopDrawing(e) {
+function stopDrawing(e: PointerEvent) {
     e.preventDefault();
 
     const stroke = activePointers.get(e.pointerId);
     if (stroke && stroke.points.length > 0) {
         // Save completed stroke to history
-        history.push({
+        strokeHistory.push({
             color: stroke.color,
             size: stroke.size,
             points: [...stroke.points]
@@ -111,13 +126,13 @@ function stopDrawing(e) {
 
 // Update undo button state
 function updateUndoButton() {
-    undoBtn.disabled = history.length === 0;
+    undoBtn.disabled = strokeHistory.length === 0;
 }
 
 // Undo last stroke
 function undo() {
-    if (history.length > 0) {
-        history.pop();
+    if (strokeHistory.length > 0) {
+        strokeHistory.pop();
         redraw();
         updateUndoButton();
     }
@@ -125,7 +140,7 @@ function undo() {
 
 // Clear canvas
 function clearCanvas() {
-    history = [];
+    strokeHistory = [];
     activePointers.clear();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     updateUndoButton();
