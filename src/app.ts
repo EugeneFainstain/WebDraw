@@ -23,20 +23,87 @@ interface Stroke {
 // History for undo functionality
 let strokeHistory: Stroke[] = [];
 
-// Two-finger drawing state
-let primaryPointerId: number | null = null;  // First finger
-let secondaryPointerId: number | null = null;  // Second finger
-let primaryPos: Point | null = null;  // Current position of first finger
-let currentStroke: Stroke | null = null;  // Stroke being drawn
-let isDrawing = false;  // True when actively drawing
+// Gesture mode
+type GestureMode = 'none' | 'waiting' | 'drawing' | 'transform';
+let gestureMode: GestureMode = 'none';
+let gestureTimer: number | null = null;
+const GESTURE_DELAY = 500; // ms to wait before entering drawing mode
+
+// Pointer tracking
+let primaryPointerId: number | null = null;
+let secondaryPointerId: number | null = null;
+let primaryPos: Point | null = null;
+let secondaryPos: Point | null = null;
+
+// Drawing state
+let currentStroke: Stroke | null = null;
+let isDrawing = false;
+
+// Transform state
+let viewTransform = {
+    scale: 1,
+    rotation: 0,  // in radians
+    panX: 0,
+    panY: 0
+};
+let transformStart: {
+    primaryPos: Point;
+    secondaryPos: Point;
+    distance: number;
+    angle: number;
+    midpoint: Point;
+    initialTransform: typeof viewTransform;
+} | null = null;
 
 // Initialize custom color picker
 const colorPicker = createColorPicker(colorPickerEl, () => {});
 
 // Initialize custom size picker
 const sizePicker = createSizePicker(sizePickerEl, () => {
-    redraw(); // Update preview dot size
+    redraw();
 });
+
+// Calculate distance between two points
+function getDistance(p1: Point, p2: Point): number {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Calculate angle between two points
+function getAngle(p1: Point, p2: Point): number {
+    return Math.atan2(p2.y - p1.y, p2.x - p1.x);
+}
+
+// Get midpoint between two points
+function getMidpoint(p1: Point, p2: Point): Point {
+    return {
+        x: (p1.x + p2.x) / 2,
+        y: (p1.y + p2.y) / 2
+    };
+}
+
+// Transform a point from screen coordinates to canvas coordinates
+function screenToCanvas(screenPos: Point): Point {
+    const cos = Math.cos(-viewTransform.rotation);
+    const sin = Math.sin(-viewTransform.rotation);
+
+    // Remove pan
+    const x1 = screenPos.x - viewTransform.panX;
+    const y1 = screenPos.y - viewTransform.panY;
+
+    // Remove rotation (rotate around center)
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const x2 = cos * (x1 - cx) - sin * (y1 - cy) + cx;
+    const y2 = sin * (x1 - cx) + cos * (y1 - cy) + cy;
+
+    // Remove scale (scale around center)
+    const x3 = (x2 - cx) / viewTransform.scale + cx;
+    const y3 = (y2 - cy) / viewTransform.scale + cy;
+
+    return { x: x3, y: y3 };
+}
 
 // Get offset position (up and left by 1/8th of canvas dimensions)
 function getOffsetPos(pos: Point): Point {
@@ -57,6 +124,17 @@ function resizeCanvas() {
 // Redraw all strokes from history + current state
 function redraw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Apply view transform
+    ctx.save();
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    ctx.translate(viewTransform.panX, viewTransform.panY);
+    ctx.translate(cx, cy);
+    ctx.rotate(viewTransform.rotation);
+    ctx.scale(viewTransform.scale, viewTransform.scale);
+    ctx.translate(-cx, -cy);
+
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -70,8 +148,10 @@ function redraw() {
         drawStroke(currentStroke);
     }
 
-    // Draw preview/indicator rings if first finger is down
-    if (primaryPos) {
+    ctx.restore();
+
+    // Draw preview/indicator rings (in screen space, not transformed)
+    if (primaryPos && gestureMode === 'drawing') {
         const offsetPos = getOffsetPos(primaryPos);
         const size = sizePicker.getSize();
         const drawColor = colorPicker.getColor();
@@ -97,7 +177,6 @@ function redraw() {
 // Draw a single stroke
 function drawStroke(stroke: Stroke) {
     if (stroke.points.length < 2) {
-        // Draw a dot for single-point strokes
         if (stroke.points.length === 1) {
             ctx.fillStyle = stroke.color;
             ctx.beginPath();
@@ -127,32 +206,74 @@ function getPointerPos(e: PointerEvent): Point {
     };
 }
 
+// Enter drawing mode
+function enterDrawingMode() {
+    gestureMode = 'drawing';
+    redraw();
+}
+
 // Handle pointer down
 function handlePointerDown(e: PointerEvent) {
     e.preventDefault();
 
-    // First finger - track it as primary
+    const pos = getPointerPos(e);
+
+    // First finger
     if (primaryPointerId === null) {
         primaryPointerId = e.pointerId;
-        primaryPos = getPointerPos(e);
-        redraw(); // Show preview dot
+        primaryPos = pos;
+
+        // Start waiting period
+        gestureMode = 'waiting';
+        gestureTimer = window.setTimeout(() => {
+            gestureTimer = null;
+            if (gestureMode === 'waiting') {
+                enterDrawingMode();
+            }
+        }, GESTURE_DELAY);
+
         return;
     }
 
-    // Second finger - track it and start drawing
-    if (secondaryPointerId === null && primaryPos) {
+    // Second finger
+    if (secondaryPointerId === null) {
         secondaryPointerId = e.pointerId;
+        secondaryPos = pos;
 
-        if (!isDrawing) {
-            isDrawing = true;
-            const offsetPos = getOffsetPos(primaryPos);
-            currentStroke = {
-                color: colorPicker.getColor(),
-                size: sizePicker.getSize(),
-                points: [offsetPos]
+        // If still in waiting period, this is a transform gesture
+        if (gestureMode === 'waiting' && gestureTimer !== null) {
+            clearTimeout(gestureTimer);
+            gestureTimer = null;
+            gestureMode = 'transform';
+
+            // Initialize transform tracking
+            transformStart = {
+                primaryPos: { ...primaryPos! },
+                secondaryPos: { ...secondaryPos! },
+                distance: getDistance(primaryPos!, secondaryPos!),
+                angle: getAngle(primaryPos!, secondaryPos!),
+                midpoint: getMidpoint(primaryPos!, secondaryPos!),
+                initialTransform: { ...viewTransform }
             };
+
+            redraw();
+            return;
         }
-        redraw();
+
+        // If in drawing mode, second finger starts/continues drawing
+        if (gestureMode === 'drawing' && primaryPos) {
+            if (!isDrawing) {
+                isDrawing = true;
+                const canvasPos = screenToCanvas(getOffsetPos(primaryPos));
+                currentStroke = {
+                    color: colorPicker.getColor(),
+                    size: sizePicker.getSize() / viewTransform.scale,
+                    points: [canvasPos]
+                };
+            }
+            redraw();
+        }
+
         return;
     }
 
@@ -163,57 +284,150 @@ function handlePointerDown(e: PointerEvent) {
 function handlePointerMove(e: PointerEvent) {
     e.preventDefault();
 
-    // Only care about primary finger movement
-    if (e.pointerId !== primaryPointerId) return;
+    const pos = getPointerPos(e);
 
-    primaryPos = getPointerPos(e);
-
-    // Determine if we should add points to the stroke
-    const liftMode = liftModeCheckbox.checked;
-    const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
-
-    if (shouldDraw) {
-        const offsetPos = getOffsetPos(primaryPos);
-        currentStroke!.points.push(offsetPos);
+    // Update position tracking
+    if (e.pointerId === primaryPointerId) {
+        primaryPos = pos;
+    } else if (e.pointerId === secondaryPointerId) {
+        secondaryPos = pos;
+    } else {
+        return;
     }
 
-    redraw();
+    // Handle transform gesture
+    if (gestureMode === 'transform' && transformStart && primaryPos && secondaryPos) {
+        const currentDistance = getDistance(primaryPos, secondaryPos);
+        const currentAngle = getAngle(primaryPos, secondaryPos);
+        const currentMidpoint = getMidpoint(primaryPos, secondaryPos);
+
+        // Calculate scale and rotation changes
+        const scaleFactor = currentDistance / transformStart.distance;
+        const newScale = transformStart.initialTransform.scale * scaleFactor;
+        const rotationDelta = currentAngle - transformStart.angle;
+        const newRotation = transformStart.initialTransform.rotation + rotationDelta;
+
+        // The transform should be centered on the pinch midpoint
+        // We need to adjust pan so that the point under the initial midpoint stays under the current midpoint
+        const startMid = transformStart.midpoint;
+        const initT = transformStart.initialTransform;
+
+        // Calculate where the initial midpoint was in canvas space
+        // Then calculate what pan is needed so that point ends up under current midpoint after new scale/rotation
+        const cos0 = Math.cos(-initT.rotation);
+        const sin0 = Math.sin(-initT.rotation);
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+
+        // Point under start midpoint in canvas coordinates (reverse the initial transform)
+        const sx1 = startMid.x - initT.panX;
+        const sy1 = startMid.y - initT.panY;
+        const sx2 = cos0 * (sx1 - cx) - sin0 * (sy1 - cy) + cx;
+        const sy2 = sin0 * (sx1 - cx) + cos0 * (sy1 - cy) + cy;
+        const canvasX = (sx2 - cx) / initT.scale + cx;
+        const canvasY = (sy2 - cy) / initT.scale + cy;
+
+        // Now apply new scale and rotation to this canvas point
+        const cos1 = Math.cos(newRotation);
+        const sin1 = Math.sin(newRotation);
+        const tx1 = (canvasX - cx) * newScale + cx;
+        const ty1 = (canvasY - cy) * newScale + cy;
+        const tx2 = cos1 * (tx1 - cx) - sin1 * (ty1 - cy) + cx;
+        const ty2 = sin1 * (tx1 - cx) + cos1 * (ty1 - cy) + cy;
+
+        // Pan needed to put this point under currentMidpoint
+        viewTransform.scale = newScale;
+        viewTransform.rotation = newRotation;
+        viewTransform.panX = currentMidpoint.x - tx2;
+        viewTransform.panY = currentMidpoint.y - ty2;
+
+        redraw();
+        return;
+    }
+
+    // Handle drawing mode - only care about primary finger
+    if (gestureMode === 'drawing' && e.pointerId === primaryPointerId) {
+        const liftMode = liftModeCheckbox.checked;
+        const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
+
+        if (shouldDraw) {
+            const canvasPos = screenToCanvas(getOffsetPos(primaryPos!));
+            currentStroke!.points.push(canvasPos);
+        }
+
+        redraw();
+    }
 }
 
 // Handle pointer up
 function handlePointerUp(e: PointerEvent) {
     e.preventDefault();
 
-    const liftMode = liftModeCheckbox.checked;
-
-    // Secondary finger lifted
-    if (e.pointerId === secondaryPointerId) {
-        secondaryPointerId = null;
-
-        // In non-lift mode, save stroke when second finger lifts (but keep preview)
-        if (!liftMode && currentStroke && currentStroke.points.length > 0) {
-            strokeHistory.push(currentStroke);
-            updateUndoButton();
-            currentStroke = null;
-            isDrawing = false;
+    // Handle transform gesture end
+    if (gestureMode === 'transform') {
+        if (e.pointerId === primaryPointerId || e.pointerId === secondaryPointerId) {
+            // End transform when any finger lifts
+            transformStart = null;
+            primaryPointerId = null;
+            secondaryPointerId = null;
+            primaryPos = null;
+            secondaryPos = null;
+            gestureMode = 'none';
+            redraw();
         }
-
-        redraw();
         return;
     }
 
-    // Primary finger lifted - save stroke and reset everything
-    if (e.pointerId === primaryPointerId) {
-        if (currentStroke && currentStroke.points.length > 0) {
-            strokeHistory.push(currentStroke);
-            updateUndoButton();
+    // Handle waiting mode - cancel if finger lifts
+    if (gestureMode === 'waiting') {
+        if (gestureTimer !== null) {
+            clearTimeout(gestureTimer);
+            gestureTimer = null;
         }
-        primaryPointerId = null;
-        secondaryPointerId = null;
-        primaryPos = null;
-        currentStroke = null;
-        isDrawing = false;
-        redraw();
+        if (e.pointerId === primaryPointerId) {
+            primaryPointerId = null;
+            primaryPos = null;
+            gestureMode = 'none';
+        }
+        return;
+    }
+
+    // Handle drawing mode
+    if (gestureMode === 'drawing') {
+        const liftMode = liftModeCheckbox.checked;
+
+        // Secondary finger lifted
+        if (e.pointerId === secondaryPointerId) {
+            secondaryPointerId = null;
+            secondaryPos = null;
+
+            // In non-lift mode, save stroke when second finger lifts
+            if (!liftMode && currentStroke && currentStroke.points.length > 0) {
+                strokeHistory.push(currentStroke);
+                updateUndoButton();
+                currentStroke = null;
+                isDrawing = false;
+            }
+
+            redraw();
+            return;
+        }
+
+        // Primary finger lifted - save stroke and reset
+        if (e.pointerId === primaryPointerId) {
+            if (currentStroke && currentStroke.points.length > 0) {
+                strokeHistory.push(currentStroke);
+                updateUndoButton();
+            }
+            primaryPointerId = null;
+            secondaryPointerId = null;
+            primaryPos = null;
+            secondaryPos = null;
+            currentStroke = null;
+            isDrawing = false;
+            gestureMode = 'none';
+            redraw();
+        }
     }
 }
 
@@ -237,8 +451,16 @@ function clearCanvas() {
     primaryPointerId = null;
     secondaryPointerId = null;
     primaryPos = null;
+    secondaryPos = null;
     currentStroke = null;
     isDrawing = false;
+    gestureMode = 'none';
+    if (gestureTimer !== null) {
+        clearTimeout(gestureTimer);
+        gestureTimer = null;
+    }
+    // Reset view transform
+    viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     updateUndoButton();
 }
