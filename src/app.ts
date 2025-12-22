@@ -27,7 +27,7 @@ let strokeHistory: Stroke[] = [];
 type GestureMode = 'none' | 'waiting' | 'drawing' | 'transform';
 let gestureMode: GestureMode = 'none';
 let gestureTimer: number | null = null;
-const GESTURE_DELAY = 500; // ms to wait before entering drawing mode
+const GESTURE_DELAY = 250; // ms to wait before entering drawing mode
 
 // Pointer tracking
 let primaryPointerId: number | null = null;
@@ -151,26 +151,42 @@ function redraw() {
     ctx.restore();
 
     // Draw preview/indicator rings (in screen space, not transformed)
-    if (primaryPos && gestureMode === 'drawing') {
+    if (primaryPos && (gestureMode === 'drawing' || gestureMode === 'waiting')) {
         const offsetPos = getOffsetPos(primaryPos);
         const size = sizePicker.getSize();
         const drawColor = colorPicker.getColor();
         const isWhite = drawColor.toUpperCase() === '#FFFFFF';
         const outerColor = isWhite ? 'black' : drawColor;
 
-        // Inner ring (white)
-        ctx.beginPath();
-        ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 2, 0, Math.PI * 2);
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        if (gestureMode === 'waiting') {
+            // Waiting mode: filled circle with white rim on top
+            ctx.beginPath();
+            ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 4, 0, Math.PI * 2);
+            ctx.fillStyle = outerColor;
+            ctx.fill();
 
-        // Outer ring (draw color, or black if white)
-        ctx.beginPath();
-        ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = outerColor;
-        ctx.lineWidth = 2;
-        ctx.stroke();
+            // White rim on top
+            ctx.beginPath();
+            ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 2, 0, Math.PI * 2);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else {
+            // Drawing mode: regular indicator (two rings)
+            // Inner ring (white)
+            ctx.beginPath();
+            ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 2, 0, Math.PI * 2);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Outer ring (draw color, or black if white)
+            ctx.beginPath();
+            ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 4, 0, Math.PI * 2);
+            ctx.strokeStyle = outerColor;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
     }
 }
 
@@ -341,6 +357,12 @@ function handlePointerMove(e: PointerEvent) {
         viewTransform.panX = currentMidpoint.x - tx2;
         viewTransform.panY = currentMidpoint.y - ty2;
 
+        redraw();
+        return;
+    }
+
+    // Handle waiting mode - update indicator position
+    if (gestureMode === 'waiting' && e.pointerId === primaryPointerId) {
         redraw();
         return;
     }
