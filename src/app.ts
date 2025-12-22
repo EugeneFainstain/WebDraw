@@ -19,18 +19,30 @@ interface Stroke {
     points: Point[];
 }
 
-interface ActiveStroke extends Stroke {
-    pointerId: number;
-}
-
-// Track active pointers for multi-touch
-const activePointers = new Map<number, ActiveStroke>();
-
 // History for undo functionality
 let strokeHistory: Stroke[] = [];
 
+// Two-finger drawing state
+let primaryPointerId: number | null = null;  // First finger
+let secondaryPointerId: number | null = null; // Second finger (triggers drawing)
+let primaryPos: Point | null = null;  // Current position of first finger
+let currentStroke: Stroke | null = null;  // Stroke being drawn
+
 // Initialize custom color picker
 const colorPicker = createColorPicker(colorPickerEl, () => {});
+
+// Get vertical offset (1/10th of canvas height)
+function getOffset(): number {
+    return canvas.height / 10;
+}
+
+// Get offset position (above the actual touch)
+function getOffsetPos(pos: Point): Point {
+    return {
+        x: pos.x,
+        y: pos.y - getOffset()
+    };
+}
 
 // Resize canvas to fill window
 function resizeCanvas() {
@@ -40,25 +52,55 @@ function resizeCanvas() {
     redraw();
 }
 
-// Redraw all strokes from history
+// Redraw all strokes from history + current state
 function redraw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
+    // Draw completed strokes
     strokeHistory.forEach(stroke => {
-        if (stroke.points.length < 2) return;
-
-        ctx.strokeStyle = stroke.color;
-        ctx.lineWidth = stroke.size;
-        ctx.beginPath();
-        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-
-        for (let i = 1; i < stroke.points.length; i++) {
-            ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
-        }
-        ctx.stroke();
+        drawStroke(stroke);
     });
+
+    // Draw current in-progress stroke
+    if (currentStroke) {
+        drawStroke(currentStroke);
+    }
+
+    // Draw preview dot if first finger is down but not drawing
+    if (primaryPos && !secondaryPointerId) {
+        const offsetPos = getOffsetPos(primaryPos);
+        const size = parseInt(strokeSize.value);
+        ctx.fillStyle = colorPicker.getColor();
+        ctx.beginPath();
+        ctx.arc(offsetPos.x, offsetPos.y, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+// Draw a single stroke
+function drawStroke(stroke: Stroke) {
+    if (stroke.points.length < 2) {
+        // Draw a dot for single-point strokes
+        if (stroke.points.length === 1) {
+            ctx.fillStyle = stroke.color;
+            ctx.beginPath();
+            ctx.arc(stroke.points[0].x, stroke.points[0].y, stroke.size / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        return;
+    }
+
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.size;
+    ctx.beginPath();
+    ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+    for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+    }
+    ctx.stroke();
 }
 
 // Get pointer position relative to canvas
@@ -70,62 +112,83 @@ function getPointerPos(e: PointerEvent): Point {
     };
 }
 
-// Start drawing
-function startDrawing(e: PointerEvent) {
+// Handle pointer down
+function handlePointerDown(e: PointerEvent) {
     e.preventDefault();
 
-    const pos = getPointerPos(e);
-    const stroke = {
-        pointerId: e.pointerId,
-        color: colorPicker.getColor(),
-        size: parseInt(strokeSize.value),
-        points: [pos]
-    };
-
-    activePointers.set(e.pointerId, stroke);
-}
-
-// Continue drawing
-function draw(e: PointerEvent) {
-    e.preventDefault();
-
-    const stroke = activePointers.get(e.pointerId);
-    if (!stroke) return;
-
-    const pos = getPointerPos(e);
-    stroke.points.push(pos);
-
-    // Draw the latest segment
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.size;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    const points = stroke.points;
-    if (points.length >= 2) {
-        ctx.beginPath();
-        ctx.moveTo(points[points.length - 2].x, points[points.length - 2].y);
-        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-        ctx.stroke();
-    }
-}
-
-// Stop drawing
-function stopDrawing(e: PointerEvent) {
-    e.preventDefault();
-
-    const stroke = activePointers.get(e.pointerId);
-    if (stroke && stroke.points.length > 0) {
-        // Save completed stroke to history
-        strokeHistory.push({
-            color: stroke.color,
-            size: stroke.size,
-            points: [...stroke.points]
-        });
-        updateUndoButton();
+    // First finger
+    if (primaryPointerId === null) {
+        primaryPointerId = e.pointerId;
+        primaryPos = getPointerPos(e);
+        redraw(); // Show preview dot
+        return;
     }
 
-    activePointers.delete(e.pointerId);
+    // Second finger - start drawing
+    if (secondaryPointerId === null && primaryPos) {
+        secondaryPointerId = e.pointerId;
+        const offsetPos = getOffsetPos(primaryPos);
+        currentStroke = {
+            color: colorPicker.getColor(),
+            size: parseInt(strokeSize.value),
+            points: [offsetPos]
+        };
+        redraw();
+        return;
+    }
+
+    // Third+ fingers - ignore
+}
+
+// Handle pointer move
+function handlePointerMove(e: PointerEvent) {
+    e.preventDefault();
+
+    // Only care about primary finger movement
+    if (e.pointerId !== primaryPointerId) return;
+
+    primaryPos = getPointerPos(e);
+
+    // If drawing (second finger is down), add point to stroke
+    if (secondaryPointerId !== null && currentStroke) {
+        const offsetPos = getOffsetPos(primaryPos);
+        currentStroke.points.push(offsetPos);
+    }
+
+    redraw();
+}
+
+// Handle pointer up
+function handlePointerUp(e: PointerEvent) {
+    e.preventDefault();
+
+    // Primary finger lifted
+    if (e.pointerId === primaryPointerId) {
+        // Save stroke if we were drawing
+        if (currentStroke && currentStroke.points.length > 0) {
+            strokeHistory.push(currentStroke);
+            updateUndoButton();
+        }
+        // Reset everything
+        primaryPointerId = null;
+        secondaryPointerId = null;
+        primaryPos = null;
+        currentStroke = null;
+        redraw();
+        return;
+    }
+
+    // Secondary finger lifted - stop drawing but keep preview
+    if (e.pointerId === secondaryPointerId) {
+        if (currentStroke && currentStroke.points.length > 0) {
+            strokeHistory.push(currentStroke);
+            updateUndoButton();
+        }
+        secondaryPointerId = null;
+        currentStroke = null;
+        redraw(); // Will show preview dot again
+        return;
+    }
 }
 
 // Update undo button state
@@ -145,17 +208,20 @@ function undo() {
 // Clear canvas
 function clearCanvas() {
     strokeHistory = [];
-    activePointers.clear();
+    primaryPointerId = null;
+    secondaryPointerId = null;
+    primaryPos = null;
+    currentStroke = null;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     updateUndoButton();
 }
 
 // Event listeners
-canvas.addEventListener('pointerdown', startDrawing);
-canvas.addEventListener('pointermove', draw);
-canvas.addEventListener('pointerup', stopDrawing);
-canvas.addEventListener('pointercancel', stopDrawing);
-canvas.addEventListener('pointerleave', stopDrawing);
+canvas.addEventListener('pointerdown', handlePointerDown);
+canvas.addEventListener('pointermove', handlePointerMove);
+canvas.addEventListener('pointerup', handlePointerUp);
+canvas.addEventListener('pointercancel', handlePointerUp);
+canvas.addEventListener('pointerleave', handlePointerUp);
 
 // Prevent default touch behaviors
 canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
@@ -164,6 +230,7 @@ canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false }
 // UI controls
 strokeSize.addEventListener('input', () => {
     sizeValue.textContent = strokeSize.value;
+    redraw(); // Update preview dot size
 });
 
 undoBtn.addEventListener('click', undo);
