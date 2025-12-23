@@ -1,3 +1,4 @@
+import '../styles.css';
 import { createColorPicker } from './colorPicker';
 import { createSizePicker } from './sizePicker';
 
