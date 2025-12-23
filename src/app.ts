@@ -9,6 +9,7 @@ const sizePickerEl = document.getElementById('sizePicker') as HTMLElement;
 const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 const liftModeCheckbox = document.getElementById('liftMode') as HTMLInputElement;
+const xPlusModeCheckbox = document.getElementById('xPlusMode') as HTMLInputElement;
 
 interface Point {
     x: number;
@@ -69,6 +70,21 @@ let lastTapPos: Point | null = null;
 const DOUBLE_TAP_DELAY = 300; // ms
 const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps for double-tap
 const MOVEMENT_THRESHOLD = 15; // pixels - if finger moves more than this during waiting, enter drawing mode
+
+// Snap a delta to the nearest 45-degree angle (0, 45, 90, 135, 180, 225, 270, 315)
+function snapTo45Degrees(deltaX: number, deltaY: number): { x: number, y: number } {
+    const magnitude = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    if (magnitude === 0) return { x: 0, y: 0 };
+
+    const angle = Math.atan2(deltaY, deltaX);
+    // Snap to nearest 45 degrees (PI/4 radians)
+    const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+
+    return {
+        x: magnitude * Math.cos(snappedAngle),
+        y: magnitude * Math.sin(snappedAngle)
+    };
+}
 
 // Calculate movement coefficient based on distance between two fingers
 // Returns 0.5 when distance < 1/8 diagonal, 1.0 when distance > 1/3 diagonal, linear interpolation in between
@@ -477,8 +493,15 @@ function handlePointerMove(e: PointerEvent) {
         // Convert screen delta to canvas delta (accounting for scale and rotation)
         const cos = Math.cos(-viewTransform.rotation);
         const sin = Math.sin(-viewTransform.rotation);
-        const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale * coefficient;
-        const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale * coefficient;
+        let canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale * coefficient;
+        let canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale * coefficient;
+
+        // Apply 45-degree snapping when X+ mode is checked and drawing
+        if (xPlusModeCheckbox.checked && gestureMode === 'drawing' && isDrawing) {
+            const snapped = snapTo45Degrees(canvasDeltaX, canvasDeltaY);
+            canvasDeltaX = snapped.x;
+            canvasDeltaY = snapped.y;
+        }
 
         indicatorAnchor = {
             x: indicatorAnchor.x + canvasDeltaX,
