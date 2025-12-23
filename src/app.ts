@@ -371,6 +371,11 @@ function handlePointerMove(e: PointerEvent) {
                 x: currentAnchor.x + canvasDeltaX,
                 y: currentAnchor.y + canvasDeltaY
             };
+
+            // Clamp indicator to view when not drawing
+            if (!isDrawing) {
+                clampIndicatorToView();
+            }
         }
         primaryPos = pos;
         lastPrimaryPos = pos;
