@@ -64,7 +64,9 @@ let primaryStartPos: Point | null = null; // Initial position when finger landed
 
 // Double-tap detection
 let lastTapTime = 0;
+let lastTapPos: Point | null = null;
 const DOUBLE_TAP_DELAY = 300; // ms
+const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps for double-tap
 const MOVEMENT_THRESHOLD = 15; // pixels - if finger moves more than this during waiting, enter drawing mode
 
 // Initialize custom color picker
@@ -343,14 +345,20 @@ function handlePointerDown(e: PointerEvent) {
         lastPrimaryPos = pos;
         primaryStartPos = pos;  // Track where finger landed for movement threshold
 
-        // Check for double-tap to reset indicator position, or first tap ever
+        // Check for double-tap to reset indicator position
         const now = Date.now();
-        if (now - lastTapTime < DOUBLE_TAP_DELAY || indicatorAnchor === null) {
-            // Set indicator to default position relative to finger
+        const isDoubleTap = now - lastTapTime < DOUBLE_TAP_DELAY &&
+                            lastTapPos !== null &&
+                            getDistance(pos, lastTapPos) < DOUBLE_TAP_DISTANCE;
+
+        if (isDoubleTap) {
+            // Double-tap detected - reset indicator to default position relative to finger
             setIndicatorToDefaultPosition(pos);
             lastTapTime = 0; // Prevent triple-tap detection
+            lastTapPos = null;
         } else {
             lastTapTime = now;
+            lastTapPos = pos;
         }
 
         // Start waiting period
@@ -673,10 +681,10 @@ function clearCanvas() {
         clearTimeout(gestureTimer);
         gestureTimer = null;
     }
-    // Reset view transform and indicator
+    // Reset view transform and indicator to center
     viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
-    indicatorAnchor = null;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
+    redraw();
     updateUndoButton();
 }
 
