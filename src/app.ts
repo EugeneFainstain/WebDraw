@@ -431,9 +431,6 @@ function handlePointerMove(e: PointerEvent) {
         viewTransform.panX = currentMidpoint.x - tx2;
         viewTransform.panY = currentMidpoint.y - ty2;
 
-        // Clamp indicator to visible view after transform
-        clampIndicatorToView();
-
         redraw();
         return;
     }
@@ -472,6 +469,9 @@ function handlePointerUp(e: PointerEvent) {
     // Handle transform gesture end
     if (gestureMode === 'transform') {
         transformStart = null;
+
+        // Clamp indicator to visible view when transform ends
+        clampIndicatorToView();
 
         if (e.pointerId === secondaryPointerId) {
             // Second finger lifted - transition to drawing mode with primary finger
