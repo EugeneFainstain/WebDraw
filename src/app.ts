@@ -158,35 +158,20 @@ function redraw() {
         const isWhite = drawColor.toUpperCase() === '#FFFFFF';
         const outerColor = isWhite ? 'black' : drawColor;
 
-        if (gestureMode === 'waiting') {
-            // Waiting mode: filled circle with white rim on top
-            ctx.beginPath();
-            ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 4, 0, Math.PI * 2);
-            ctx.fillStyle = outerColor;
-            ctx.fill();
+        // Always draw the same indicator style (two rings)
+        // Inner ring (white)
+        ctx.beginPath();
+        ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 2, 0, Math.PI * 2);
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.stroke();
 
-            // White rim on top
-            ctx.beginPath();
-            ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 2, 0, Math.PI * 2);
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        } else {
-            // Drawing mode: regular indicator (two rings)
-            // Inner ring (white)
-            ctx.beginPath();
-            ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 2, 0, Math.PI * 2);
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Outer ring (draw color, or black if white)
-            ctx.beginPath();
-            ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 4, 0, Math.PI * 2);
-            ctx.strokeStyle = outerColor;
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        }
+        // Outer ring (draw color, or black if white)
+        ctx.beginPath();
+        ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = outerColor;
+        ctx.lineWidth = 2;
+        ctx.stroke()
     }
 }
 
@@ -387,8 +372,17 @@ function handlePointerUp(e: PointerEvent) {
 
     // Handle transform gesture end
     if (gestureMode === 'transform') {
-        if (e.pointerId === primaryPointerId || e.pointerId === secondaryPointerId) {
-            // End transform when any finger lifts
+        if (e.pointerId === secondaryPointerId) {
+            // Second finger lifted - transition to drawing mode
+            transformStart = null;
+            secondaryPointerId = null;
+            secondaryPos = null;
+            gestureMode = 'drawing';
+            redraw();
+            return;
+        }
+        if (e.pointerId === primaryPointerId) {
+            // Primary finger lifted - end everything
             transformStart = null;
             primaryPointerId = null;
             secondaryPointerId = null;
