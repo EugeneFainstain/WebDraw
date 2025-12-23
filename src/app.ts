@@ -60,6 +60,7 @@ let transformStart: {
 // null means use default position
 let indicatorAnchor: Point | null = null;
 let lastPrimaryPos: Point | null = null; // For tracking finger movement delta
+let lastSecondaryPos: Point | null = null; // For tracking secondary finger movement delta
 let primaryStartPos: Point | null = null; // Initial position when finger landed (for movement threshold)
 
 // Double-tap detection
@@ -378,6 +379,7 @@ function handlePointerDown(e: PointerEvent) {
     if (secondaryPointerId === null) {
         secondaryPointerId = e.pointerId;
         secondaryPos = pos;
+        lastSecondaryPos = pos;  // Initialize to prevent marker jump on first move
 
         // If still in waiting period, this is a transform gesture
         if (gestureMode === 'waiting' && gestureTimer !== null) {
@@ -426,35 +428,43 @@ function handlePointerMove(e: PointerEvent) {
     const pos = getPointerPos(e);
 
     // Update position tracking
+    // Track deltas for both fingers
+    let deltaX = 0;
+    let deltaY = 0;
+
     if (e.pointerId === primaryPointerId) {
-        // Move indicator anchor based on finger movement delta
-        if (lastPrimaryPos && (gestureMode === 'waiting' || gestureMode === 'drawing')) {
-            const deltaX = pos.x - lastPrimaryPos.x;
-            const deltaY = pos.y - lastPrimaryPos.y;
-
-            // Convert screen delta to canvas delta (accounting for scale and rotation)
-            const cos = Math.cos(-viewTransform.rotation);
-            const sin = Math.sin(-viewTransform.rotation);
-            const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale;
-            const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale;
-
-            // Update anchor position (should always be set at this point)
-            if (indicatorAnchor) {
-                indicatorAnchor = {
-                    x: indicatorAnchor.x + canvasDeltaX,
-                    y: indicatorAnchor.y + canvasDeltaY
-                };
-
-                // Pan the canvas to keep the indicator in view (both when drawing and not)
-                panToKeepIndicatorInView();
-            }
+        if (lastPrimaryPos) {
+            deltaX = pos.x - lastPrimaryPos.x;
+            deltaY = pos.y - lastPrimaryPos.y;
         }
         primaryPos = pos;
         lastPrimaryPos = pos;
     } else if (e.pointerId === secondaryPointerId) {
+        if (lastSecondaryPos) {
+            deltaX = pos.x - lastSecondaryPos.x;
+            deltaY = pos.y - lastSecondaryPos.y;
+        }
         secondaryPos = pos;
+        lastSecondaryPos = pos;
     } else {
         return;
+    }
+
+    // Move indicator anchor based on finger movement delta (sum of both fingers)
+    if ((gestureMode === 'waiting' || gestureMode === 'drawing') && indicatorAnchor) {
+        // Convert screen delta to canvas delta (accounting for scale and rotation)
+        const cos = Math.cos(-viewTransform.rotation);
+        const sin = Math.sin(-viewTransform.rotation);
+        const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale;
+        const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale;
+
+        indicatorAnchor = {
+            x: indicatorAnchor.x + canvasDeltaX,
+            y: indicatorAnchor.y + canvasDeltaY
+        };
+
+        // Pan the canvas to keep the indicator in view (both when drawing and not)
+        panToKeepIndicatorInView();
     }
 
     // Handle transform gesture
@@ -524,13 +534,13 @@ function handlePointerMove(e: PointerEvent) {
         return;
     }
 
-    // Handle drawing mode - only care about primary finger
-    if (gestureMode === 'drawing' && e.pointerId === primaryPointerId) {
+    // Handle drawing mode - either finger can contribute to drawing
+    if (gestureMode === 'drawing') {
         const liftMode = liftModeCheckbox.checked;
         const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
 
-        if (shouldDraw && indicatorAnchor) {
-            // Use the indicator anchor position for drawing
+        if (shouldDraw && indicatorAnchor && (deltaX !== 0 || deltaY !== 0)) {
+            // Use the indicator anchor position for drawing when any tracked finger moves
             currentStroke!.points.push({ ...indicatorAnchor });
         }
 
@@ -539,7 +549,7 @@ function handlePointerMove(e: PointerEvent) {
     }
 
     // Also redraw for any tracked pointer movement (to update indicator after transform ends)
-    if (primaryPos && (gestureMode === 'drawing' || gestureMode === 'waiting')) {
+    if (primaryPos && gestureMode === 'waiting') {
         redraw();
     }
 }
