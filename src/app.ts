@@ -136,17 +136,39 @@ function canvasToScreen(canvasPos: Point): Point {
     return { x: x3, y: y3 };
 }
 
-// Get default indicator position (center horizontally, 1/4 from top)
-function getDefaultIndicatorPos(): Point {
+// Get default indicator offset (1/8th of max dimension, at 45 degrees towards upper-left)
+function getDefaultIndicatorOffset(): Point {
+    const maxDim = Math.max(canvas.width, canvas.height);
+    const offset = maxDim / 8;
+    // 45 degrees means equal x and y offset (offset * cos(45) = offset * sin(45) = offset / sqrt(2))
+    const diagonalOffset = offset / Math.SQRT2;
     return {
-        x: canvas.width / 2,
-        y: canvas.height / 4
+        x: -diagonalOffset,  // towards left
+        y: -diagonalOffset   // towards top
     };
+}
+
+// Set indicator to default position relative to a screen point, clamped to view
+function setIndicatorToDefaultPosition(screenPos: Point): void {
+    const offset = getDefaultIndicatorOffset();
+    const targetScreenPos = {
+        x: screenPos.x + offset.x,
+        y: screenPos.y + offset.y
+    };
+
+    // Clamp to visible area
+    const margin = 10;
+    const clampedX = Math.max(margin, Math.min(canvas.width - margin, targetScreenPos.x));
+    const clampedY = Math.max(margin, Math.min(canvas.height - margin, targetScreenPos.y));
+
+    // Convert to canvas coordinates
+    indicatorAnchor = screenToCanvas({ x: clampedX, y: clampedY });
 }
 
 // Clamp indicator anchor to visible view (actually moves the anchor if needed)
 function clampIndicatorToView(): void {
-    const anchorCanvas = indicatorAnchor || getDefaultIndicatorPos();
+    if (!indicatorAnchor) return; // No anchor set yet
+    const anchorCanvas = indicatorAnchor;
     const screenPos = canvasToScreen(anchorCanvas);
 
     const margin = 10;
@@ -161,8 +183,11 @@ function clampIndicatorToView(): void {
 
 // Get indicator screen position
 function getIndicatorScreenPos(): Point {
-    const anchorCanvas = indicatorAnchor || getDefaultIndicatorPos();
-    return canvasToScreen(anchorCanvas);
+    if (!indicatorAnchor) {
+        // Fallback to center of screen if no anchor set
+        return { x: canvas.width / 2, y: canvas.height / 4 };
+    }
+    return canvasToScreen(indicatorAnchor);
 }
 
 // Resize canvas to fill window
@@ -284,10 +309,11 @@ function handlePointerDown(e: PointerEvent) {
         primaryPos = pos;
         lastPrimaryPos = pos;
 
-        // Check for double-tap to reset indicator position
+        // Check for double-tap to reset indicator position, or first tap ever
         const now = Date.now();
-        if (now - lastTapTime < DOUBLE_TAP_DELAY) {
-            indicatorAnchor = null; // Reset to default position
+        if (now - lastTapTime < DOUBLE_TAP_DELAY || indicatorAnchor === null) {
+            // Set indicator to default position relative to finger
+            setIndicatorToDefaultPosition(pos);
             lastTapTime = 0; // Prevent triple-tap detection
         } else {
             lastTapTime = now;
@@ -332,15 +358,14 @@ function handlePointerDown(e: PointerEvent) {
         }
 
         // If in drawing mode, second finger starts/continues drawing
-        if (gestureMode === 'drawing' && primaryPos) {
+        if (gestureMode === 'drawing' && primaryPos && indicatorAnchor) {
             if (!isDrawing) {
                 isDrawing = true;
                 // Use the indicator anchor position for drawing
-                const anchorPos = indicatorAnchor || getDefaultIndicatorPos();
                 currentStroke = {
                     color: colorPicker.getColor(),
                     size: sizePicker.getSize(),
-                    points: [anchorPos]
+                    points: [{ ...indicatorAnchor }]
                 };
             }
             redraw();
@@ -371,12 +396,13 @@ function handlePointerMove(e: PointerEvent) {
             const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale;
             const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale;
 
-            // Update anchor position
-            const currentAnchor = indicatorAnchor || getDefaultIndicatorPos();
-            indicatorAnchor = {
-                x: currentAnchor.x + canvasDeltaX,
-                y: currentAnchor.y + canvasDeltaY
-            };
+            // Update anchor position (should always be set at this point)
+            if (indicatorAnchor) {
+                indicatorAnchor = {
+                    x: indicatorAnchor.x + canvasDeltaX,
+                    y: indicatorAnchor.y + canvasDeltaY
+                };
+            }
 
             // Clamp indicator to view when not drawing
             if (!isDrawing) {
@@ -452,10 +478,9 @@ function handlePointerMove(e: PointerEvent) {
         const liftMode = liftModeCheckbox.checked;
         const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
 
-        if (shouldDraw) {
+        if (shouldDraw && indicatorAnchor) {
             // Use the indicator anchor position for drawing
-            const anchorPos = indicatorAnchor || getDefaultIndicatorPos();
-            currentStroke!.points.push(anchorPos);
+            currentStroke!.points.push({ ...indicatorAnchor });
         }
 
         redraw();
