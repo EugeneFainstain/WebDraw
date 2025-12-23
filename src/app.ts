@@ -55,6 +55,15 @@ let transformStart: {
     initialTransform: typeof viewTransform;
 } | null = null;
 
+// Indicator anchor point (in canvas coordinates, not screen coordinates)
+// null means use default position
+let indicatorAnchor: Point | null = null;
+let lastPrimaryPos: Point | null = null; // For tracking finger movement delta
+
+// Double-tap detection
+let lastTapTime = 0;
+const DOUBLE_TAP_DELAY = 300; // ms
+
 // Initialize custom color picker
 const colorPicker = createColorPicker(colorPickerEl, () => {});
 
@@ -105,11 +114,49 @@ function screenToCanvas(screenPos: Point): Point {
     return { x: x3, y: y3 };
 }
 
-// Get offset position (up and left by 1/8th of canvas dimensions)
-function getOffsetPos(pos: Point): Point {
+// Transform a point from canvas coordinates to screen coordinates
+function canvasToScreen(canvasPos: Point): Point {
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    // Apply scale (around center)
+    const x1 = (canvasPos.x - cx) * viewTransform.scale + cx;
+    const y1 = (canvasPos.y - cy) * viewTransform.scale + cy;
+
+    // Apply rotation (around center)
+    const cos = Math.cos(viewTransform.rotation);
+    const sin = Math.sin(viewTransform.rotation);
+    const x2 = cos * (x1 - cx) - sin * (y1 - cy) + cx;
+    const y2 = sin * (x1 - cx) + cos * (y1 - cy) + cy;
+
+    // Apply pan
+    const x3 = x2 + viewTransform.panX;
+    const y3 = y2 + viewTransform.panY;
+
+    return { x: x3, y: y3 };
+}
+
+// Get default indicator position (center horizontally, 1/4 from top)
+function getDefaultIndicatorPos(): Point {
     return {
-        x: pos.x - canvas.width / 8,
-        y: pos.y - canvas.height / 8
+        x: canvas.width / 2,
+        y: canvas.height / 4
+    };
+}
+
+// Get indicator screen position, clipped to visible view
+function getIndicatorScreenPos(): Point {
+    // Get the anchor in canvas coordinates (or default if not set)
+    const anchorCanvas = indicatorAnchor || getDefaultIndicatorPos();
+
+    // Convert to screen coordinates
+    const screenPos = canvasToScreen(anchorCanvas);
+
+    // Clip to visible view with some margin
+    const margin = 20;
+    return {
+        x: Math.max(margin, Math.min(canvas.width - margin, screenPos.x)),
+        y: Math.max(margin, Math.min(canvas.height - margin, screenPos.y))
     };
 }
 
@@ -152,7 +199,7 @@ function redraw() {
 
     // Draw preview/indicator rings (in screen space, not transformed)
     if (primaryPos && (gestureMode === 'drawing' || gestureMode === 'waiting')) {
-        const offsetPos = getOffsetPos(primaryPos);
+        const indicatorPos = getIndicatorScreenPos();
         const size = sizePicker.getSize();
         const drawColor = colorPicker.getColor();
         const isWhite = drawColor.toUpperCase() === '#FFFFFF';
@@ -161,14 +208,14 @@ function redraw() {
         // Always draw the same indicator style (two rings)
         // Inner ring (white)
         ctx.beginPath();
-        ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 2, 0, Math.PI * 2);
+        ctx.arc(indicatorPos.x, indicatorPos.y, size / 2 + 2, 0, Math.PI * 2);
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
         ctx.stroke();
 
         // Outer ring (draw color, or black if white)
         ctx.beginPath();
-        ctx.arc(offsetPos.x, offsetPos.y, size / 2 + 4, 0, Math.PI * 2);
+        ctx.arc(indicatorPos.x, indicatorPos.y, size / 2 + 4, 0, Math.PI * 2);
         ctx.strokeStyle = outerColor;
         ctx.lineWidth = 2;
         ctx.stroke()
@@ -223,6 +270,16 @@ function handlePointerDown(e: PointerEvent) {
     if (primaryPointerId === null) {
         primaryPointerId = e.pointerId;
         primaryPos = pos;
+        lastPrimaryPos = pos;
+
+        // Check for double-tap to reset indicator position
+        const now = Date.now();
+        if (now - lastTapTime < DOUBLE_TAP_DELAY) {
+            indicatorAnchor = null; // Reset to default position
+            lastTapTime = 0; // Prevent triple-tap detection
+        } else {
+            lastTapTime = now;
+        }
 
         // Start waiting period
         gestureMode = 'waiting';
@@ -233,6 +290,7 @@ function handlePointerDown(e: PointerEvent) {
             }
         }, GESTURE_DELAY);
 
+        redraw();
         return;
     }
 
@@ -265,11 +323,12 @@ function handlePointerDown(e: PointerEvent) {
         if (gestureMode === 'drawing' && primaryPos) {
             if (!isDrawing) {
                 isDrawing = true;
-                const canvasPos = screenToCanvas(getOffsetPos(primaryPos));
+                // Use the indicator anchor position for drawing
+                const anchorPos = indicatorAnchor || getDefaultIndicatorPos();
                 currentStroke = {
                     color: colorPicker.getColor(),
                     size: sizePicker.getSize() / viewTransform.scale,
-                    points: [canvasPos]
+                    points: [anchorPos]
                 };
             }
             redraw();
@@ -289,7 +348,26 @@ function handlePointerMove(e: PointerEvent) {
 
     // Update position tracking
     if (e.pointerId === primaryPointerId) {
+        // Move indicator anchor based on finger movement delta
+        if (lastPrimaryPos && (gestureMode === 'waiting' || gestureMode === 'drawing')) {
+            const deltaX = pos.x - lastPrimaryPos.x;
+            const deltaY = pos.y - lastPrimaryPos.y;
+
+            // Convert screen delta to canvas delta (accounting for scale and rotation)
+            const cos = Math.cos(-viewTransform.rotation);
+            const sin = Math.sin(-viewTransform.rotation);
+            const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale;
+            const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale;
+
+            // Update anchor position
+            const currentAnchor = indicatorAnchor || getDefaultIndicatorPos();
+            indicatorAnchor = {
+                x: currentAnchor.x + canvasDeltaX,
+                y: currentAnchor.y + canvasDeltaY
+            };
+        }
         primaryPos = pos;
+        lastPrimaryPos = pos;
     } else if (e.pointerId === secondaryPointerId) {
         secondaryPos = pos;
     } else {
@@ -358,8 +436,9 @@ function handlePointerMove(e: PointerEvent) {
         const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
 
         if (shouldDraw) {
-            const canvasPos = screenToCanvas(getOffsetPos(primaryPos!));
-            currentStroke!.points.push(canvasPos);
+            // Use the indicator anchor position for drawing
+            const anchorPos = indicatorAnchor || getDefaultIndicatorPos();
+            currentStroke!.points.push(anchorPos);
         }
 
         redraw();
@@ -482,6 +561,7 @@ function clearCanvas() {
     secondaryPointerId = null;
     primaryPos = null;
     secondaryPos = null;
+    lastPrimaryPos = null;
     currentStroke = null;
     isDrawing = false;
     gestureMode = 'none';
@@ -489,8 +569,9 @@ function clearCanvas() {
         clearTimeout(gestureTimer);
         gestureTimer = null;
     }
-    // Reset view transform
+    // Reset view transform and indicator
     viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
+    indicatorAnchor = null;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     updateUndoButton();
 }
