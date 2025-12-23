@@ -206,7 +206,9 @@ function redraw() {
     // Draw preview/indicator rings (in screen space, not transformed)
     if (primaryPos && (gestureMode === 'drawing' || gestureMode === 'waiting')) {
         const indicatorPos = getIndicatorScreenPos();
-        const size = sizePicker.getSize();
+        // Calculate the actual rendered size (stroke size * zoom, but at least 1 pixel)
+        const strokeSize = sizePicker.getSize();
+        const renderedSize = Math.max(strokeSize * viewTransform.scale, 1);
         const drawColor = colorPicker.getColor();
         const isWhite = drawColor.toUpperCase() === '#FFFFFF';
         const outerColor = isWhite ? 'black' : drawColor;
@@ -214,14 +216,14 @@ function redraw() {
         // Always draw the same indicator style (two rings)
         // Inner ring (white)
         ctx.beginPath();
-        ctx.arc(indicatorPos.x, indicatorPos.y, size / 2 + 2, 0, Math.PI * 2);
+        ctx.arc(indicatorPos.x, indicatorPos.y, renderedSize / 2 + 2, 0, Math.PI * 2);
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
         ctx.stroke();
 
         // Outer ring (draw color, or black if white)
         ctx.beginPath();
-        ctx.arc(indicatorPos.x, indicatorPos.y, size / 2 + 4, 0, Math.PI * 2);
+        ctx.arc(indicatorPos.x, indicatorPos.y, renderedSize / 2 + 4, 0, Math.PI * 2);
         ctx.strokeStyle = outerColor;
         ctx.lineWidth = 2;
         ctx.stroke()
@@ -230,18 +232,22 @@ function redraw() {
 
 // Draw a single stroke
 function drawStroke(stroke: Stroke) {
+    // Ensure stroke width is at least 1 pixel when rendered (accounting for zoom)
+    const minSize = 1 / viewTransform.scale;
+    const renderSize = Math.max(stroke.size, minSize);
+
     if (stroke.points.length < 2) {
         if (stroke.points.length === 1) {
             ctx.fillStyle = stroke.color;
             ctx.beginPath();
-            ctx.arc(stroke.points[0].x, stroke.points[0].y, stroke.size / 2, 0, Math.PI * 2);
+            ctx.arc(stroke.points[0].x, stroke.points[0].y, renderSize / 2, 0, Math.PI * 2);
             ctx.fill();
         }
         return;
     }
 
     ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.size;
+    ctx.lineWidth = renderSize;
     ctx.beginPath();
     ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
 
@@ -333,7 +339,7 @@ function handlePointerDown(e: PointerEvent) {
                 const anchorPos = indicatorAnchor || getDefaultIndicatorPos();
                 currentStroke = {
                     color: colorPicker.getColor(),
-                    size: sizePicker.getSize() / viewTransform.scale,
+                    size: sizePicker.getSize(),
                     points: [anchorPos]
                 };
             }
