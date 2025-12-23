@@ -644,16 +644,29 @@ function handlePointerUp(e: PointerEvent) {
             return;
         }
 
-        // Primary finger lifted - save stroke and reset
+        // Primary finger lifted
         if (e.pointerId === primaryPointerId) {
+            // If secondary finger is still down, promote it to primary and continue
+            if (secondaryPointerId !== null && secondaryPos !== null) {
+                primaryPointerId = secondaryPointerId;
+                primaryPos = secondaryPos;
+                lastPrimaryPos = lastSecondaryPos;  // Transfer position tracking
+                secondaryPointerId = null;
+                secondaryPos = null;
+                lastSecondaryPos = null;
+                // Continue drawing - don't save stroke yet
+                redraw();
+                return;
+            }
+
+            // No secondary finger - save stroke and reset
             if (currentStroke && currentStroke.points.length > 0) {
                 strokeHistory.push(currentStroke);
                 updateUndoButton();
             }
             primaryPointerId = null;
-            secondaryPointerId = null;
             primaryPos = null;
-            secondaryPos = null;
+            lastPrimaryPos = null;
             currentStroke = null;
             isDrawing = false;
             gestureMode = 'none';
