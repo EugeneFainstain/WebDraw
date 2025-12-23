@@ -363,6 +363,12 @@ function handlePointerMove(e: PointerEvent) {
         }
 
         redraw();
+        return;
+    }
+
+    // Also redraw for any tracked pointer movement (to update indicator after transform ends)
+    if (primaryPos && (gestureMode === 'drawing' || gestureMode === 'waiting')) {
+        redraw();
     }
 }
 
@@ -372,9 +378,10 @@ function handlePointerUp(e: PointerEvent) {
 
     // Handle transform gesture end
     if (gestureMode === 'transform') {
+        transformStart = null;
+
         if (e.pointerId === secondaryPointerId) {
-            // Second finger lifted - transition to drawing mode
-            transformStart = null;
+            // Second finger lifted - transition to drawing mode with primary finger
             secondaryPointerId = null;
             secondaryPos = null;
             gestureMode = 'drawing';
@@ -382,12 +389,19 @@ function handlePointerUp(e: PointerEvent) {
             return;
         }
         if (e.pointerId === primaryPointerId) {
-            // Primary finger lifted - end everything
-            transformStart = null;
+            // Primary finger lifted - make secondary the new primary and transition to drawing
+            if (secondaryPointerId !== null && secondaryPos !== null) {
+                primaryPointerId = secondaryPointerId;
+                primaryPos = secondaryPos;
+                secondaryPointerId = null;
+                secondaryPos = null;
+                gestureMode = 'drawing';
+                redraw();
+                return;
+            }
+            // No secondary finger - end everything
             primaryPointerId = null;
-            secondaryPointerId = null;
             primaryPos = null;
-            secondaryPos = null;
             gestureMode = 'none';
             redraw();
         }
