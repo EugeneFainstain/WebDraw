@@ -144,20 +144,25 @@ function getDefaultIndicatorPos(): Point {
     };
 }
 
-// Get indicator screen position, clipped to visible view
-function getIndicatorScreenPos(): Point {
-    // Get the anchor in canvas coordinates (or default if not set)
+// Clamp indicator anchor to visible view (actually moves the anchor if needed)
+function clampIndicatorToView(): void {
     const anchorCanvas = indicatorAnchor || getDefaultIndicatorPos();
-
-    // Convert to screen coordinates
     const screenPos = canvasToScreen(anchorCanvas);
 
-    // Clip to visible view with some margin
-    const margin = 20;
-    return {
-        x: Math.max(margin, Math.min(canvas.width - margin, screenPos.x)),
-        y: Math.max(margin, Math.min(canvas.height - margin, screenPos.y))
-    };
+    const margin = 10;
+    const clampedX = Math.max(margin, Math.min(canvas.width - margin, screenPos.x));
+    const clampedY = Math.max(margin, Math.min(canvas.height - margin, screenPos.y));
+
+    // If clamping was needed, update the anchor position
+    if (clampedX !== screenPos.x || clampedY !== screenPos.y) {
+        indicatorAnchor = screenToCanvas({ x: clampedX, y: clampedY });
+    }
+}
+
+// Get indicator screen position
+function getIndicatorScreenPos(): Point {
+    const anchorCanvas = indicatorAnchor || getDefaultIndicatorPos();
+    return canvasToScreen(anchorCanvas);
 }
 
 // Resize canvas to fill window
@@ -165,6 +170,7 @@ function resizeCanvas() {
     const toolbarHeight = 60;
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight - toolbarHeight;
+    clampIndicatorToView();
     redraw();
 }
 
@@ -419,6 +425,9 @@ function handlePointerMove(e: PointerEvent) {
         viewTransform.rotation = newRotation;
         viewTransform.panX = currentMidpoint.x - tx2;
         viewTransform.panY = currentMidpoint.y - ty2;
+
+        // Clamp indicator to visible view after transform
+        clampIndicatorToView();
 
         redraw();
         return;
