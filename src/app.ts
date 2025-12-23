@@ -579,6 +579,7 @@ function handlePointerUp(e: PointerEvent) {
             if (secondaryPointerId !== null && secondaryPos !== null) {
                 primaryPointerId = secondaryPointerId;
                 primaryPos = secondaryPos;
+                lastPrimaryPos = secondaryPos;  // Prevent marker jump
                 secondaryPointerId = null;
                 secondaryPos = null;
                 gestureMode = 'drawing';
