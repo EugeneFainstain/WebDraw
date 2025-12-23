@@ -228,8 +228,8 @@ function redraw() {
 
     ctx.restore();
 
-    // Draw edge ticks to indicate marker position when off-screen or during transforms
-    if (indicatorAnchor) {
+    // Draw edge ticks only when marker is not visible (no finger down or during transform)
+    if (indicatorAnchor && !(primaryPos && (gestureMode === 'drawing' || gestureMode === 'waiting'))) {
         drawEdgeTicks();
     }
 
@@ -604,6 +604,7 @@ function handlePointerUp(e: PointerEvent) {
             primaryPointerId = null;
             primaryPos = null;
             gestureMode = 'none';
+            redraw();
         }
         return;
     }
