@@ -168,10 +168,10 @@ function setIndicatorToDefaultPosition(screenPos: Point): void {
 }
 
 // Clamp indicator anchor to visible view (actually moves the anchor if needed)
+// Used when ending zoom/pan operations
 function clampIndicatorToView(): void {
-    if (!indicatorAnchor) return; // No anchor set yet
-    const anchorCanvas = indicatorAnchor;
-    const screenPos = canvasToScreen(anchorCanvas);
+    if (!indicatorAnchor) return;
+    const screenPos = canvasToScreen(indicatorAnchor);
 
     const margin = 10;
     const clampedX = Math.max(margin, Math.min(canvas.width - margin, screenPos.x));
@@ -180,6 +180,36 @@ function clampIndicatorToView(): void {
     // If clamping was needed, update the anchor position
     if (clampedX !== screenPos.x || clampedY !== screenPos.y) {
         indicatorAnchor = screenToCanvas({ x: clampedX, y: clampedY });
+    }
+}
+
+// Pan the canvas to keep the indicator in view (instead of clamping the indicator)
+// Used when moving the marker
+function panToKeepIndicatorInView(): void {
+    if (!indicatorAnchor) return;
+    const screenPos = canvasToScreen(indicatorAnchor);
+
+    const margin = 10;
+    let panDeltaX = 0;
+    let panDeltaY = 0;
+
+    // Check if indicator is outside the visible area and calculate pan needed
+    if (screenPos.x < margin) {
+        panDeltaX = margin - screenPos.x;
+    } else if (screenPos.x > canvas.width - margin) {
+        panDeltaX = (canvas.width - margin) - screenPos.x;
+    }
+
+    if (screenPos.y < margin) {
+        panDeltaY = margin - screenPos.y;
+    } else if (screenPos.y > canvas.height - margin) {
+        panDeltaY = (canvas.height - margin) - screenPos.y;
+    }
+
+    // Apply pan if needed
+    if (panDeltaX !== 0 || panDeltaY !== 0) {
+        viewTransform.panX += panDeltaX;
+        viewTransform.panY += panDeltaY;
     }
 }
 
@@ -467,11 +497,9 @@ function handlePointerMove(e: PointerEvent) {
                     x: indicatorAnchor.x + canvasDeltaX,
                     y: indicatorAnchor.y + canvasDeltaY
                 };
-            }
 
-            // Clamp indicator to view when not drawing
-            if (!isDrawing) {
-                clampIndicatorToView();
+                // Pan the canvas to keep the indicator in view (both when drawing and not)
+                panToKeepIndicatorInView();
             }
         }
         primaryPos = pos;
