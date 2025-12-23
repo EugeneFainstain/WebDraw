@@ -25,7 +25,7 @@ interface Stroke {
 let strokeHistory: Stroke[] = [];
 
 // Gesture mode
-type GestureMode = 'none' | 'waiting' | 'drawing' | 'transform';
+type GestureMode = 'none' | 'waiting'  | 'drawing' | 'transform';
 let gestureMode: GestureMode = 'none';
 let gestureTimer: number | null = null;
 const GESTURE_DELAY = 100; // ms to wait before entering drawing mode
