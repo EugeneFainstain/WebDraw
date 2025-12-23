@@ -27,7 +27,7 @@ let strokeHistory: Stroke[] = [];
 type GestureMode = 'none' | 'waiting' | 'drawing' | 'transform';
 let gestureMode: GestureMode = 'none';
 let gestureTimer: number | null = null;
-const GESTURE_DELAY = 250; // ms to wait before entering drawing mode
+const GESTURE_DELAY = 100; // ms to wait before entering drawing mode
 
 // Pointer tracking
 let primaryPointerId: number | null = null;
@@ -59,10 +59,12 @@ let transformStart: {
 // null means use default position
 let indicatorAnchor: Point | null = null;
 let lastPrimaryPos: Point | null = null; // For tracking finger movement delta
+let primaryStartPos: Point | null = null; // Initial position when finger landed (for movement threshold)
 
 // Double-tap detection
 let lastTapTime = 0;
 const DOUBLE_TAP_DELAY = 300; // ms
+const MOVEMENT_THRESHOLD = 15; // pixels - if finger moves more than this during waiting, enter drawing mode
 
 // Initialize custom color picker
 const colorPicker = createColorPicker(colorPickerEl, () => {});
@@ -228,13 +230,13 @@ function redraw() {
 
     ctx.restore();
 
-    // Draw edge ticks only when marker is not visible (no finger down or during transform)
-    if (indicatorAnchor && !(primaryPos && (gestureMode === 'drawing' || gestureMode === 'waiting'))) {
+    // Draw edge ticks only when marker is not visible (not in drawing mode)
+    if (indicatorAnchor && gestureMode !== 'drawing') {
         drawEdgeTicks();
     }
 
-    // Draw preview/indicator rings (in screen space, not transformed)
-    if (primaryPos && (gestureMode === 'drawing' || gestureMode === 'waiting')) {
+    // Draw preview/indicator rings (in screen space, not transformed) - only in drawing mode
+    if (primaryPos && gestureMode === 'drawing') {
         const indicatorPos = getIndicatorScreenPos();
         // Calculate the actual rendered size (stroke size * zoom, but at least 1 pixel)
         const strokeSize = sizePicker.getSize();
@@ -370,6 +372,7 @@ function handlePointerDown(e: PointerEvent) {
         primaryPointerId = e.pointerId;
         primaryPos = pos;
         lastPrimaryPos = pos;
+        primaryStartPos = pos;  // Track where finger landed for movement threshold
 
         // Check for double-tap to reset indicator position, or first tap ever
         const now = Date.now();
@@ -529,8 +532,19 @@ function handlePointerMove(e: PointerEvent) {
         return;
     }
 
-    // Handle waiting mode - update indicator position
+    // Handle waiting mode - check if movement exceeds threshold
     if (gestureMode === 'waiting' && e.pointerId === primaryPointerId) {
+        // If finger has moved beyond threshold, enter drawing mode immediately
+        if (primaryStartPos) {
+            const dist = getDistance(pos, primaryStartPos);
+            if (dist > MOVEMENT_THRESHOLD) {
+                if (gestureTimer !== null) {
+                    clearTimeout(gestureTimer);
+                    gestureTimer = null;
+                }
+                enterDrawingMode();
+            }
+        }
         redraw();
         return;
     }
@@ -567,22 +581,36 @@ function handlePointerUp(e: PointerEvent) {
         clampIndicatorToView();
 
         if (e.pointerId === secondaryPointerId) {
-            // Second finger lifted - transition to drawing mode with primary finger
+            // Second finger lifted - go back to waiting mode with primary finger
             secondaryPointerId = null;
             secondaryPos = null;
-            gestureMode = 'drawing';
+            primaryStartPos = primaryPos;  // Reset start position for movement threshold
+            gestureMode = 'waiting';
+            gestureTimer = window.setTimeout(() => {
+                gestureTimer = null;
+                if (gestureMode === 'waiting') {
+                    enterDrawingMode();
+                }
+            }, GESTURE_DELAY);
             redraw();
             return;
         }
         if (e.pointerId === primaryPointerId) {
-            // Primary finger lifted - make secondary the new primary and transition to drawing
+            // Primary finger lifted - make secondary the new primary and go to waiting mode
             if (secondaryPointerId !== null && secondaryPos !== null) {
                 primaryPointerId = secondaryPointerId;
                 primaryPos = secondaryPos;
                 lastPrimaryPos = secondaryPos;  // Prevent marker jump
+                primaryStartPos = secondaryPos;  // Reset start position for movement threshold
                 secondaryPointerId = null;
                 secondaryPos = null;
-                gestureMode = 'drawing';
+                gestureMode = 'waiting';
+                gestureTimer = window.setTimeout(() => {
+                    gestureTimer = null;
+                    if (gestureMode === 'waiting') {
+                        enterDrawingMode();
+                    }
+                }, GESTURE_DELAY);
                 redraw();
                 return;
             }
