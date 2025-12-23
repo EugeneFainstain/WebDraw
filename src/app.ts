@@ -261,13 +261,8 @@ function redraw() {
 
     ctx.restore();
 
-    // Draw edge ticks only when marker is not visible (not in drawing mode)
-    if (indicatorAnchor && gestureMode !== 'drawing') {
-        drawEdgeTicks();
-    }
-
-    // Draw preview/indicator rings (in screen space, not transformed) - only in drawing mode
-    if (primaryPos && gestureMode === 'drawing') {
+    // Draw marker indicator (in screen space, not transformed) - always visible when anchor exists
+    if (indicatorAnchor) {
         const indicatorPos = getIndicatorScreenPos();
         // Calculate the actual rendered size (stroke size * zoom, but at least 1 pixel)
         const strokeSize = sizePicker.getSize();
@@ -291,63 +286,6 @@ function redraw() {
         ctx.lineWidth = 2;
         ctx.stroke()
     }
-}
-
-// Draw edge ticks indicating marker position (always visible, pointing inward)
-function drawEdgeTicks(): void {
-    if (!indicatorAnchor) return;
-
-    const screenPos = canvasToScreen(indicatorAnchor);
-    const tickSize = 12;
-
-    const drawColor = colorPicker.getColor();
-    const isWhite = drawColor.toUpperCase() === '#FFFFFF';
-    const tickColor = isWhite ? 'black' : drawColor;
-
-    // Clamp position for tick placement along each edge
-    const margin = 10;
-    const clampedX = Math.max(margin, Math.min(canvas.width - margin, screenPos.x));
-    const clampedY = Math.max(margin, Math.min(canvas.height - margin, screenPos.y));
-
-    ctx.fillStyle = tickColor;
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2;
-
-    // Left edge tick (pointy end pointing right/inward)
-    ctx.beginPath();
-    ctx.moveTo(tickSize, clampedY);  // pointy end inward
-    ctx.lineTo(0, clampedY - tickSize / 2);
-    ctx.lineTo(0, clampedY + tickSize / 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Right edge tick (pointy end pointing left/inward)
-    ctx.beginPath();
-    ctx.moveTo(canvas.width - tickSize, clampedY);  // pointy end inward
-    ctx.lineTo(canvas.width, clampedY - tickSize / 2);
-    ctx.lineTo(canvas.width, clampedY + tickSize / 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Top edge tick (pointy end pointing down/inward)
-    ctx.beginPath();
-    ctx.moveTo(clampedX, tickSize);  // pointy end inward
-    ctx.lineTo(clampedX - tickSize / 2, 0);
-    ctx.lineTo(clampedX + tickSize / 2, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Bottom edge tick (pointy end pointing up/inward)
-    ctx.beginPath();
-    ctx.moveTo(clampedX, canvas.height - tickSize);  // pointy end inward
-    ctx.lineTo(clampedX - tickSize / 2, canvas.height);
-    ctx.lineTo(clampedX + tickSize / 2, canvas.height);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
 }
 
 // Draw a single stroke
@@ -763,3 +701,7 @@ window.addEventListener('resize', resizeCanvas);
 // Initialize
 resizeCanvas();
 updateUndoButton();
+
+// Set initial marker position to center of screen
+indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
+redraw();
