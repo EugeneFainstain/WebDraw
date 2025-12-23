@@ -70,6 +70,21 @@ const DOUBLE_TAP_DELAY = 300; // ms
 const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps for double-tap
 const MOVEMENT_THRESHOLD = 15; // pixels - if finger moves more than this during waiting, enter drawing mode
 
+// Calculate movement coefficient based on distance between two fingers
+// Returns 0.5 when distance < 1/8 diagonal, 1.0 when distance > 1/3 diagonal, linear interpolation in between
+function getMovementCoefficient(fingerDistance: number): number {
+    const diagonal = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
+    const minDist = diagonal / 8;  // 1/8 diagonal -> coefficient 0.5
+    const maxDist = diagonal / 3;  // 1/3 diagonal -> coefficient 1.0
+
+    if (fingerDistance <= minDist) return 0.5;
+    if (fingerDistance >= maxDist) return 1.0;
+
+    // Linear interpolation between 0.5 and 1.0
+    const t = (fingerDistance - minDist) / (maxDist - minDist);
+    return 0.5 + t * 0.5;
+}
+
 // Initialize custom color picker
 const colorPicker = createColorPicker(colorPickerEl, () => {});
 
@@ -452,11 +467,18 @@ function handlePointerMove(e: PointerEvent) {
 
     // Move indicator anchor based on finger movement delta (sum of both fingers)
     if ((gestureMode === 'waiting' || gestureMode === 'drawing') && indicatorAnchor) {
+        // Apply movement coefficient when two fingers are touching
+        let coefficient = 1.0;
+        if (primaryPos && secondaryPos) {
+            const fingerDistance = getDistance(primaryPos, secondaryPos);
+            coefficient = getMovementCoefficient(fingerDistance);
+        }
+
         // Convert screen delta to canvas delta (accounting for scale and rotation)
         const cos = Math.cos(-viewTransform.rotation);
         const sin = Math.sin(-viewTransform.rotation);
-        const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale;
-        const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale;
+        const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale * coefficient;
+        const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale * coefficient;
 
         indicatorAnchor = {
             x: indicatorAnchor.x + canvasDeltaX,
