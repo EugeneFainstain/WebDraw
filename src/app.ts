@@ -464,25 +464,9 @@ function handlePointerDown(e: PointerEvent) {
 function handlePointerMove(e: PointerEvent) {
     e.preventDefault();
 
-    // Get all coalesced events to process position updates atomically
-    const events = e.getCoalescedEvents();
-    const eventsToProcess = events.length > 0 ? events : [e];
-
-    // Process all coalesced events to update positions
-    for (const event of eventsToProcess) {
-        const pos = getPointerPos(event);
-
-        if (event.pointerId === primaryPointerId) {
-            primaryPos = pos;
-        } else if (event.pointerId === secondaryPointerId) {
-            secondaryPos = pos;
-        } else if (event.pointerId === tertiaryPointerId) {
-            tertiaryPos = pos;
-        }
-    }
-
-    // Now calculate delta based on the final updated positions
     const pos = getPointerPos(e);
+
+    // Update positions and calculate delta
     let deltaX = 0;
     let deltaY = 0;
 
@@ -491,14 +475,17 @@ function handlePointerMove(e: PointerEvent) {
             deltaX = pos.x - lastPrimaryPos.x;
             deltaY = pos.y - lastPrimaryPos.y;
         }
+        primaryPos = pos;
         lastPrimaryPos = pos;
     } else if (e.pointerId === secondaryPointerId) {
         if (lastSecondaryPos) {
             deltaX = pos.x - lastSecondaryPos.x;
             deltaY = pos.y - lastSecondaryPos.y;
         }
+        secondaryPos = pos;
         lastSecondaryPos = pos;
     } else if (e.pointerId === tertiaryPointerId) {
+        tertiaryPos = pos;
         // No delta needed for tertiary
     } else {
         return;
@@ -587,26 +574,13 @@ function handlePointerMove(e: PointerEvent) {
                 finalDeltaX = (lastDelta.x + deltaX) / 2;
                 finalDeltaY = (lastDelta.y + deltaY) / 2;
 
-                // Detect if we need to double the result:
-                // 1. If either delta is zero (stationary finger sent an event)
-                // 2. If both deltas are from the same finger (other finger didn't move at all)
-                const lastDeltaIsZero = (lastDelta.x === 0 && lastDelta.y === 0);
-                const currentDeltaIsZero = (deltaX === 0 && deltaY === 0);
+                // If both deltas are from the same finger, the other finger didn't move
+                // Double the result to compensate for averaging with a non-existent zero delta
                 const sameFingerTwice = (lastDelta.pointerId === e.pointerId);
 
-                console.log('Two-finger mode:', {
-                    lastDelta,
-                    currentDelta: { x: deltaX, y: deltaY, pointerId: e.pointerId },
-                    lastDeltaIsZero,
-                    currentDeltaIsZero,
-                    sameFingerTwice,
-                    beforeDouble: { x: finalDeltaX, y: finalDeltaY }
-                });
-
-                if (lastDeltaIsZero || currentDeltaIsZero || sameFingerTwice) {
+                if (sameFingerTwice) {
                     finalDeltaX *= 2;
                     finalDeltaY *= 2;
-                    console.log('After doubling:', { x: finalDeltaX, y: finalDeltaY });
                 }
 
                 // Clear the buffer - we've used it
