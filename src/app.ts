@@ -234,10 +234,10 @@ function getIndicatorScreenPos(): Point {
     return canvasToScreen(indicatorAnchor);
 }
 
-// Get grid cell size
+// Get grid cell size (based on default stroke size of 6)
 function getGridCellSize(): number {
-    const strokeSize = sizePicker.getSize();
-    return strokeSize * 4;
+    const defaultStrokeSize = 6;
+    return defaultStrokeSize * 4;
 }
 
 // Snap a point to the nearest grid junction
@@ -770,10 +770,10 @@ function handlePointerMove(e: PointerEvent) {
         const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
 
         if (shouldDraw && indicatorAnchor && (deltaX !== 0 || deltaY !== 0)) {
-            // In X+ mode, only add points when moving 3/4 cell size away from last junction
+            // In X+ mode, only add points when moving a full cell size away from last junction
             if (xPlusModeCheckbox.checked) {
                 const cellSize = getGridCellSize();
-                const threshold = cellSize * 0.75;
+                const threshold = cellSize;
 
                 if (lastGridPosition === null) {
                     // Initialize - store the last grid junction position
@@ -783,7 +783,7 @@ function handlePointerMove(e: PointerEvent) {
                     const deltaFromLastX = Math.abs(indicatorAnchor.x - lastGridPosition.x);
                     const deltaFromLastY = Math.abs(indicatorAnchor.y - lastGridPosition.y);
 
-                    // Check if we've moved 3/4 cell size away in either direction
+                    // Check if we've moved a full cell size away in either direction
                     if (deltaFromLastX >= threshold || deltaFromLastY >= threshold) {
                         // Add the nearest grid junction
                         const gridPoint = snapToGrid(indicatorAnchor);
