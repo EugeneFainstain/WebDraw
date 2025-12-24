@@ -248,6 +248,54 @@ function getIndicatorScreenPos(): Point {
     return canvasToScreen(indicatorAnchor);
 }
 
+// Draw grid with light blue lines
+function drawGrid() {
+    const strokeSize = sizePicker.getSize();
+    const cellSize = strokeSize * 4;
+
+    // Draw grid lines with light blue color
+    ctx.strokeStyle = 'lightblue';
+    ctx.lineWidth = 1 / viewTransform.scale; // Keep grid lines thin regardless of zoom
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+
+    // Calculate the visible area in canvas coordinates
+    // Transform screen corners to canvas coordinates to get visible bounds
+    const topLeft = screenToCanvas({ x: 0, y: 0 });
+    const topRight = screenToCanvas({ x: canvas.width, y: 0 });
+    const bottomLeft = screenToCanvas({ x: 0, y: canvas.height });
+    const bottomRight = screenToCanvas({ x: canvas.width, y: canvas.height });
+
+    // Find the bounding box in canvas coordinates
+    const minX = Math.min(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x);
+    const maxX = Math.max(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x);
+    const minY = Math.min(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y);
+    const maxY = Math.max(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y);
+
+    // Extend bounds slightly to ensure full coverage
+    const margin = cellSize * 2;
+    const gridLeft = Math.floor((minX - margin) / cellSize) * cellSize;
+    const gridRight = Math.ceil((maxX + margin) / cellSize) * cellSize;
+    const gridTop = Math.floor((minY - margin) / cellSize) * cellSize;
+    const gridBottom = Math.ceil((maxY + margin) / cellSize) * cellSize;
+
+    // Draw vertical lines
+    for (let x = gridLeft; x <= gridRight; x += cellSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, gridTop);
+        ctx.lineTo(x, gridBottom);
+        ctx.stroke();
+    }
+
+    // Draw horizontal lines
+    for (let y = gridTop; y <= gridBottom; y += cellSize) {
+        ctx.beginPath();
+        ctx.moveTo(gridLeft, y);
+        ctx.lineTo(gridRight, y);
+        ctx.stroke();
+    }
+}
+
 // Resize canvas to fill window
 function resizeCanvas() {
     const toolbarHeight = 60;
@@ -270,6 +318,11 @@ function redraw() {
     ctx.rotate(viewTransform.rotation);
     ctx.scale(viewTransform.scale, viewTransform.scale);
     ctx.translate(-cx, -cy);
+
+    // Draw grid if X+ mode is enabled
+    if (xPlusModeCheckbox.checked) {
+        drawGrid();
+    }
 
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -878,6 +931,7 @@ canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false }
 // UI controls
 undoBtn.addEventListener('click', undo);
 clearBtn.addEventListener('click', clearCanvas);
+xPlusModeCheckbox.addEventListener('change', redraw);
 
 // Handle window resize
 window.addEventListener('resize', resizeCanvas);
