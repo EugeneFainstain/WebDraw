@@ -574,14 +574,40 @@ function handlePointerMove(e: PointerEvent) {
                 finalDeltaX = (lastDelta.x + deltaX) / 2;
                 finalDeltaY = (lastDelta.y + deltaY) / 2;
 
-                // If both deltas are from the same finger, the other finger didn't move
-                // Double the result to compensate for averaging with a non-existent zero delta
-                const sameFingerTwice = (lastDelta.pointerId === e.pointerId);
+                // Calculate delta lengths
+                const lastLength = Math.sqrt(lastDelta.x * lastDelta.x + lastDelta.y * lastDelta.y);
+                const currentLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-                if (sameFingerTwice) {
-                    finalDeltaX *= 2;
-                    finalDeltaY *= 2;
+                // If same finger twice, the other delta is implicitly zero
+                const sameFingerTwice = (lastDelta.pointerId === e.pointerId);
+                const bigL = sameFingerTwice
+                    ? Math.max(lastLength, currentLength)
+                    : Math.max(lastLength, currentLength);
+                const smallL = sameFingerTwice
+                    ? 0 // Other finger didn't move at all
+                    : Math.min(lastLength, currentLength);
+
+                // Calculate unevenness: (BigL - SmallL) / (BigL + 0.01)
+                const unevenness = (bigL - smallL) / (bigL + 0.01);
+
+                // Calculate coefficient based on unevenness
+                // unevenness <= 0.5 => coeff = 1 (fingers moving evenly together)
+                // unevenness >= 0.9 => coeff = 2 (one finger much faster or stationary)
+                // Linear interpolation in between
+                let coefficient = 1.0;
+                if (unevenness <= 0.5) {
+                    coefficient = 1.0;
+                } else if (unevenness >= 0.9) {
+                    coefficient = 2.0;
+                } else {
+                    // Linear interpolation: map [0.5, 0.9] to [1.0, 2.0]
+                    const t = (unevenness - 0.5) / (0.9 - 0.5);
+                    coefficient = 1.0 + t * 1.0; // 1.0 when t=0, 2.0 when t=1
                 }
+
+                // Apply coefficient
+                finalDeltaX *= coefficient;
+                finalDeltaY *= coefficient;
 
                 // Clear the buffer - we've used it
                 lastDelta = null;
