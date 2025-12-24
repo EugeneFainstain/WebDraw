@@ -64,6 +64,8 @@ let lastSecondaryPos: Point | null = null; // For tracking secondary finger move
 
 // Two-finger delta buffering - store last delta to average with next one
 let lastDelta: { x: number, y: number, pointerId: number } | null = null;
+// Batched delta for frame rate consistency
+let batchedDelta: { x: number, y: number } | null = null;
 
 // Double-tap detection
 let lastTapTime = 0;
@@ -424,6 +426,8 @@ function handlePointerDown(e: PointerEvent) {
         if (gestureMode === 'drawing' && primaryPos && indicatorAnchor) {
             if (!isDrawing) {
                 isDrawing = true;
+                // Clear any batched work when starting a new stroke
+                batchedDelta = null;
                 // Use the indicator anchor position for drawing
                 currentStroke = {
                     color: colorPicker.getColor(),
@@ -568,31 +572,40 @@ function handlePointerMove(e: PointerEvent) {
 
         // When two fingers are touching, buffer deltas and average consecutive pairs
         if (primaryPos && secondaryPos) {
-            // If we have a previous delta, process it with the current one
+            // First, process any batched work from previous iteration
+            if (batchedDelta !== null) {
+                const cos = Math.cos(-viewTransform.rotation);
+                const sin = Math.sin(-viewTransform.rotation);
+                const canvasDeltaX = (cos * batchedDelta.x - sin * batchedDelta.y) / viewTransform.scale;
+                const canvasDeltaY = (sin * batchedDelta.x + cos * batchedDelta.y) / viewTransform.scale;
+
+                indicatorAnchor.x += canvasDeltaX;
+                indicatorAnchor.y += canvasDeltaY;
+                panToKeepIndicatorInView();
+
+                // Add point to stroke if drawing
+                if (isDrawing && currentStroke) {
+                    currentStroke.points.push({ ...indicatorAnchor });
+                }
+
+                batchedDelta = null;
+            }
+
+            // Now process the pair of deltas
             if (lastDelta !== null) {
                 const sameFingerTwice = (lastDelta.pointerId === e.pointerId);
 
                 if (sameFingerTwice) {
                     // Same finger moved twice - other finger is stationary
-                    // Apply both deltas separately for finer resolution
-                    // First, apply the buffered delta
-                    const cos1 = Math.cos(-viewTransform.rotation);
-                    const sin1 = Math.sin(-viewTransform.rotation);
-                    const canvasDelta1X = (cos1 * lastDelta.x - sin1 * lastDelta.y) / viewTransform.scale;
-                    const canvasDelta1Y = (sin1 * lastDelta.x + cos1 * lastDelta.y) / viewTransform.scale;
+                    // Process first message immediately for full frame rate
+                    finalDeltaX = lastDelta.x;
+                    finalDeltaY = lastDelta.y;
 
-                    indicatorAnchor.x += canvasDelta1X;
-                    indicatorAnchor.y += canvasDelta1Y;
-                    panToKeepIndicatorInView();
+                    // Store current delta for next iteration (don't batch it)
+                    lastDelta = { x: deltaX, y: deltaY, pointerId: e.pointerId };
 
-                    // Add point to stroke if drawing
-                    if (isDrawing && currentStroke) {
-                        currentStroke.points.push({ ...indicatorAnchor });
-                    }
-
-                    // Now continue with the current delta (will be applied below)
-                    finalDeltaX = deltaX;
-                    finalDeltaY = deltaY;
+                    // Process the first delta now (will add point below)
+                    // The second delta will be processed in the next iteration
                 } else {
                     // Different fingers - average and apply coefficient based on unevenness
                     finalDeltaX = (lastDelta.x + deltaX) / 2;
@@ -626,18 +639,37 @@ function handlePointerMove(e: PointerEvent) {
                     // Apply coefficient
                     finalDeltaX *= coefficient;
                     finalDeltaY *= coefficient;
-                }
 
-                // Clear the buffer - we've used it
-                lastDelta = null;
+                    // Clear the buffer - we've used both deltas
+                    lastDelta = null;
+                }
             } else {
-                // Store this delta and wait for the next one
+                // First message of the pair - store and wait
                 lastDelta = { x: deltaX, y: deltaY, pointerId: e.pointerId };
                 // Don't move indicator yet - waiting for the next delta
                 return;
             }
         } else {
-            // Single finger - use delta directly, no buffering
+            // Single finger mode - process any batched work first
+            if (batchedDelta !== null) {
+                const cos = Math.cos(-viewTransform.rotation);
+                const sin = Math.sin(-viewTransform.rotation);
+                const canvasDeltaX = (cos * batchedDelta.x - sin * batchedDelta.y) / viewTransform.scale;
+                const canvasDeltaY = (sin * batchedDelta.x + cos * batchedDelta.y) / viewTransform.scale;
+
+                indicatorAnchor.x += canvasDeltaX;
+                indicatorAnchor.y += canvasDeltaY;
+                panToKeepIndicatorInView();
+
+                // In lift mode, add point when exiting two-finger mode
+                if (liftModeCheckbox.checked && isDrawing && currentStroke) {
+                    currentStroke.points.push({ ...indicatorAnchor });
+                }
+
+                batchedDelta = null;
+            }
+
+            // Use current delta directly, no buffering
             finalDeltaX = deltaX;
             finalDeltaY = deltaY;
 
@@ -805,6 +837,7 @@ function clearCanvas() {
     lastPrimaryPos = null;
     lastSecondaryPos = null;
     lastDelta = null;
+    batchedDelta = null;
     currentStroke = null;
     isDrawing = false;
     gestureMode = 'none';
