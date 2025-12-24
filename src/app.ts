@@ -40,6 +40,7 @@ let tertiaryPos: Point | null = null;
 // Drawing state
 let currentStroke: Stroke | null = null;
 let isDrawing = false;
+let lastGridPosition: Point | null = null; // Track last grid position for X+ mode
 
 // Transform state
 let viewTransform = {
@@ -248,10 +249,24 @@ function getIndicatorScreenPos(): Point {
     return canvasToScreen(indicatorAnchor);
 }
 
+// Get grid cell size
+function getGridCellSize(): number {
+    const strokeSize = sizePicker.getSize();
+    return strokeSize * 4;
+}
+
+// Snap a point to the nearest grid junction
+function snapToGrid(point: Point): Point {
+    const cellSize = getGridCellSize();
+    return {
+        x: Math.round(point.x / cellSize) * cellSize,
+        y: Math.round(point.y / cellSize) * cellSize
+    };
+}
+
 // Draw grid with light blue lines
 function drawGrid() {
-    const strokeSize = sizePicker.getSize();
-    const cellSize = strokeSize * 4;
+    const cellSize = getGridCellSize();
 
     // Draw grid lines with light blue color
     ctx.strokeStyle = 'lightblue';
@@ -488,11 +503,14 @@ function handlePointerDown(e: PointerEvent) {
                 isDrawing = true;
                 // Clear any batched work when starting a new stroke
                 batchedDelta = null;
+                // Reset grid tracking for X+ mode
+                lastGridPosition = null;
                 // Use the indicator anchor position for drawing
+                const startPoint = xPlusModeCheckbox.checked ? snapToGrid(indicatorAnchor) : indicatorAnchor;
                 currentStroke = {
                     color: colorPicker.getColor(),
                     size: sizePicker.getSize(),
-                    points: [{ ...indicatorAnchor }]
+                    points: [{ ...startPoint }]
                 };
             }
             redraw();
@@ -522,6 +540,7 @@ function handlePointerDown(e: PointerEvent) {
         // Clear the stroke
         currentStroke = null;
         isDrawing = false;
+        lastGridPosition = null;
 
         // Initialize 3-finger transform
         initThreeFingerTransform();
@@ -773,8 +792,28 @@ function handlePointerMove(e: PointerEvent) {
         const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
 
         if (shouldDraw && indicatorAnchor && (deltaX !== 0 || deltaY !== 0)) {
-            // Use the indicator anchor position for drawing when any tracked finger moves
-            currentStroke!.points.push({ ...indicatorAnchor });
+            // In X+ mode, only add points when crossing grid boundaries
+            if (xPlusModeCheckbox.checked) {
+                const cellSize = getGridCellSize();
+                const currentGridX = Math.floor(indicatorAnchor.x / cellSize);
+                const currentGridY = Math.floor(indicatorAnchor.y / cellSize);
+
+                if (lastGridPosition === null) {
+                    // Initialize - store which grid cell we're in
+                    lastGridPosition = { x: currentGridX, y: currentGridY };
+                } else {
+                    // Check if we've moved to a different grid cell
+                    if (lastGridPosition.x !== currentGridX || lastGridPosition.y !== currentGridY) {
+                        // We crossed a boundary - add the nearest grid junction
+                        const gridPoint = snapToGrid(indicatorAnchor);
+                        currentStroke!.points.push(gridPoint);
+                        lastGridPosition = { x: currentGridX, y: currentGridY };
+                    }
+                }
+            } else {
+                // Normal mode: add every point
+                currentStroke!.points.push({ ...indicatorAnchor });
+            }
         }
 
         redraw();
@@ -834,6 +873,7 @@ function handlePointerUp(e: PointerEvent) {
                 updateUndoButton();
                 currentStroke = null;
                 isDrawing = false;
+                lastGridPosition = null;
             }
 
             redraw();
@@ -874,6 +914,13 @@ function handlePointerUp(e: PointerEvent) {
             currentStroke = null;
             isDrawing = false;
             gestureMode = 'none';
+            lastGridPosition = null;
+
+            // Snap marker to grid when all fingers are lifted in X+ mode
+            if (xPlusModeCheckbox.checked && indicatorAnchor) {
+                indicatorAnchor = snapToGrid(indicatorAnchor);
+            }
+
             redraw();
         }
     }
@@ -931,7 +978,13 @@ canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false }
 // UI controls
 undoBtn.addEventListener('click', undo);
 clearBtn.addEventListener('click', clearCanvas);
-xPlusModeCheckbox.addEventListener('change', redraw);
+xPlusModeCheckbox.addEventListener('change', () => {
+    // Snap marker to grid when X+ mode is turned on
+    if (xPlusModeCheckbox.checked && indicatorAnchor) {
+        indicatorAnchor = snapToGrid(indicatorAnchor);
+    }
+    redraw();
+});
 
 // Handle window resize
 window.addEventListener('resize', resizeCanvas);
