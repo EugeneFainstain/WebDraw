@@ -448,8 +448,7 @@ function handlePointerDown(e: PointerEvent) {
     if (primaryPointerId === null) {
         primaryPointerId = e.pointerId;
         primaryPos = pos;
-        // Don't set lastPrimaryPos yet - let first move event establish baseline
-        lastPrimaryPos = null;
+        lastPrimaryPos = pos;
 
         // Capture pointer to ensure we get all events immediately
         canvas.setPointerCapture(e.pointerId);
@@ -480,8 +479,7 @@ function handlePointerDown(e: PointerEvent) {
     if (secondaryPointerId === null) {
         secondaryPointerId = e.pointerId;
         secondaryPos = pos;
-        // Don't set lastSecondaryPos yet - let first move event establish baseline
-        lastSecondaryPos = null;
+        lastSecondaryPos = pos;
 
         // Capture pointer to ensure we get all events immediately
         canvas.setPointerCapture(e.pointerId);
@@ -550,17 +548,6 @@ function handlePointerDown(e: PointerEvent) {
 function handlePointerMove(e: PointerEvent) {
     e.preventDefault();
 
-    // Get coalesced events for smoother drawing on iOS
-    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-
-    // Process all coalesced events
-    for (const event of events) {
-        processPointerMove(event);
-    }
-}
-
-// Process a single pointer move event
-function processPointerMove(e: PointerEvent) {
     const pos = getPointerPos(e);
 
     // Update positions and calculate delta
