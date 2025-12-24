@@ -116,4 +116,7 @@ button {
     left: 0;
     background: #fff;
     touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
