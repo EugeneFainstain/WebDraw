@@ -73,6 +73,10 @@ let lastTapPos: Point | null = null;
 const DOUBLE_TAP_DELAY = 300; // ms
 const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps for double-tap
 
+// Track when second finger touches down for stroke protection
+let secondFingerDownTime = 0;
+const STROKE_PROTECTION_DELAY = 250; // ms - if third finger lands after this, save the stroke
+
 // Snap a delta to the nearest 45-degree angle (0, 45, 90, 135, 180, 225, 270, 315)
 function snapTo45Degrees(deltaX: number, deltaY: number): { x: number, y: number } {
     const magnitude = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
@@ -422,6 +426,9 @@ function handlePointerDown(e: PointerEvent) {
         secondaryPos = pos;
         lastSecondaryPos = pos;
 
+        // Record time for stroke protection
+        secondFingerDownTime = Date.now();
+
         // If in drawing mode, second finger starts/continues drawing
         if (gestureMode === 'drawing' && primaryPos && indicatorAnchor) {
             if (!isDrawing) {
@@ -449,11 +456,19 @@ function handlePointerDown(e: PointerEvent) {
         // Switch to transform mode (even if we were drawing)
         gestureMode = 'transform';
 
-        // Abort any in-progress stroke (don't save it)
-        if (currentStroke) {
-            currentStroke = null;
-            isDrawing = false;
+        // Check if stroke should be protected (save if >250ms elapsed)
+        const elapsedTime = Date.now() - secondFingerDownTime;
+        if (currentStroke && elapsedTime > STROKE_PROTECTION_DELAY) {
+            // Save the stroke instead of aborting
+            if (currentStroke.points.length > 0) {
+                strokeHistory.push(currentStroke);
+                updateUndoButton();
+            }
         }
+
+        // Clear the stroke
+        currentStroke = null;
+        isDrawing = false;
 
         // Initialize 3-finger transform
         initThreeFingerTransform();
