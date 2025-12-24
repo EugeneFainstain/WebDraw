@@ -51,8 +51,8 @@ let viewTransform = {
 let transformStart: {
     pivot: Point;
     initialScale: number;
-    initialRotation: number;
-    fingerAngles: number[];  // Initial angle from pivot to each finger
+    fingerAngles: number[];  // Initial raw angle from pivot to each finger (for unwrapping)
+    unwrappedRotation: number;  // Accumulated unwrapped rotation
     initialTransform: typeof viewTransform;
 } | null = null;
 
@@ -355,6 +355,13 @@ function getPointerPos(e: PointerEvent): Point {
     };
 }
 
+// Normalize angle difference to [-PI, PI]
+function normalizeAngleDelta(delta: number): number {
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+    return delta;
+}
+
 // Calculate the pivot point and initial transform state for 3-finger gesture
 function initThreeFingerTransform() {
     if (!primaryPos || !secondaryPos || !tertiaryPos) return;
@@ -371,17 +378,16 @@ function initThreeFingerTransform() {
     const dist3 = getDistance(pivot, tertiaryPos);
     const initialScale = (dist1 + dist2 + dist3) / 3;
 
-    // Calculate angle from pivot to each finger
+    // Calculate raw angle from pivot to each finger (for unwrapping later)
     const angle1 = getAngle(pivot, primaryPos);
     const angle2 = getAngle(pivot, secondaryPos);
     const angle3 = getAngle(pivot, tertiaryPos);
-    const initialRotation = (angle1 + angle2 + angle3) / 3;
 
     transformStart = {
         pivot,
         initialScale,
-        initialRotation,
         fingerAngles: [angle1, angle2, angle3],
+        unwrappedRotation: 0,  // Start with no rotation
         initialTransform: { ...viewTransform }
     };
 }
@@ -451,10 +457,8 @@ function handlePointerDown(e: PointerEvent) {
         // Switch to transform mode (even if we were drawing)
         gestureMode = 'transform';
 
-        // Save any in-progress stroke
-        if (currentStroke && currentStroke.points.length > 0) {
-            strokeHistory.push(currentStroke);
-            updateUndoButton();
+        // Abort any in-progress stroke (don't save it)
+        if (currentStroke) {
             currentStroke = null;
             isDrawing = false;
         }
@@ -512,17 +516,27 @@ function handlePointerMove(e: PointerEvent) {
         const dist3 = getDistance(currentPivot, tertiaryPos);
         const currentScale = (dist1 + dist2 + dist3) / 3;
 
-        // Calculate current average angle
+        // Calculate current raw angles for each finger
         const angle1 = getAngle(currentPivot, primaryPos);
         const angle2 = getAngle(currentPivot, secondaryPos);
         const angle3 = getAngle(currentPivot, tertiaryPos);
-        const currentRotation = (angle1 + angle2 + angle3) / 3;
+
+        // Calculate unwrapped angle deltas for each finger
+        const delta1 = normalizeAngleDelta(angle1 - transformStart.fingerAngles[0]);
+        const delta2 = normalizeAngleDelta(angle2 - transformStart.fingerAngles[1]);
+        const delta3 = normalizeAngleDelta(angle3 - transformStart.fingerAngles[2]);
+
+        // Average the angle deltas and accumulate to unwrapped rotation
+        const averageDelta = (delta1 + delta2 + delta3) / 3;
+        transformStart.unwrappedRotation += averageDelta;
+
+        // Update stored angles for next iteration
+        transformStart.fingerAngles = [angle1, angle2, angle3];
 
         // Calculate scale and rotation changes
         const scaleFactor = currentScale / transformStart.initialScale;
         const newScale = transformStart.initialTransform.scale * scaleFactor;
-        const rotationDelta = currentRotation - transformStart.initialRotation;
-        const newRotation = transformStart.initialTransform.rotation + rotationDelta;
+        const newRotation = transformStart.initialTransform.rotation + transformStart.unwrappedRotation;
 
         // Calculate pan to keep the point under the initial pivot under the current pivot
         const startPivot = transformStart.pivot;
