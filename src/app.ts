@@ -789,6 +789,8 @@ function handlePointerMove(e: PointerEvent) {
                         const gridPoint = snapToGrid(indicatorAnchor);
                         currentStroke!.points.push(gridPoint);
                         lastGridPosition = gridPoint;
+                        // Snap marker to the junction
+                        indicatorAnchor = gridPoint;
                     }
                 }
             } else {
