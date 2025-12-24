@@ -448,7 +448,11 @@ function handlePointerDown(e: PointerEvent) {
     if (primaryPointerId === null) {
         primaryPointerId = e.pointerId;
         primaryPos = pos;
-        lastPrimaryPos = pos;
+        // Don't set lastPrimaryPos yet - let first move event establish baseline
+        lastPrimaryPos = null;
+
+        // Capture pointer to ensure we get all events immediately
+        canvas.setPointerCapture(e.pointerId);
 
         // Check for double-tap to reset indicator position
         const now = Date.now();
@@ -476,7 +480,11 @@ function handlePointerDown(e: PointerEvent) {
     if (secondaryPointerId === null) {
         secondaryPointerId = e.pointerId;
         secondaryPos = pos;
-        lastSecondaryPos = pos;
+        // Don't set lastSecondaryPos yet - let first move event establish baseline
+        lastSecondaryPos = null;
+
+        // Capture pointer to ensure we get all events immediately
+        canvas.setPointerCapture(e.pointerId);
 
         // Record time for stroke protection
         secondFingerDownTime = Date.now();
@@ -507,6 +515,9 @@ function handlePointerDown(e: PointerEvent) {
     if (tertiaryPointerId === null) {
         tertiaryPointerId = e.pointerId;
         tertiaryPos = pos;
+
+        // Capture pointer to ensure we get all events immediately
+        canvas.setPointerCapture(e.pointerId);
 
         // Switch to transform mode (even if we were drawing)
         gestureMode = 'transform';
