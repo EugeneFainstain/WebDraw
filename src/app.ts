@@ -448,7 +448,7 @@ function handlePointerDown(e: PointerEvent) {
     if (primaryPointerId === null) {
         primaryPointerId = e.pointerId;
         primaryPos = pos;
-        lastPrimaryPos = pos;
+        lastPrimaryPos = null; // Don't set yet - let first move event establish baseline
 
         // Capture pointer to ensure we get all events immediately
         canvas.setPointerCapture(e.pointerId);
@@ -479,7 +479,7 @@ function handlePointerDown(e: PointerEvent) {
     if (secondaryPointerId === null) {
         secondaryPointerId = e.pointerId;
         secondaryPos = pos;
-        lastSecondaryPos = pos;
+        lastSecondaryPos = null; // Don't set yet - let first move event establish baseline
 
         // Capture pointer to ensure we get all events immediately
         canvas.setPointerCapture(e.pointerId);
