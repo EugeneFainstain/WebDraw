@@ -539,6 +539,17 @@ function handlePointerDown(e: PointerEvent) {
 function handlePointerMove(e: PointerEvent) {
     e.preventDefault();
 
+    // Get coalesced events for smoother drawing on iOS
+    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+
+    // Process all coalesced events
+    for (const event of events) {
+        processPointerMove(event);
+    }
+}
+
+// Process a single pointer move event
+function processPointerMove(e: PointerEvent) {
     const pos = getPointerPos(e);
 
     // Update positions and calculate delta
