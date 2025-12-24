@@ -476,9 +476,25 @@ function handlePointerDown(e: PointerEvent) {
 function handlePointerMove(e: PointerEvent) {
     e.preventDefault();
 
-    const pos = getPointerPos(e);
+    // Get all coalesced events to process position updates atomically
+    const events = e.getCoalescedEvents();
+    const eventsToProcess = events.length > 0 ? events : [e];
 
-    // Update position tracking and calculate deltas
+    // Process all coalesced events to update positions
+    for (const event of eventsToProcess) {
+        const pos = getPointerPos(event);
+
+        if (event.pointerId === primaryPointerId) {
+            primaryPos = pos;
+        } else if (event.pointerId === secondaryPointerId) {
+            secondaryPos = pos;
+        } else if (event.pointerId === tertiaryPointerId) {
+            tertiaryPos = pos;
+        }
+    }
+
+    // Now calculate delta based on the final updated positions
+    const pos = getPointerPos(e);
     let deltaX = 0;
     let deltaY = 0;
 
@@ -487,17 +503,15 @@ function handlePointerMove(e: PointerEvent) {
             deltaX = pos.x - lastPrimaryPos.x;
             deltaY = pos.y - lastPrimaryPos.y;
         }
-        primaryPos = pos;
         lastPrimaryPos = pos;
     } else if (e.pointerId === secondaryPointerId) {
         if (lastSecondaryPos) {
             deltaX = pos.x - lastSecondaryPos.x;
             deltaY = pos.y - lastSecondaryPos.y;
         }
-        secondaryPos = pos;
         lastSecondaryPos = pos;
     } else if (e.pointerId === tertiaryPointerId) {
-        tertiaryPos = pos;
+        // No delta needed for tertiary
     } else {
         return;
     }
