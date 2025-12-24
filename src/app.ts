@@ -953,9 +953,11 @@ canvas.addEventListener('pointerup', handlePointerUp);
 canvas.addEventListener('pointercancel', handlePointerUp);
 canvas.addEventListener('pointerleave', handlePointerUp);
 
-// Prevent default touch behaviors
+// Prevent default touch behaviors - must be non-passive to work on iOS
 canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
 canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+canvas.addEventListener('touchend', e => e.preventDefault(), { passive: false });
+canvas.addEventListener('touchcancel', e => e.preventDefault(), { passive: false });
 
 // UI controls
 undoBtn.addEventListener('click', undo);
