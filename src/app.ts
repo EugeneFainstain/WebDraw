@@ -78,21 +78,6 @@ const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps for double
 let secondFingerDownTime = 0;
 const STROKE_PROTECTION_DELAY = 250; // ms - if third finger lands after this, save the stroke
 
-// Snap a delta to the nearest 45-degree angle (0, 45, 90, 135, 180, 225, 270, 315)
-function snapTo45Degrees(deltaX: number, deltaY: number): { x: number, y: number } {
-    const magnitude = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    if (magnitude === 0) return { x: 0, y: 0 };
-
-    const angle = Math.atan2(deltaY, deltaX);
-    // Snap to nearest 45 degrees (PI/4 radians)
-    const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
-
-    return {
-        x: magnitude * Math.cos(snappedAngle),
-        y: magnitude * Math.sin(snappedAngle)
-    };
-}
-
 // Initialize custom color picker
 const colorPicker = createColorPicker(colorPickerEl, () => {});
 
@@ -767,15 +752,8 @@ function handlePointerMove(e: PointerEvent) {
         // Convert screen delta to canvas delta (accounting for scale and rotation)
         const cos = Math.cos(-viewTransform.rotation);
         const sin = Math.sin(-viewTransform.rotation);
-        let canvasDeltaX = (cos * finalDeltaX - sin * finalDeltaY) / viewTransform.scale;
-        let canvasDeltaY = (sin * finalDeltaX + cos * finalDeltaY) / viewTransform.scale;
-
-        // Apply 45-degree snapping when X+ mode is checked and drawing
-        if (xPlusModeCheckbox.checked && gestureMode === 'drawing' && isDrawing) {
-            const snapped = snapTo45Degrees(canvasDeltaX, canvasDeltaY);
-            canvasDeltaX = snapped.x;
-            canvasDeltaY = snapped.y;
-        }
+        const canvasDeltaX = (cos * finalDeltaX - sin * finalDeltaY) / viewTransform.scale;
+        const canvasDeltaY = (sin * finalDeltaX + cos * finalDeltaY) / viewTransform.scale;
 
         indicatorAnchor = {
             x: indicatorAnchor.x + canvasDeltaX,
