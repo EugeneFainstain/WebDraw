@@ -770,22 +770,25 @@ function handlePointerMove(e: PointerEvent) {
         const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
 
         if (shouldDraw && indicatorAnchor && (deltaX !== 0 || deltaY !== 0)) {
-            // In X+ mode, only add points when crossing grid boundaries
+            // In X+ mode, only add points when moving 3/4 cell size away from last junction
             if (xPlusModeCheckbox.checked) {
                 const cellSize = getGridCellSize();
-                const currentGridX = Math.floor(indicatorAnchor.x / cellSize);
-                const currentGridY = Math.floor(indicatorAnchor.y / cellSize);
+                const threshold = cellSize * 0.75;
 
                 if (lastGridPosition === null) {
-                    // Initialize - store which grid cell we're in
-                    lastGridPosition = { x: currentGridX, y: currentGridY };
+                    // Initialize - store the last grid junction position
+                    lastGridPosition = snapToGrid(indicatorAnchor);
                 } else {
-                    // Check if we've moved to a different grid cell
-                    if (lastGridPosition.x !== currentGridX || lastGridPosition.y !== currentGridY) {
-                        // We crossed a boundary - add the nearest grid junction
+                    // Calculate distance from last added point
+                    const deltaFromLastX = Math.abs(indicatorAnchor.x - lastGridPosition.x);
+                    const deltaFromLastY = Math.abs(indicatorAnchor.y - lastGridPosition.y);
+
+                    // Check if we've moved 3/4 cell size away in either direction
+                    if (deltaFromLastX >= threshold || deltaFromLastY >= threshold) {
+                        // Add the nearest grid junction
                         const gridPoint = snapToGrid(indicatorAnchor);
                         currentStroke!.points.push(gridPoint);
-                        lastGridPosition = { x: currentGridX, y: currentGridY };
+                        lastGridPosition = gridPoint;
                     }
                 }
             } else {
