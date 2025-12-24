@@ -8,7 +8,6 @@ const colorPickerEl = document.getElementById('colorPicker') as HTMLElement;
 const sizePickerEl = document.getElementById('sizePicker') as HTMLElement;
 const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
-const liftModeCheckbox = document.getElementById('liftMode') as HTMLInputElement;
 const xPlusModeCheckbox = document.getElementById('xPlusMode') as HTMLInputElement;
 
 interface Point {
@@ -733,11 +732,6 @@ function handlePointerMove(e: PointerEvent) {
                 indicatorAnchor.y += canvasDeltaY;
                 panToKeepIndicatorInView();
 
-                // In lift mode, add point when exiting two-finger mode
-                if (liftModeCheckbox.checked && isDrawing && currentStroke) {
-                    currentStroke.points.push({ ...indicatorAnchor });
-                }
-
                 batchedDelta = null;
             }
 
@@ -766,8 +760,7 @@ function handlePointerMove(e: PointerEvent) {
 
     // Handle drawing mode - either finger can contribute to drawing
     if (gestureMode === 'drawing') {
-        const liftMode = liftModeCheckbox.checked;
-        const shouldDraw = isDrawing && currentStroke && (liftMode || secondaryPointerId !== null);
+        const shouldDraw = isDrawing && currentStroke && secondaryPointerId !== null;
 
         if (shouldDraw && indicatorAnchor && (deltaX !== 0 || deltaY !== 0)) {
             // In X+ mode, only add points when moving a full cell size away from last junction
@@ -839,8 +832,6 @@ function handlePointerUp(e: PointerEvent) {
 
     // Handle drawing mode
     if (gestureMode === 'drawing') {
-        const liftMode = liftModeCheckbox.checked;
-
         // Secondary finger lifted
         if (e.pointerId === secondaryPointerId) {
             secondaryPointerId = null;
@@ -850,8 +841,8 @@ function handlePointerUp(e: PointerEvent) {
             // Clear pending delta
             lastDelta = null;
 
-            // In non-lift mode, save stroke when second finger lifts
-            if (!liftMode && currentStroke && currentStroke.points.length > 0) {
+            // Save stroke when second finger lifts
+            if (currentStroke && currentStroke.points.length > 0) {
                 strokeHistory.push(currentStroke);
                 updateUndoButton();
                 currentStroke = null;
