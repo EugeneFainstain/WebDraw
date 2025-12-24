@@ -868,7 +868,15 @@ function handlePointerUp(e: PointerEvent) {
                 // Clear pending delta
                 lastDelta = null;
 
-                // Continue drawing - don't save stroke yet
+                // Save stroke when going from 2 fingers to 1 finger
+                if (currentStroke && currentStroke.points.length > 0) {
+                    strokeHistory.push(currentStroke);
+                    updateUndoButton();
+                    currentStroke = null;
+                    isDrawing = false;
+                    lastGridPosition = null;
+                }
+
                 redraw();
                 return;
             }
