@@ -450,7 +450,7 @@ function handlePointerDown(e: PointerEvent) {
         primaryPos = pos;
         lastPrimaryPos = null; // Don't set yet - let first move event establish baseline
 
-        // Capture pointer to ensure we get all events immediately
+        // Capture pointer to continue tracking even outside canvas
         canvas.setPointerCapture(e.pointerId);
 
         // Check for double-tap to reset indicator position
@@ -481,7 +481,7 @@ function handlePointerDown(e: PointerEvent) {
         secondaryPos = pos;
         lastSecondaryPos = null; // Don't set yet - let first move event establish baseline
 
-        // Capture pointer to ensure we get all events immediately
+        // Capture pointer to continue tracking even outside canvas
         canvas.setPointerCapture(e.pointerId);
 
         // Record time for stroke protection
@@ -514,7 +514,7 @@ function handlePointerDown(e: PointerEvent) {
         tertiaryPointerId = e.pointerId;
         tertiaryPos = pos;
 
-        // Capture pointer to ensure we get all events immediately
+        // Capture pointer to continue tracking even outside canvas
         canvas.setPointerCapture(e.pointerId);
 
         // Switch to transform mode (even if we were drawing)
