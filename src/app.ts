@@ -26,16 +26,16 @@ interface Stroke {
 let strokeHistory: Stroke[] = [];
 
 // Gesture mode
-type GestureMode = 'none' | 'waiting'  | 'drawing' | 'transform';
+type GestureMode = 'none' | 'drawing' | 'transform';
 let gestureMode: GestureMode = 'none';
-let gestureTimer: number | null = null;
-const GESTURE_DELAY = 100; // ms to wait before entering drawing mode
 
 // Pointer tracking
 let primaryPointerId: number | null = null;
 let secondaryPointerId: number | null = null;
+let tertiaryPointerId: number | null = null;
 let primaryPos: Point | null = null;
 let secondaryPos: Point | null = null;
+let tertiaryPos: Point | null = null;
 
 // Drawing state
 let currentStroke: Stroke | null = null;
@@ -49,11 +49,10 @@ let viewTransform = {
     panY: 0
 };
 let transformStart: {
-    primaryPos: Point;
-    secondaryPos: Point;
-    distance: number;
-    angle: number;
-    midpoint: Point;
+    pivot: Point;
+    initialScale: number;
+    initialRotation: number;
+    fingerAngles: number[];  // Initial angle from pivot to each finger
     initialTransform: typeof viewTransform;
 } | null = null;
 
@@ -62,14 +61,12 @@ let transformStart: {
 let indicatorAnchor: Point | null = null;
 let lastPrimaryPos: Point | null = null; // For tracking finger movement delta
 let lastSecondaryPos: Point | null = null; // For tracking secondary finger movement delta
-let primaryStartPos: Point | null = null; // Initial position when finger landed (for movement threshold)
 
 // Double-tap detection
 let lastTapTime = 0;
 let lastTapPos: Point | null = null;
 const DOUBLE_TAP_DELAY = 300; // ms
 const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps for double-tap
-const MOVEMENT_THRESHOLD = 15; // pixels - if finger moves more than this during waiting, enter drawing mode
 
 // Snap a delta to the nearest 45-degree angle (0, 45, 90, 135, 180, 225, 270, 315)
 function snapTo45Degrees(deltaX: number, deltaY: number): { x: number, y: number } {
@@ -358,10 +355,35 @@ function getPointerPos(e: PointerEvent): Point {
     };
 }
 
-// Enter drawing mode
-function enterDrawingMode() {
-    gestureMode = 'drawing';
-    redraw();
+// Calculate the pivot point and initial transform state for 3-finger gesture
+function initThreeFingerTransform() {
+    if (!primaryPos || !secondaryPos || !tertiaryPos) return;
+
+    // Calculate pivot as average of all three finger positions
+    const pivot = {
+        x: (primaryPos.x + secondaryPos.x + tertiaryPos.x) / 3,
+        y: (primaryPos.y + secondaryPos.y + tertiaryPos.y) / 3
+    };
+
+    // Calculate average distance from pivot to fingers
+    const dist1 = getDistance(pivot, primaryPos);
+    const dist2 = getDistance(pivot, secondaryPos);
+    const dist3 = getDistance(pivot, tertiaryPos);
+    const initialScale = (dist1 + dist2 + dist3) / 3;
+
+    // Calculate angle from pivot to each finger
+    const angle1 = getAngle(pivot, primaryPos);
+    const angle2 = getAngle(pivot, secondaryPos);
+    const angle3 = getAngle(pivot, tertiaryPos);
+    const initialRotation = (angle1 + angle2 + angle3) / 3;
+
+    transformStart = {
+        pivot,
+        initialScale,
+        initialRotation,
+        fingerAngles: [angle1, angle2, angle3],
+        initialTransform: { ...viewTransform }
+    };
 }
 
 // Handle pointer down
@@ -375,7 +397,6 @@ function handlePointerDown(e: PointerEvent) {
         primaryPointerId = e.pointerId;
         primaryPos = pos;
         lastPrimaryPos = pos;
-        primaryStartPos = pos;  // Track where finger landed for movement threshold
 
         // Check for double-tap to reset indicator position
         const now = Date.now();
@@ -393,15 +414,8 @@ function handlePointerDown(e: PointerEvent) {
             lastTapPos = pos;
         }
 
-        // Start waiting period
-        gestureMode = 'waiting';
-        gestureTimer = window.setTimeout(() => {
-            gestureTimer = null;
-            if (gestureMode === 'waiting') {
-                enterDrawingMode();
-            }
-        }, GESTURE_DELAY);
-
+        // Enter drawing mode immediately
+        gestureMode = 'drawing';
         redraw();
         return;
     }
@@ -410,27 +424,7 @@ function handlePointerDown(e: PointerEvent) {
     if (secondaryPointerId === null) {
         secondaryPointerId = e.pointerId;
         secondaryPos = pos;
-        lastSecondaryPos = pos;  // Initialize to prevent marker jump on first move
-
-        // If still in waiting period, this is a transform gesture
-        if (gestureMode === 'waiting' && gestureTimer !== null) {
-            clearTimeout(gestureTimer);
-            gestureTimer = null;
-            gestureMode = 'transform';
-
-            // Initialize transform tracking
-            transformStart = {
-                primaryPos: { ...primaryPos! },
-                secondaryPos: { ...secondaryPos! },
-                distance: getDistance(primaryPos!, secondaryPos!),
-                angle: getAngle(primaryPos!, secondaryPos!),
-                midpoint: getMidpoint(primaryPos!, secondaryPos!),
-                initialTransform: { ...viewTransform }
-            };
-
-            redraw();
-            return;
-        }
+        lastSecondaryPos = pos;
 
         // If in drawing mode, second finger starts/continues drawing
         if (gestureMode === 'drawing' && primaryPos && indicatorAnchor) {
@@ -449,7 +443,29 @@ function handlePointerDown(e: PointerEvent) {
         return;
     }
 
-    // Third+ fingers - ignore
+    // Third finger - enter transform mode
+    if (tertiaryPointerId === null) {
+        tertiaryPointerId = e.pointerId;
+        tertiaryPos = pos;
+
+        // Switch to transform mode (even if we were drawing)
+        gestureMode = 'transform';
+
+        // Save any in-progress stroke
+        if (currentStroke && currentStroke.points.length > 0) {
+            strokeHistory.push(currentStroke);
+            updateUndoButton();
+            currentStroke = null;
+            isDrawing = false;
+        }
+
+        // Initialize 3-finger transform
+        initThreeFingerTransform();
+        redraw();
+        return;
+    }
+
+    // Fourth+ fingers - ignore
 }
 
 // Handle pointer move
@@ -458,8 +474,7 @@ function handlePointerMove(e: PointerEvent) {
 
     const pos = getPointerPos(e);
 
-    // Update position tracking
-    // Track deltas for both fingers
+    // Update position tracking and calculate deltas
     let deltaX = 0;
     let deltaY = 0;
 
@@ -477,12 +492,74 @@ function handlePointerMove(e: PointerEvent) {
         }
         secondaryPos = pos;
         lastSecondaryPos = pos;
+    } else if (e.pointerId === tertiaryPointerId) {
+        tertiaryPos = pos;
     } else {
         return;
     }
 
+    // Handle 3-finger transform gesture
+    if (gestureMode === 'transform' && transformStart && primaryPos && secondaryPos && tertiaryPos) {
+        // Calculate current pivot (average of three finger positions)
+        const currentPivot = {
+            x: (primaryPos.x + secondaryPos.x + tertiaryPos.x) / 3,
+            y: (primaryPos.y + secondaryPos.y + tertiaryPos.y) / 3
+        };
+
+        // Calculate current average distance from pivot to fingers
+        const dist1 = getDistance(currentPivot, primaryPos);
+        const dist2 = getDistance(currentPivot, secondaryPos);
+        const dist3 = getDistance(currentPivot, tertiaryPos);
+        const currentScale = (dist1 + dist2 + dist3) / 3;
+
+        // Calculate current average angle
+        const angle1 = getAngle(currentPivot, primaryPos);
+        const angle2 = getAngle(currentPivot, secondaryPos);
+        const angle3 = getAngle(currentPivot, tertiaryPos);
+        const currentRotation = (angle1 + angle2 + angle3) / 3;
+
+        // Calculate scale and rotation changes
+        const scaleFactor = currentScale / transformStart.initialScale;
+        const newScale = transformStart.initialTransform.scale * scaleFactor;
+        const rotationDelta = currentRotation - transformStart.initialRotation;
+        const newRotation = transformStart.initialTransform.rotation + rotationDelta;
+
+        // Calculate pan to keep the point under the initial pivot under the current pivot
+        const startPivot = transformStart.pivot;
+        const initT = transformStart.initialTransform;
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+
+        // Convert initial pivot from screen to canvas coordinates
+        const cos0 = Math.cos(-initT.rotation);
+        const sin0 = Math.sin(-initT.rotation);
+        const sx1 = startPivot.x - initT.panX;
+        const sy1 = startPivot.y - initT.panY;
+        const sx2 = cos0 * (sx1 - cx) - sin0 * (sy1 - cy) + cx;
+        const sy2 = sin0 * (sx1 - cx) + cos0 * (sy1 - cy) + cy;
+        const canvasX = (sx2 - cx) / initT.scale + cx;
+        const canvasY = (sy2 - cy) / initT.scale + cy;
+
+        // Apply new scale and rotation to this canvas point
+        const cos1 = Math.cos(newRotation);
+        const sin1 = Math.sin(newRotation);
+        const tx1 = (canvasX - cx) * newScale + cx;
+        const ty1 = (canvasY - cy) * newScale + cy;
+        const tx2 = cos1 * (tx1 - cx) - sin1 * (ty1 - cy) + cx;
+        const ty2 = sin1 * (tx1 - cx) + cos1 * (ty1 - cy) + cy;
+
+        // Update transform
+        viewTransform.scale = newScale;
+        viewTransform.rotation = newRotation;
+        viewTransform.panX = currentPivot.x - tx2;
+        viewTransform.panY = currentPivot.y - ty2;
+
+        redraw();
+        return;
+    }
+
     // Move indicator anchor based on finger movement delta (sum of both fingers)
-    if ((gestureMode === 'waiting' || gestureMode === 'drawing') && indicatorAnchor) {
+    if (gestureMode === 'drawing' && indicatorAnchor) {
         // Apply movement coefficient when two fingers are touching
         let coefficient = 1.0;
         if (primaryPos && secondaryPos) {
@@ -508,75 +585,8 @@ function handlePointerMove(e: PointerEvent) {
             y: indicatorAnchor.y + canvasDeltaY
         };
 
-        // Pan the canvas to keep the indicator in view (both when drawing and not)
+        // Pan the canvas to keep the indicator in view
         panToKeepIndicatorInView();
-    }
-
-    // Handle transform gesture
-    if (gestureMode === 'transform' && transformStart && primaryPos && secondaryPos) {
-        const currentDistance = getDistance(primaryPos, secondaryPos);
-        const currentAngle = getAngle(primaryPos, secondaryPos);
-        const currentMidpoint = getMidpoint(primaryPos, secondaryPos);
-
-        // Calculate scale and rotation changes
-        const scaleFactor = currentDistance / transformStart.distance;
-        const newScale = transformStart.initialTransform.scale * scaleFactor;
-        const rotationDelta = currentAngle - transformStart.angle;
-        const newRotation = transformStart.initialTransform.rotation + rotationDelta;
-
-        // The transform should be centered on the pinch midpoint
-        // We need to adjust pan so that the point under the initial midpoint stays under the current midpoint
-        const startMid = transformStart.midpoint;
-        const initT = transformStart.initialTransform;
-
-        // Calculate where the initial midpoint was in canvas space
-        // Then calculate what pan is needed so that point ends up under current midpoint after new scale/rotation
-        const cos0 = Math.cos(-initT.rotation);
-        const sin0 = Math.sin(-initT.rotation);
-        const cx = canvas.width / 2;
-        const cy = canvas.height / 2;
-
-        // Point under start midpoint in canvas coordinates (reverse the initial transform)
-        const sx1 = startMid.x - initT.panX;
-        const sy1 = startMid.y - initT.panY;
-        const sx2 = cos0 * (sx1 - cx) - sin0 * (sy1 - cy) + cx;
-        const sy2 = sin0 * (sx1 - cx) + cos0 * (sy1 - cy) + cy;
-        const canvasX = (sx2 - cx) / initT.scale + cx;
-        const canvasY = (sy2 - cy) / initT.scale + cy;
-
-        // Now apply new scale and rotation to this canvas point
-        const cos1 = Math.cos(newRotation);
-        const sin1 = Math.sin(newRotation);
-        const tx1 = (canvasX - cx) * newScale + cx;
-        const ty1 = (canvasY - cy) * newScale + cy;
-        const tx2 = cos1 * (tx1 - cx) - sin1 * (ty1 - cy) + cx;
-        const ty2 = sin1 * (tx1 - cx) + cos1 * (ty1 - cy) + cy;
-
-        // Pan needed to put this point under currentMidpoint
-        viewTransform.scale = newScale;
-        viewTransform.rotation = newRotation;
-        viewTransform.panX = currentMidpoint.x - tx2;
-        viewTransform.panY = currentMidpoint.y - ty2;
-
-        redraw();
-        return;
-    }
-
-    // Handle waiting mode - check if movement exceeds threshold
-    if (gestureMode === 'waiting' && e.pointerId === primaryPointerId) {
-        // If finger has moved beyond threshold, enter drawing mode immediately
-        if (primaryStartPos) {
-            const dist = getDistance(pos, primaryStartPos);
-            if (dist > MOVEMENT_THRESHOLD) {
-                if (gestureTimer !== null) {
-                    clearTimeout(gestureTimer);
-                    gestureTimer = null;
-                }
-                enterDrawingMode();
-            }
-        }
-        redraw();
-        return;
     }
 
     // Handle drawing mode - either finger can contribute to drawing
@@ -592,11 +602,6 @@ function handlePointerMove(e: PointerEvent) {
         redraw();
         return;
     }
-
-    // Also redraw for any tracked pointer movement (to update indicator after transform ends)
-    if (primaryPos && gestureMode === 'waiting') {
-        redraw();
-    }
 }
 
 // Handle pointer up
@@ -605,66 +610,30 @@ function handlePointerUp(e: PointerEvent) {
 
     // Handle transform gesture end
     if (gestureMode === 'transform') {
-        transformStart = null;
-
-        // Clamp indicator to visible view when transform ends
-        clampIndicatorToView();
-
-        if (e.pointerId === secondaryPointerId) {
-            // Second finger lifted - go back to waiting mode with primary finger
+        // Check if tertiary finger is lifting
+        if (e.pointerId === tertiaryPointerId) {
+            tertiaryPointerId = null;
+            tertiaryPos = null;
+        } else if (e.pointerId === secondaryPointerId) {
             secondaryPointerId = null;
             secondaryPos = null;
-            primaryStartPos = primaryPos;  // Reset start position for movement threshold
-            gestureMode = 'waiting';
-            gestureTimer = window.setTimeout(() => {
-                gestureTimer = null;
-                if (gestureMode === 'waiting') {
-                    enterDrawingMode();
-                }
-            }, GESTURE_DELAY);
-            redraw();
-            return;
-        }
-        if (e.pointerId === primaryPointerId) {
-            // Primary finger lifted - make secondary the new primary and go to waiting mode
-            if (secondaryPointerId !== null && secondaryPos !== null) {
-                primaryPointerId = secondaryPointerId;
-                primaryPos = secondaryPos;
-                lastPrimaryPos = secondaryPos;  // Prevent marker jump
-                primaryStartPos = secondaryPos;  // Reset start position for movement threshold
-                secondaryPointerId = null;
-                secondaryPos = null;
-                gestureMode = 'waiting';
-                gestureTimer = window.setTimeout(() => {
-                    gestureTimer = null;
-                    if (gestureMode === 'waiting') {
-                        enterDrawingMode();
-                    }
-                }, GESTURE_DELAY);
-                redraw();
-                return;
-            }
-            // No secondary finger - end everything
+            lastSecondaryPos = null;
+        } else if (e.pointerId === primaryPointerId) {
             primaryPointerId = null;
             primaryPos = null;
-            gestureMode = 'none';
-            redraw();
+            lastPrimaryPos = null;
         }
-        return;
-    }
 
-    // Handle waiting mode - cancel if finger lifts
-    if (gestureMode === 'waiting') {
-        if (gestureTimer !== null) {
-            clearTimeout(gestureTimer);
-            gestureTimer = null;
-        }
-        if (e.pointerId === primaryPointerId) {
-            primaryPointerId = null;
-            primaryPos = null;
+        // Exit transform mode only when all three fingers are lifted
+        if (tertiaryPointerId === null && secondaryPointerId === null && primaryPointerId === null) {
+            transformStart = null;
             gestureMode = 'none';
-            redraw();
+
+            // Clamp indicator to visible view when transform ends
+            clampIndicatorToView();
         }
+
+        redraw();
         return;
     }
 
@@ -676,6 +645,7 @@ function handlePointerUp(e: PointerEvent) {
         if (e.pointerId === secondaryPointerId) {
             secondaryPointerId = null;
             secondaryPos = null;
+            lastSecondaryPos = null;
 
             // In non-lift mode, save stroke when second finger lifts
             if (!liftMode && currentStroke && currentStroke.points.length > 0) {
@@ -739,16 +709,16 @@ function clearCanvas() {
     strokeHistory = [];
     primaryPointerId = null;
     secondaryPointerId = null;
+    tertiaryPointerId = null;
     primaryPos = null;
     secondaryPos = null;
+    tertiaryPos = null;
     lastPrimaryPos = null;
+    lastSecondaryPos = null;
     currentStroke = null;
     isDrawing = false;
     gestureMode = 'none';
-    if (gestureTimer !== null) {
-        clearTimeout(gestureTimer);
-        gestureTimer = null;
-    }
+    transformStart = null;
     // Reset view transform and indicator to center
     viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
     indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
