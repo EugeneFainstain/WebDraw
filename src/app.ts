@@ -62,6 +62,9 @@ let indicatorAnchor: Point | null = null;
 let lastPrimaryPos: Point | null = null; // For tracking finger movement delta
 let lastSecondaryPos: Point | null = null; // For tracking secondary finger movement delta
 
+// Two-finger delta buffering - store last delta to average with next one
+let lastDelta: { x: number, y: number } | null = null;
+
 // Double-tap detection
 let lastTapTime = 0;
 let lastTapPos: Point | null = null;
@@ -586,20 +589,45 @@ function handlePointerMove(e: PointerEvent) {
         return;
     }
 
-    // Move indicator anchor based on finger movement delta (sum of both fingers)
+    // Move indicator anchor based on finger movement delta
     if (gestureMode === 'drawing' && indicatorAnchor) {
-        // Apply movement coefficient when two fingers are touching
+        let finalDeltaX = 0;
+        let finalDeltaY = 0;
         let coefficient = 1.0;
+
+        // When two fingers are touching, buffer deltas and average consecutive pairs
         if (primaryPos && secondaryPos) {
             const fingerDistance = getDistance(primaryPos, secondaryPos);
             coefficient = getMovementCoefficient(fingerDistance);
+
+            // If we have a previous delta, average it with the current one
+            if (lastDelta !== null) {
+                // Average the last delta with the current delta
+                finalDeltaX = (lastDelta.x + deltaX) / 2;
+                finalDeltaY = (lastDelta.y + deltaY) / 2;
+
+                // Clear the buffer - we've used it
+                lastDelta = null;
+            } else {
+                // Store this delta and wait for the next one
+                lastDelta = { x: deltaX, y: deltaY };
+                // Don't move indicator yet - waiting for the next delta
+                return;
+            }
+        } else {
+            // Single finger - use delta directly, no buffering
+            finalDeltaX = deltaX;
+            finalDeltaY = deltaY;
+
+            // Clear any pending delta from previous two-finger mode
+            lastDelta = null;
         }
 
         // Convert screen delta to canvas delta (accounting for scale and rotation)
         const cos = Math.cos(-viewTransform.rotation);
         const sin = Math.sin(-viewTransform.rotation);
-        let canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale * coefficient;
-        let canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale * coefficient;
+        let canvasDeltaX = (cos * finalDeltaX - sin * finalDeltaY) / viewTransform.scale * coefficient;
+        let canvasDeltaY = (sin * finalDeltaX + cos * finalDeltaY) / viewTransform.scale * coefficient;
 
         // Apply 45-degree snapping when X+ mode is checked and drawing
         if (xPlusModeCheckbox.checked && gestureMode === 'drawing' && isDrawing) {
@@ -675,6 +703,9 @@ function handlePointerUp(e: PointerEvent) {
             secondaryPos = null;
             lastSecondaryPos = null;
 
+            // Clear pending delta
+            lastDelta = null;
+
             // In non-lift mode, save stroke when second finger lifts
             if (!liftMode && currentStroke && currentStroke.points.length > 0) {
                 strokeHistory.push(currentStroke);
@@ -697,6 +728,10 @@ function handlePointerUp(e: PointerEvent) {
                 secondaryPointerId = null;
                 secondaryPos = null;
                 lastSecondaryPos = null;
+
+                // Clear pending delta
+                lastDelta = null;
+
                 // Continue drawing - don't save stroke yet
                 redraw();
                 return;
@@ -710,6 +745,10 @@ function handlePointerUp(e: PointerEvent) {
             primaryPointerId = null;
             primaryPos = null;
             lastPrimaryPos = null;
+
+            // Clear pending delta
+            lastDelta = null;
+
             currentStroke = null;
             isDrawing = false;
             gestureMode = 'none';
@@ -743,6 +782,7 @@ function clearCanvas() {
     tertiaryPos = null;
     lastPrimaryPos = null;
     lastSecondaryPos = null;
+    lastDelta = null;
     currentStroke = null;
     isDrawing = false;
     gestureMode = 'none';
