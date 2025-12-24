@@ -63,7 +63,7 @@ let lastPrimaryPos: Point | null = null; // For tracking finger movement delta
 let lastSecondaryPos: Point | null = null; // For tracking secondary finger movement delta
 
 // Two-finger delta buffering - store last delta to average with next one
-let lastDelta: { x: number, y: number } | null = null;
+let lastDelta: { x: number, y: number, pointerId: number } | null = null;
 
 // Double-tap detection
 let lastTapTime = 0;
@@ -84,21 +84,6 @@ function snapTo45Degrees(deltaX: number, deltaY: number): { x: number, y: number
         x: magnitude * Math.cos(snappedAngle),
         y: magnitude * Math.sin(snappedAngle)
     };
-}
-
-// Calculate movement coefficient based on distance between two fingers
-// Returns 0.5 when distance < 1/8 diagonal, 1.0 when distance > 1/3 diagonal, linear interpolation in between
-function getMovementCoefficient(fingerDistance: number): number {
-    const diagonal = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
-    const minDist = diagonal / 8;  // 1/8 diagonal -> coefficient 0.5
-    const maxDist = diagonal / 3;  // 1/3 diagonal -> coefficient 1.0
-
-    if (fingerDistance <= minDist) return 0.5;
-    if (fingerDistance >= maxDist) return 1.0;
-
-    // Linear interpolation between 0.5 and 1.0
-    const t = (fingerDistance - minDist) / (maxDist - minDist);
-    return 0.5 + t * 0.5;
 }
 
 // Initialize custom color picker
@@ -593,24 +578,42 @@ function handlePointerMove(e: PointerEvent) {
     if (gestureMode === 'drawing' && indicatorAnchor) {
         let finalDeltaX = 0;
         let finalDeltaY = 0;
-        let coefficient = 1.0;
 
         // When two fingers are touching, buffer deltas and average consecutive pairs
         if (primaryPos && secondaryPos) {
-            const fingerDistance = getDistance(primaryPos, secondaryPos);
-            coefficient = getMovementCoefficient(fingerDistance);
-
             // If we have a previous delta, average it with the current one
             if (lastDelta !== null) {
                 // Average the last delta with the current delta
                 finalDeltaX = (lastDelta.x + deltaX) / 2;
                 finalDeltaY = (lastDelta.y + deltaY) / 2;
 
+                // Detect if we need to double the result:
+                // 1. If either delta is zero (stationary finger sent an event)
+                // 2. If both deltas are from the same finger (other finger didn't move at all)
+                const lastDeltaIsZero = (lastDelta.x === 0 && lastDelta.y === 0);
+                const currentDeltaIsZero = (deltaX === 0 && deltaY === 0);
+                const sameFingerTwice = (lastDelta.pointerId === e.pointerId);
+
+                console.log('Two-finger mode:', {
+                    lastDelta,
+                    currentDelta: { x: deltaX, y: deltaY, pointerId: e.pointerId },
+                    lastDeltaIsZero,
+                    currentDeltaIsZero,
+                    sameFingerTwice,
+                    beforeDouble: { x: finalDeltaX, y: finalDeltaY }
+                });
+
+                if (lastDeltaIsZero || currentDeltaIsZero || sameFingerTwice) {
+                    finalDeltaX *= 2;
+                    finalDeltaY *= 2;
+                    console.log('After doubling:', { x: finalDeltaX, y: finalDeltaY });
+                }
+
                 // Clear the buffer - we've used it
                 lastDelta = null;
             } else {
                 // Store this delta and wait for the next one
-                lastDelta = { x: deltaX, y: deltaY };
+                lastDelta = { x: deltaX, y: deltaY, pointerId: e.pointerId };
                 // Don't move indicator yet - waiting for the next delta
                 return;
             }
@@ -626,8 +629,8 @@ function handlePointerMove(e: PointerEvent) {
         // Convert screen delta to canvas delta (accounting for scale and rotation)
         const cos = Math.cos(-viewTransform.rotation);
         const sin = Math.sin(-viewTransform.rotation);
-        let canvasDeltaX = (cos * finalDeltaX - sin * finalDeltaY) / viewTransform.scale * coefficient;
-        let canvasDeltaY = (sin * finalDeltaX + cos * finalDeltaY) / viewTransform.scale * coefficient;
+        let canvasDeltaX = (cos * finalDeltaX - sin * finalDeltaY) / viewTransform.scale;
+        let canvasDeltaY = (sin * finalDeltaX + cos * finalDeltaY) / viewTransform.scale;
 
         // Apply 45-degree snapping when X+ mode is checked and drawing
         if (xPlusModeCheckbox.checked && gestureMode === 'drawing' && isDrawing) {
