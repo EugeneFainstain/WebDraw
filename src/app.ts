@@ -568,46 +568,65 @@ function handlePointerMove(e: PointerEvent) {
 
         // When two fingers are touching, buffer deltas and average consecutive pairs
         if (primaryPos && secondaryPos) {
-            // If we have a previous delta, average it with the current one
+            // If we have a previous delta, process it with the current one
             if (lastDelta !== null) {
-                // Average the last delta with the current delta
-                finalDeltaX = (lastDelta.x + deltaX) / 2;
-                finalDeltaY = (lastDelta.y + deltaY) / 2;
-
-                // Calculate delta lengths
-                const lastLength = Math.sqrt(lastDelta.x * lastDelta.x + lastDelta.y * lastDelta.y);
-                const currentLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
-                // If same finger twice, the other delta is implicitly zero
                 const sameFingerTwice = (lastDelta.pointerId === e.pointerId);
-                const bigL = sameFingerTwice
-                    ? Math.max(lastLength, currentLength)
-                    : Math.max(lastLength, currentLength);
-                const smallL = sameFingerTwice
-                    ? 0 // Other finger didn't move at all
-                    : Math.min(lastLength, currentLength);
 
-                // Calculate unevenness: (BigL - SmallL) / (BigL + 0.01)
-                const unevenness = (bigL - smallL) / (bigL + 0.01);
+                if (sameFingerTwice) {
+                    // Same finger moved twice - other finger is stationary
+                    // Apply both deltas separately for finer resolution
+                    // First, apply the buffered delta
+                    const cos1 = Math.cos(-viewTransform.rotation);
+                    const sin1 = Math.sin(-viewTransform.rotation);
+                    const canvasDelta1X = (cos1 * lastDelta.x - sin1 * lastDelta.y) / viewTransform.scale;
+                    const canvasDelta1Y = (sin1 * lastDelta.x + cos1 * lastDelta.y) / viewTransform.scale;
 
-                // Calculate coefficient based on unevenness
-                // unevenness <= 0.5 => coeff = 1 (fingers moving evenly together)
-                // unevenness >= 0.9 => coeff = 2 (one finger much faster or stationary)
-                // Linear interpolation in between
-                let coefficient = 1.0;
-                if (unevenness <= 0.5) {
-                    coefficient = 1.0;
-                } else if (unevenness >= 0.9) {
-                    coefficient = 2.0;
+                    indicatorAnchor.x += canvasDelta1X;
+                    indicatorAnchor.y += canvasDelta1Y;
+                    panToKeepIndicatorInView();
+
+                    // Add point to stroke if drawing
+                    if (isDrawing && currentStroke) {
+                        currentStroke.points.push({ ...indicatorAnchor });
+                    }
+
+                    // Now continue with the current delta (will be applied below)
+                    finalDeltaX = deltaX;
+                    finalDeltaY = deltaY;
                 } else {
-                    // Linear interpolation: map [0.5, 0.9] to [1.0, 2.0]
-                    const t = (unevenness - 0.5) / (0.9 - 0.5);
-                    coefficient = 1.0 + t * 1.0; // 1.0 when t=0, 2.0 when t=1
-                }
+                    // Different fingers - average and apply coefficient based on unevenness
+                    finalDeltaX = (lastDelta.x + deltaX) / 2;
+                    finalDeltaY = (lastDelta.y + deltaY) / 2;
 
-                // Apply coefficient
-                finalDeltaX *= coefficient;
-                finalDeltaY *= coefficient;
+                    // Calculate delta lengths
+                    const lastLength = Math.sqrt(lastDelta.x * lastDelta.x + lastDelta.y * lastDelta.y);
+                    const currentLength = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+                    const bigL = Math.max(lastLength, currentLength);
+                    const smallL = Math.min(lastLength, currentLength);
+
+                    // Calculate unevenness: (BigL - SmallL) / (BigL + 0.01)
+                    const unevenness = (bigL - smallL) / (bigL + 0.01);
+
+                    // Calculate coefficient based on unevenness
+                    // unevenness <= 0.5 => coeff = 1 (fingers moving evenly together)
+                    // unevenness >= 0.9 => coeff = 2 (one finger much faster or stationary)
+                    // Linear interpolation in between
+                    let coefficient = 1.0;
+                    if (unevenness <= 0.5) {
+                        coefficient = 1.0;
+                    } else if (unevenness >= 0.9) {
+                        coefficient = 2.0;
+                    } else {
+                        // Linear interpolation: map [0.5, 0.9] to [1.0, 2.0]
+                        const t = (unevenness - 0.5) / (0.9 - 0.5);
+                        coefficient = 1.0 + t * 1.0; // 1.0 when t=0, 2.0 when t=1
+                    }
+
+                    // Apply coefficient
+                    finalDeltaX *= coefficient;
+                    finalDeltaY *= coefficient;
+                }
 
                 // Clear the buffer - we've used it
                 lastDelta = null;
