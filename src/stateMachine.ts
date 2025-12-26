@@ -3,6 +3,11 @@
  *
  * This module defines the complete state machine for the WebDraw application,
  * including all states, events, transitions, and the Fresh Stroke feature.
+ *
+ * IMPORTANT: When modifying transitions, always update both:
+ * 1. The code implementation in this file
+ * 2. The state machine documentation in CLAUDE.md
+ * Keep them synchronized to avoid confusion.
  */
 
 // ============================================================================
@@ -24,6 +29,12 @@ export enum State {
  * Fresh Stroke Mode (boolean flag isFreshStroke)
  * When true: The marker shows green, and 3-finger transform affects only the last stroke
  * When false: Normal mode, 3-finger transform affects entire canvas
+ *
+ * Exit conditions:
+ * - Single tap (quick tap without timeout or movement)
+ * - Moving the marker far from the fresh stroke position
+ * - Undo/Clear operations
+ * - Too many fingers touching
  */
 export type StateModifier = {
     isFreshStroke: boolean;
@@ -189,7 +200,7 @@ export class StateMachine {
                 return this.transitionFromIdle(modifier, event);
 
             case State.MovingMarker:
-                return this.transitionFromMovingMarker(modifier, event);
+                return this.transitionFromMovingMarker(modifier, event, flags);
 
             case State.Drawing:
                 return this.transitionFromDrawing(modifier, event, flags);
@@ -271,7 +282,7 @@ export class StateMachine {
     // TRANSITIONS FROM MOVING MARKER STATE
     // ========================================================================
 
-    private transitionFromMovingMarker(modifier: StateModifier, event: Event): TransitionResult {
+    private transitionFromMovingMarker(modifier: StateModifier, event: Event, flags: EventFlags): TransitionResult {
         const { isFreshStroke } = modifier;
 
         switch (event) {
@@ -300,12 +311,24 @@ export class StateMachine {
                 };
 
             case Event.FINGER_UP:
-                // Keep modifier unchanged
-                return {
-                    newState: State.Idle,
-                    newModifier: { isFreshStroke },  // keep
-                    actions: []
-                };
+                // Single tap detection: exit Fresh Stroke if no timeout and no movement
+                const isSingleTap = !flags.TIMEOUT_HAPPENED && !flags.FINGER_MOVED_FAR_HAPPENED;
+
+                if (isFreshStroke && isSingleTap) {
+                    // Quick tap in Fresh Stroke mode → exit to Normal
+                    return {
+                        newState: State.Idle,
+                        newModifier: { isFreshStroke: false },  // → Normal
+                        actions: [Action.EXIT_FRESH_STROKE]
+                    };
+                } else {
+                    // Keep modifier unchanged (normal finger up or not a quick tap)
+                    return {
+                        newState: State.Idle,
+                        newModifier: { isFreshStroke },  // keep
+                        actions: []
+                    };
+                }
 
             case Event.TIMEOUT:
                 // Keep modifier unchanged
