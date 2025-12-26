@@ -32,23 +32,24 @@ The app uses a formal state machine with 4 states:
 - **Idle** - No fingers touching
 - **MovingMarker** - One finger moving the drawing marker
 - **Drawing** - Two fingers drawing a stroke
-- **Transform** - Three fingers transforming canvas or fresh stroke
+- **Transform** - Three fingers transforming canvas or selected stroke
 
 #### Key Transitions
 
-- **Drawing + FINGER_UP** → **MovingMarker** (one finger lifted, continue with remaining finger, stroke saved)
+- **Drawing + FINGER_UP** → **MovingMarker** (one finger lifted, continue with remaining finger, stroke saved and selected)
 - **Transform + FINGER_UP** → **Idle** (finger lifted during transform)
 
-#### Fresh Stroke Mode
+#### Selected Stroke Mode
 
-After completing a stroke, the app enters "Fresh Stroke" mode:
+After completing a stroke, the app enters "Selected Stroke" mode:
 - Indicator shows **green (lime)** instead of white
-- 3-finger transform affects **only the last stroke** instead of the entire canvas
+- 3-finger transform affects **only the selected stroke** instead of the entire canvas
 - Allows quick adjustment of the just-drawn stroke
+- The selected stroke index is tracked in `selectedStrokeIdx` (null = no selection)
 
-**Exit conditions for Fresh Stroke mode:**
+**Exit conditions for Selected Stroke mode:**
 1. **Single tap** - Quick tap (finger down and up within 250ms, no movement >30px)
-2. **Moving marker far** - Moving the marker >30px from the fresh stroke position
+2. **Moving marker far** - Moving the marker >30px from the selected stroke position
 3. **Undo/Clear** - Using undo or clear buttons
 4. **Too many fingers** - Touching with 3+ fingers during marker movement
 
@@ -57,5 +58,6 @@ After completing a stroke, the app enters "Fresh Stroke" mode:
 - `strokeHistory` (Array) - Stores completed strokes for undo functionality
 - `currentStroke` - Stroke currently being drawn
 - `indicatorAnchor` - Position of the drawing marker in canvas coordinates
-- `freshStrokeMarkerPos` - Reference position when entering fresh stroke mode
+- `selectedStrokeIdx` - Index of the selected stroke (null = no selection)
+- `selectedStrokeMarkerPos` - Reference position when entering selected stroke mode
 - `viewTransform` - Canvas transformation (scale, rotation, pan)

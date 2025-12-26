@@ -17,10 +17,11 @@ The application has **4 distinct states**:
 
 ## State Modifier
 
-**Fresh Stroke Mode** (`isFreshStroke: boolean`)
+**Selected Stroke Mode** (`isFreshStroke: boolean`)
 
-- When `true`: The marker shows green, and 3-finger transform affects only the last stroke
-- When `false`: Normal mode, 3-finger transform affects entire canvas
+- When `true`: A stroke is selected (marker shows green), and 3-finger transform affects only the selected stroke
+- When `false`: No selection (normal mode), 3-finger transform affects entire canvas
+- The actual selected stroke index is tracked separately in `app.ts` as `selectedStrokeIdx`
 
 ## Events
 
@@ -54,8 +55,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `CREATE_STROKE` | Create a new stroke |
 | `SAVE_STROKE` | Save current stroke to history |
 | `ABANDON_STROKE` | Discard current stroke |
-| `ENTER_FRESH_STROKE` | Enter fresh stroke mode |
-| `EXIT_FRESH_STROKE` | Exit fresh stroke mode |
+| `SELECT_STROKE` | Select a stroke (enter selected stroke mode) |
+| `DESELECT_STROKE` | Deselect stroke (exit selected stroke mode) |
 | `INIT_TRANSFORM` | Initialize 3-finger transform |
 | `APPLY_TRANSFORM` | Apply transform (continuous) |
 | `PROCESS_UNDO` | Execute undo operation |
@@ -73,42 +74,42 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 ### FROM Idle State
 
-| Event | IF Normal Mode → | IF Fresh Stroke Mode → |
+| Event | IF Normal Mode → | IF Stroke Selected → |
 |-------|------------------|------------------------|
-| F1_DOWN | MovingMarker (keep Normal) | MovingMarker (keep Fresh) |
-| F2_DOWN | Idle (keep Normal) | Idle (keep Fresh) |
-| F3_DOWN | Idle (keep Normal) | Idle (keep Fresh) |
-| FINGER_UP | Idle (keep Normal) | Idle (keep Fresh) |
+| F1_DOWN | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
+| F2_DOWN | Idle (keep Normal) | Idle (keep Selected) |
+| F3_DOWN | Idle (keep Normal) | Idle (keep Selected) |
+| FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | Idle (keep Normal) - [SET_TIMEOUT_FLAG] | Idle (keep Fresh) - [SET_TIMEOUT_FLAG] |
-| FINGER_MOVED_FAR | Idle (keep Normal) | Idle (keep Fresh) |
-| UNDO | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] |
-| CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] |
+| FINGER_MOVED_FAR | Idle (keep Normal) | Idle (keep Selected) |
+| UNDO | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] |
+| CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
 ### FROM MovingMarker State
 
-| Event | IF Normal Mode → | IF Fresh Stroke Mode → |
+| Event | IF Normal Mode → | IF Stroke Selected → |
 |-------|------------------|------------------------|
-| F1_DOWN | MovingMarker (keep Normal) | MovingMarker (keep Fresh) |
+| F1_DOWN | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
 | F2_DOWN | Drawing (keep Normal) - [CREATE_STROKE] | Drawing (keep Fresh) - [CREATE_STROKE] |
-| F3_DOWN | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, EXIT_FRESH_STROKE] | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, EXIT_FRESH_STROKE] |
-| FINGER_UP | Idle (keep Normal) | Idle (keep Fresh) |
+| F3_DOWN | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
+| FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | MovingMarker (keep Normal) - [SET_TIMEOUT_FLAG] | MovingMarker (keep Fresh) - [SET_TIMEOUT_FLAG] |
-| FINGER_MOVED_FAR | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] |
-| UNDO | MovingMarker (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] | MovingMarker (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] |
-| CLEAR | MovingMarker (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] | MovingMarker (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] |
+| FINGER_MOVED_FAR | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
+| UNDO | MovingMarker (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] | MovingMarker (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] |
+| CLEAR | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
 ### FROM Drawing State
 
-| Event | IF Normal Mode → | IF Fresh Stroke Mode → |
+| Event | IF Normal Mode → | IF Stroke Selected → |
 |-------|------------------|------------------------|
-| F1_DOWN | Drawing (keep Normal) | Drawing (keep Fresh) |
-| F2_DOWN | Drawing (keep Normal) | Drawing (keep Fresh) |
-| F3_DOWN | Transform (keep Normal) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] | Transform (keep Fresh) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] |
-| FINGER_UP | MovingMarker (→ Fresh Stroke) - [SAVE_STROKE, ENTER_FRESH_STROKE] | MovingMarker (keep Fresh) - [SAVE_STROKE] |
-| TIMEOUT | Drawing (keep Normal) - [SET_TIMEOUT_FLAG] | Drawing (keep Fresh) - [SET_TIMEOUT_FLAG] |
-| FINGER_MOVED_FAR | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] |
-| UNDO | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] |
-| CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] |
+| F1_DOWN | Drawing (keep Normal) | Drawing (keep Selected) |
+| F2_DOWN | Drawing (keep Normal) | Drawing (keep Selected) |
+| F3_DOWN | Transform (keep Normal) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] | Transform (keep Selected) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] |
+| FINGER_UP | MovingMarker (→ Selected) - [SAVE_STROKE, SELECT_STROKE] | MovingMarker (keep Selected) - [SAVE_STROKE] |
+| TIMEOUT | Drawing (keep Normal) - [SET_TIMEOUT_FLAG] | Drawing (keep Selected) - [SET_TIMEOUT_FLAG] |
+| FINGER_MOVED_FAR | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
+| UNDO | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] |
+| CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
 **Note on F3_DOWN:** Actions depend on FINGER_MOVED_FAR_HAPPENED flag:
 - If flag is true: [SAVE_STROKE, INIT_TRANSFORM]
@@ -116,16 +117,16 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 ### FROM Transform State
 
-| Event | IF Normal Mode → | IF Fresh Stroke Mode → |
+| Event | IF Normal Mode → | IF Stroke Selected → |
 |-------|------------------|------------------------|
-| F1_DOWN | Transform (keep Normal) | Transform (keep Fresh) |
-| F2_DOWN | Transform (keep Normal) | Transform (keep Fresh) |
-| F3_DOWN | Transform (keep Normal) | Transform (keep Fresh) |
-| FINGER_UP | Idle (keep Normal) | Idle (keep Fresh) |
+| F1_DOWN | Transform (keep Normal) | Transform (keep Selected) |
+| F2_DOWN | Transform (keep Normal) | Transform (keep Selected) |
+| F3_DOWN | Transform (keep Normal) | Transform (keep Selected) |
+| FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | Transform (keep Normal) - [SET_TIMEOUT_FLAG] | Transform (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | Transform (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG] | Transform (keep Fresh) - [SET_FINGER_MOVED_FAR_FLAG] |
-| UNDO | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] |
-| CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] |
+| UNDO | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] |
+| CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
 ## Implementation Notes
 
@@ -135,22 +136,24 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 2. **FINGER_MOVED_FAR_HAPPENED**: Set when any finger moves >30px from its reference point. Used in Drawing state to determine whether to save or abandon a stroke when F3_DOWN occurs.
 
-### Fresh Stroke Mode
+### Selected Stroke Mode
 
 **Entry Conditions:**
 - Only entered when completing a stroke (FINGER_UP in Drawing state)
+- Automatically selects the stroke that was just drawn
 
 **Exit Conditions:**
+- Single tap (quick tap without timeout or movement)
 - UNDO button pressed
 - CLEAR button pressed
-- Starting a new stroke (F2_DOWN in MovingMarker)
-- Marker movement >30px from fresh stroke position (FINGER_MOVED_FAR in MovingMarker)
-- Canvas transform completion (FINGER_UP in Transform when in Normal mode)
+- Marker movement >30px from selected stroke position (FINGER_MOVED_FAR in MovingMarker)
+- Too many fingers (F3_DOWN in MovingMarker)
 
 **Behavior:**
-- In Fresh Stroke mode, transform only affects the last stroke
-- In Normal mode, transform affects the entire canvas
-- Visual indicator: marker shows green ring instead of white
+- When a stroke is selected: 3-finger transform only affects the selected stroke
+- When no stroke is selected (Normal mode): 3-finger transform affects the entire canvas
+- Visual indicator: marker shows green ring when a stroke is selected, white ring otherwise
+- The selected stroke index is tracked in `app.ts` as `selectedStrokeIdx` (null = no selection)
 
 ### Stroke Protection
 

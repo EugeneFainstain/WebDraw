@@ -2,7 +2,7 @@
  * WebDraw State Machine
  *
  * This module defines the complete state machine for the WebDraw application,
- * including all states, events, transitions, and the Fresh Stroke feature.
+ * including all states, events, transitions, and the Selected Stroke feature.
  *
  * IMPORTANT: When modifying transitions, always update both:
  * 1. The code implementation in this file
@@ -26,18 +26,21 @@ export enum State {
 // ============================================================================
 
 /**
- * Fresh Stroke Mode (boolean flag isFreshStroke)
- * When true: The marker shows green, and 3-finger transform affects only the last stroke
- * When false: Normal mode, 3-finger transform affects entire canvas
+ * Selected Stroke Mode
+ * When true: A stroke is selected (marker shows green), and 3-finger transform affects only that stroke
+ * When false: No selection (normal mode), 3-finger transform affects entire canvas
+ *
+ * Note: The actual selected stroke index is tracked in app.ts (selectedStrokeIdx)
+ * This flag indicates whether the selection mode is active.
  *
  * Exit conditions:
  * - Single tap (quick tap without timeout or movement)
- * - Moving the marker far from the fresh stroke position
+ * - Moving the marker far from the selected stroke position
  * - Undo/Clear operations
  * - Too many fingers touching
  */
 export type StateModifier = {
-    isFreshStroke: boolean;
+    isStrokeSelected: boolean;
 };
 
 // ============================================================================
@@ -83,9 +86,9 @@ export enum Action {
     SAVE_STROKE = 'SAVE_STROKE',
     ABANDON_STROKE = 'ABANDON_STROKE',
 
-    // Fresh stroke actions
-    ENTER_FRESH_STROKE = 'ENTER_FRESH_STROKE',
-    EXIT_FRESH_STROKE = 'EXIT_FRESH_STROKE',
+    // Selected stroke actions
+    SELECT_STROKE = 'SELECT_STROKE',
+    DESELECT_STROKE = 'DESELECT_STROKE',
 
     // Transform actions
     INIT_TRANSFORM = 'INIT_TRANSFORM',
@@ -125,7 +128,7 @@ export class StateMachine {
 
     constructor() {
         this.currentState = State.Idle;
-        this.modifier = { isFreshStroke: false };
+        this.modifier = { isStrokeSelected: false };
         this.flags = {
             TIMEOUT_HAPPENED: false,
             FINGER_MOVED_FAR_HAPPENED: false
@@ -145,8 +148,8 @@ export class StateMachine {
         return { ...this.flags };
     }
 
-    public isFreshStroke(): boolean {
-        return this.modifier.isFreshStroke;
+    public isStrokeSelected(): boolean {
+        return this.modifier.isStrokeSelected;
     }
 
     // Process an event and return the transition result
@@ -178,7 +181,7 @@ export class StateMachine {
     // Reset the state machine
     public reset(): void {
         this.currentState = State.Idle;
-        this.modifier = { isFreshStroke: false };
+        this.modifier = { isStrokeSelected: false };
         this.flags = {
             TIMEOUT_HAPPENED: false,
             FINGER_MOVED_FAR_HAPPENED: false
@@ -212,7 +215,7 @@ export class StateMachine {
                 // Should never happen
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke: false },
+                    newModifier: { isStrokeSelected: false },
                     actions: [Action.DO_NOTHING]
                 };
         }
@@ -223,14 +226,14 @@ export class StateMachine {
     // ========================================================================
 
     private transitionFromIdle(modifier: StateModifier, event: Event): TransitionResult {
-        const { isFreshStroke } = modifier;
+        const { isStrokeSelected } = modifier;
 
         switch (event) {
             case Event.F1_DOWN:
                 // Keep modifier unchanged
                 return {
                     newState: State.MovingMarker,
-                    newModifier: { isFreshStroke },  // keep
+                    newModifier: { isStrokeSelected },  // keep
                     actions: []
                 };
 
@@ -241,7 +244,7 @@ export class StateMachine {
                 // Keep modifier unchanged
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke },  // keep
+                    newModifier: { isStrokeSelected },  // keep
                     actions: [Action.DO_NOTHING]
                 };
 
@@ -249,30 +252,30 @@ export class StateMachine {
                 // Keep modifier unchanged
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke },  // keep
+                    newModifier: { isStrokeSelected },  // keep
                     actions: [Action.SET_TIMEOUT_FLAG, Action.DO_NOTHING]
                 };
 
             case Event.UNDO:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.PROCESS_UNDO, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.PROCESS_UNDO, Action.DESELECT_STROKE]
                 };
 
             case Event.CLEAR:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.PROCESS_CLEAR, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
                 };
 
             default:
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke },
+                    newModifier: { isStrokeSelected },
                     actions: [Action.DO_NOTHING]
                 };
         }
@@ -283,14 +286,14 @@ export class StateMachine {
     // ========================================================================
 
     private transitionFromMovingMarker(modifier: StateModifier, event: Event, flags: EventFlags): TransitionResult {
-        const { isFreshStroke } = modifier;
+        const { isStrokeSelected } = modifier;
 
         switch (event) {
             case Event.F1_DOWN:
                 // Keep modifier unchanged
                 return {
                     newState: State.MovingMarker,
-                    newModifier: { isFreshStroke },  // keep
+                    newModifier: { isStrokeSelected },  // keep
                     actions: [Action.DO_NOTHING]
                 };
 
@@ -298,34 +301,34 @@ export class StateMachine {
                 // Keep modifier unchanged
                 return {
                     newState: State.Drawing,
-                    newModifier: { isFreshStroke },  // keep
+                    newModifier: { isStrokeSelected },  // keep
                     actions: [Action.CREATE_STROKE]
                 };
 
             case Event.F3_DOWN:
-                // Too many fingers - abort and exit Fresh Stroke (→ Normal)
+                // Too many fingers - abort and deselect stroke (→ Normal)
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.ABORT_TOO_MANY_FINGERS, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.ABORT_TOO_MANY_FINGERS, Action.DESELECT_STROKE]
                 };
 
             case Event.FINGER_UP:
-                // Single tap detection: exit Fresh Stroke if no timeout and no movement
+                // Single tap detection: deselect stroke if no timeout and no movement
                 const isSingleTap = !flags.TIMEOUT_HAPPENED && !flags.FINGER_MOVED_FAR_HAPPENED;
 
-                if (isFreshStroke && isSingleTap) {
-                    // Quick tap in Fresh Stroke mode → exit to Normal
+                if (isStrokeSelected && isSingleTap) {
+                    // Quick tap with stroke selected → deselect
                     return {
                         newState: State.Idle,
-                        newModifier: { isFreshStroke: false },  // → Normal
-                        actions: [Action.EXIT_FRESH_STROKE]
+                        newModifier: { isStrokeSelected: false },  // → Normal
+                        actions: [Action.DESELECT_STROKE]
                     };
                 } else {
                     // Keep modifier unchanged (normal finger up or not a quick tap)
                     return {
                         newState: State.Idle,
-                        newModifier: { isFreshStroke },  // keep
+                        newModifier: { isStrokeSelected },  // keep
                         actions: []
                     };
                 }
@@ -334,38 +337,38 @@ export class StateMachine {
                 // Keep modifier unchanged
                 return {
                     newState: State.MovingMarker,
-                    newModifier: { isFreshStroke },  // keep
+                    newModifier: { isStrokeSelected },  // keep
                     actions: [Action.SET_TIMEOUT_FLAG]
                 };
 
             case Event.FINGER_MOVED_FAR:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.MovingMarker,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.EXIT_FRESH_STROKE, Action.MOVE_MARKER]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.DESELECT_STROKE, Action.MOVE_MARKER]
                 };
 
             case Event.UNDO:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.MovingMarker,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.PROCESS_UNDO, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.PROCESS_UNDO, Action.DESELECT_STROKE]
                 };
 
             case Event.CLEAR:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.MovingMarker,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.PROCESS_CLEAR, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
                 };
 
             default:
                 return {
                     newState: State.MovingMarker,
-                    newModifier: { isFreshStroke },
+                    newModifier: { isStrokeSelected },
                     actions: [Action.DO_NOTHING]
                 };
         }
@@ -380,7 +383,7 @@ export class StateMachine {
         event: Event,
         flags: EventFlags
     ): TransitionResult {
-        const { isFreshStroke } = modifier;
+        const { isStrokeSelected } = modifier;
 
         switch (event) {
             case Event.F1_DOWN:
@@ -388,7 +391,7 @@ export class StateMachine {
                 // Keep modifier unchanged
                 return {
                     newState: State.Drawing,
-                    newModifier: { isFreshStroke },  // keep
+                    newModifier: { isStrokeSelected },  // keep
                     actions: [Action.DO_NOTHING]
                 };
 
@@ -398,64 +401,64 @@ export class StateMachine {
                 if (flags.FINGER_MOVED_FAR_HAPPENED) {
                     return {
                         newState: State.Transform,
-                        newModifier: { isFreshStroke },  // keep
+                        newModifier: { isStrokeSelected },  // keep
                         actions: [Action.SAVE_STROKE, Action.INIT_TRANSFORM]
                     };
                 } else {
                     return {
                         newState: State.Transform,
-                        newModifier: { isFreshStroke },  // keep
+                        newModifier: { isStrokeSelected },  // keep
                         actions: [Action.ABANDON_STROKE, Action.INIT_TRANSFORM]
                     };
                 }
 
             case Event.FINGER_UP:
                 // Transition to MovingMarker with remaining finger
-                // Enter Fresh Stroke mode (Normal → Fresh, Fresh → keep Fresh)
+                // Select the stroke that was just drawn (Normal → Selected, Selected → keep Selected)
                 return {
                     newState: State.MovingMarker,
-                    newModifier: { isFreshStroke: true },  // → Fresh Stroke
-                    actions: isFreshStroke ?
-                        [Action.SAVE_STROKE] :  // already Fresh, just save
-                        [Action.SAVE_STROKE, Action.ENTER_FRESH_STROKE]  // Normal → Fresh
+                    newModifier: { isStrokeSelected: true },  // → Stroke Selected
+                    actions: isStrokeSelected ?
+                        [Action.SAVE_STROKE] :  // already selected, just save
+                        [Action.SAVE_STROKE, Action.SELECT_STROKE]  // Normal → Select stroke
                 };
 
             case Event.TIMEOUT:
                 // Keep modifier unchanged
                 return {
                     newState: State.Drawing,
-                    newModifier: { isFreshStroke },  // keep
+                    newModifier: { isStrokeSelected },  // keep
                     actions: [Action.SET_TIMEOUT_FLAG]
                 };
 
             case Event.FINGER_MOVED_FAR:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.Drawing,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.DESELECT_STROKE]
                 };
 
             case Event.UNDO:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.PROCESS_UNDO, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.PROCESS_UNDO, Action.DESELECT_STROKE]
                 };
 
             case Event.CLEAR:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.PROCESS_CLEAR, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
                 };
 
             default:
                 return {
                     newState: State.Drawing,
-                    newModifier: { isFreshStroke },
+                    newModifier: { isStrokeSelected },
                     actions: [Action.DO_NOTHING]
                 };
         }
@@ -502,19 +505,19 @@ export class StateMachine {
                 };
 
             case Event.UNDO:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.PROCESS_UNDO, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.PROCESS_UNDO, Action.DESELECT_STROKE]
                 };
 
             case Event.CLEAR:
-                // Exit Fresh Stroke mode (→ Normal)
+                // Deselect stroke (→ Normal)
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke: false },  // → Normal
-                    actions: [Action.PROCESS_CLEAR, Action.EXIT_FRESH_STROKE]
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
                 };
 
             default:
@@ -537,7 +540,7 @@ export class StateMachine {
         const transitions = new Map<Event, TransitionResult>();
 
         for (const event of Object.values(Event)) {
-            const normalMode = this.transition(state, { isFreshStroke: false }, event, {
+            const normalMode = this.transition(state, { isStrokeSelected: false }, event, {
                 TIMEOUT_HAPPENED: false,
                 FINGER_MOVED_FAR_HAPPENED: false
             });

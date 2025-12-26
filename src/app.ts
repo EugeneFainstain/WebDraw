@@ -46,8 +46,11 @@ let currentStroke: Stroke | null = null;
 // Indicator anchor point (in canvas coordinates)
 let indicatorAnchor: Point | null = null;
 
-// Reference position for fresh stroke tracking
-let freshStrokeMarkerPos: Point | null = null;
+// Selected stroke index (null = no selection, number = index in strokeHistory)
+let selectedStrokeIdx: number | null = null;
+
+// Reference position for selected stroke tracking
+let selectedStrokeMarkerPos: Point | null = null;
 
 // Track last grid position for X+ mode
 let lastGridPosition: Point | null = null;
@@ -375,11 +378,11 @@ function redraw() {
         const isWhite = drawColor.toUpperCase() === '#FFFFFF';
         const outerColor = isWhite ? 'black' : drawColor;
 
-        // Inner ring (white, or green if in fresh stroke mode)
-        const isFreshStroke = stateMachine.isFreshStroke();
+        // Inner ring (white, or green if a stroke is selected)
+        const hasSelectedStroke = selectedStrokeIdx !== null;
         ctx.beginPath();
         ctx.arc(indicatorPos.x, indicatorPos.y, renderedSize / 2 + 2, 0, Math.PI * 2);
-        ctx.strokeStyle = isFreshStroke ? 'lime' : 'white';
+        ctx.strokeStyle = hasSelectedStroke ? 'lime' : 'white';
         ctx.lineWidth = 2;
         ctx.stroke();
 
@@ -422,12 +425,12 @@ function initThreeFingerTransform() {
         initialTransform: { ...viewTransform }
     };
 
-    // If in fresh stroke state, store initial stroke points for transformation
-    if (stateMachine.isFreshStroke() && strokeHistory.length > 0) {
-        const lastStroke = strokeHistory[strokeHistory.length - 1];
+    // If a stroke is selected, store initial stroke points for transformation
+    if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+        const selectedStroke = strokeHistory[selectedStrokeIdx];
         transformStart = {
             ...baseTransformStart,
-            initialStrokePoints: lastStroke.points.map(p => ({ ...p }))
+            initialStrokePoints: selectedStroke.points.map(p => ({ ...p }))
         };
     } else {
         transformStart = baseTransformStart;
@@ -466,10 +469,10 @@ function applyThreeFingerTransform() {
     const scaleFactor = currentScale / transformStart.initialScale;
     const rotationDelta = transformStart.unwrappedRotation;
 
-    // Check if we're transforming a fresh stroke or the entire canvas
-    if (transformStart.initialStrokePoints && strokeHistory.length > 0) {
-        // Transform only the last stroke
-        const lastStroke = strokeHistory[strokeHistory.length - 1];
+    // Check if we're transforming a selected stroke or the entire canvas
+    if (transformStart.initialStrokePoints && selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+        // Transform only the selected stroke
+        const selectedStroke = strokeHistory[selectedStrokeIdx];
 
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (const point of transformStart.initialStrokePoints) {
@@ -494,7 +497,7 @@ function applyThreeFingerTransform() {
             y: initialStrokeCenter.y + panDeltaY
         };
 
-        lastStroke.points = transformStart.initialStrokePoints.map(point => {
+        selectedStroke.points = transformStart.initialStrokePoints.map(point => {
             const dx = point.x - initialStrokeCenter.x;
             const dy = point.y - initialStrokeCenter.y;
 
@@ -513,8 +516,8 @@ function applyThreeFingerTransform() {
         });
 
         // Move the marker to the last point of the transformed stroke
-        if (lastStroke.points.length > 0) {
-            indicatorAnchor = { ...lastStroke.points[lastStroke.points.length - 1] };
+        if (selectedStroke.points.length > 0) {
+            indicatorAnchor = { ...selectedStroke.points[selectedStroke.points.length - 1] };
         }
     } else {
         // Transform the entire canvas view
@@ -740,12 +743,17 @@ function handleActions(actions: Action[]): void {
                 lastGridPosition = null;
                 break;
 
-            case Action.ENTER_FRESH_STROKE:
-                freshStrokeMarkerPos = indicatorAnchor ? { ...indicatorAnchor } : null;
+            case Action.SELECT_STROKE:
+                selectedStrokeMarkerPos = indicatorAnchor ? { ...indicatorAnchor } : null;
+                // Set selected stroke to the last stroke in history
+                if (strokeHistory.length > 0) {
+                    selectedStrokeIdx = strokeHistory.length - 1;
+                }
                 break;
 
-            case Action.EXIT_FRESH_STROKE:
-                freshStrokeMarkerPos = null;
+            case Action.DESELECT_STROKE:
+                selectedStrokeMarkerPos = null;
+                selectedStrokeIdx = null;
                 break;
 
             case Action.INIT_TRANSFORM:
