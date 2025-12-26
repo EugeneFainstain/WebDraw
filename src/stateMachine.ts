@@ -410,9 +410,10 @@ export class StateMachine {
                 }
 
             case Event.FINGER_UP:
+                // Transition to MovingMarker with remaining finger
                 // Enter Fresh Stroke mode (Normal → Fresh, Fresh → keep Fresh)
                 return {
-                    newState: State.Idle,
+                    newState: State.MovingMarker,
                     newModifier: { isFreshStroke: true },  // → Fresh Stroke
                     actions: isFreshStroke ?
                         [Action.SAVE_STROKE] :  // already Fresh, just save

@@ -34,6 +34,11 @@ The app uses a formal state machine with 4 states:
 - **Drawing** - Two fingers drawing a stroke
 - **Transform** - Three fingers transforming canvas or fresh stroke
 
+#### Key Transitions
+
+- **Drawing + FINGER_UP** → **MovingMarker** (one finger lifted, continue with remaining finger, stroke saved)
+- **Transform + FINGER_UP** → **Idle** (finger lifted during transform)
+
 #### Fresh Stroke Mode
 
 After completing a stroke, the app enters "Fresh Stroke" mode:

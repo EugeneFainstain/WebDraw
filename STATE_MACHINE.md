@@ -104,7 +104,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F1_DOWN | Drawing (keep Normal) | Drawing (keep Fresh) |
 | F2_DOWN | Drawing (keep Normal) | Drawing (keep Fresh) |
 | F3_DOWN | Transform (keep Normal) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] | Transform (keep Fresh) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] |
-| FINGER_UP | Idle (→ Fresh Stroke) - [SAVE_STROKE, ENTER_FRESH_STROKE] | Idle (keep Fresh) - [SAVE_STROKE] |
+| FINGER_UP | MovingMarker (→ Fresh Stroke) - [SAVE_STROKE, ENTER_FRESH_STROKE] | MovingMarker (keep Fresh) - [SAVE_STROKE] |
 | TIMEOUT | Drawing (keep Normal) - [SET_TIMEOUT_FLAG] | Drawing (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] |
 | UNDO | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] |
