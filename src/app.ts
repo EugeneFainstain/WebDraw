@@ -925,6 +925,14 @@ function updateUndoButton() {
 // Undo last stroke
 function undo() {
     if (strokeHistory.length > 0) {
+        const lastStroke = strokeHistory[strokeHistory.length - 1];
+
+        // Move marker to the beginning of the stroke being removed
+        if (lastStroke.points.length > 0) {
+            indicatorAnchor = { ...lastStroke.points[0] };
+            panToKeepIndicatorInView();
+        }
+
         strokeHistory.pop();
         redraw();
         updateUndoButton();
