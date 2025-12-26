@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ['main', 'version1', 'version2', 'version3', 'version4']
+    branches: ['main', 'version1', 'version2', 'version3', 'version4', 'version5', 'version6', 'version7', 'version8', 'version9', 'version10']
   workflow_dispatch:
 
 permissions:
