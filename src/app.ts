@@ -511,6 +511,11 @@ function applyThreeFingerTransform() {
                 y: scaledY + newStrokeCenter.y
             };
         });
+
+        // Move the marker to the last point of the transformed stroke
+        if (lastStroke.points.length > 0) {
+            indicatorAnchor = { ...lastStroke.points[lastStroke.points.length - 1] };
+        }
     } else {
         // Transform the entire canvas view
         const newScale = transformStart.initialTransform.scale * scaleFactor;
