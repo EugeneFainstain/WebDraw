@@ -26,32 +26,13 @@ The application uses a state machine architecture with the following main files:
 - **src/colorPicker.ts** - Color picker UI component
 - **src/sizePicker.ts** - Stroke size picker UI component
 
-### State Machine (src/stateMachine.ts)
+### State Machine
 
-The app uses a formal state machine with 4 states:
-- **Idle** - No fingers touching
-- **MovingMarker** - One finger moving the drawing marker
-- **Drawing** - Two fingers drawing a stroke
-- **Transform** - Three fingers transforming canvas or selected stroke
-
-#### Key Transitions
-
-- **Drawing + FINGER_UP** → **MovingMarker** (one finger lifted, continue with remaining finger, stroke saved and selected)
-- **Transform + FINGER_UP** → **Idle** (finger lifted during transform)
-
-#### Selected Stroke Mode
-
-After completing a stroke, the app enters "Selected Stroke" mode:
-- Indicator shows **green (lime)** instead of white
-- 3-finger transform affects **only the selected stroke** instead of the entire canvas
-- Allows quick adjustment of the just-drawn stroke
-- The selected stroke index is tracked in `selectedStrokeIdx` (null = no selection)
-
-**Exit conditions for Selected Stroke mode:**
-1. **Single tap** - Quick tap (finger down and up within 250ms, no movement >30px)
-2. **Moving marker far** - Moving the marker >30px from the selected stroke position
-3. **Undo/Clear** - Using undo or clear buttons
-4. **Too many fingers** - Touching with 3+ fingers during marker movement
+The app uses a formal state machine architecture (see [STATE_MACHINE.md](STATE_MACHINE.md) for complete documentation):
+- **4 states**: Idle, MovingMarker, Drawing, Transform
+- **Events**: Finger down/up, timeouts, movement thresholds, undo/clear
+- **Actions**: Returned by state transitions, executed by app.ts
+- **Selected Stroke Mode**: After drawing, the stroke is selected (green indicator) and can be transformed independently
 
 ### Core State (src/app.ts)
 
