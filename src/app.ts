@@ -79,10 +79,6 @@ let lastTapPos: Point | null = null;
 const DOUBLE_TAP_DELAY = 300; // ms
 const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps for double-tap
 
-// Single-tap detection for exiting fresh stroke mode
-let primaryFingerDownTime = 0;
-const SINGLE_TAP_MAX_DURATION = 200; // ms - max duration for a tap to count as a single tap
-
 // Track when second finger touches down for stroke protection
 let secondFingerDownTime = 0;
 const STROKE_PROTECTION_DELAY = 250; // ms - if third finger lands after this, save the stroke
@@ -470,9 +466,6 @@ function handlePointerDown(e: PointerEvent) {
         primaryPointerId = e.pointerId;
         primaryPos = pos;
         lastPrimaryPos = null; // Don't set yet - let first move event establish baseline
-
-        // Track when primary finger goes down for single-tap detection
-        primaryFingerDownTime = Date.now();
 
         // Capture pointer to continue tracking even outside canvas
         canvas.setPointerCapture(e.pointerId);
@@ -991,14 +984,6 @@ function handlePointerUp(e: PointerEvent) {
             if (currentStroke && currentStroke.points.length > 0) {
                 strokeHistory.push(currentStroke);
                 updateUndoButton();
-            } else if (isFreshStroke) {
-                // Check if this was a quick tap (not just lifting the finger after drawing)
-                const tapDuration = Date.now() - primaryFingerDownTime;
-                if (tapDuration < SINGLE_TAP_MAX_DURATION) {
-                    // Single tap detected - exit fresh stroke state
-                    isFreshStroke = false;
-                    freshStrokeMarkerPos = null;
-                }
             }
 
             primaryPointerId = null;
