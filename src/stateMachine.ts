@@ -6,7 +6,7 @@
  *
  * IMPORTANT: When modifying transitions, always update both:
  * 1. The code implementation in this file
- * 2. The state machine documentation in CLAUDE.md
+ * 2. The state machine documentation in STATE_MACHINE.md
  * Keep them synchronized to avoid confusion.
  */
 

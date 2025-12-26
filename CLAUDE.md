@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**IMPORTANT**: When modifying the state machine ([src/stateMachine.ts](src/stateMachine.ts)), always update this documentation file synchronously. Keep code and documentation in sync.
+**IMPORTANT**: When modifying the state machine ([src/stateMachine.ts](src/stateMachine.ts)), always update the documentation in STATE_MACHINE.md file synchronously. Keep code and documentation in sync.
 
 ## Project Overview
 
