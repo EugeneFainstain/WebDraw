@@ -435,11 +435,11 @@ export class StateMachine {
                 };
 
             case Event.FINGER_UP:
-                // Always exit fresh stroke when transform ends
+                // Preserve the modifier state (stay in same mode)
                 return {
                     newState: State.Idle,
-                    newModifier: { isFreshStroke: false },
-                    actions: [Action.EXIT_FRESH_STROKE]
+                    newModifier: modifier,
+                    actions: []
                 };
 
             case Event.TIMEOUT:

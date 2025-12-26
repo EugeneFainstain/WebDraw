@@ -113,11 +113,11 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F1_DOWN | Transform (Normal) - do nothing | Transform (Fresh Stroke) - do nothing |
 | F2_DOWN | Transform (Normal) - do nothing | Transform (Fresh Stroke) - do nothing |
 | F3_DOWN | Transform (Normal) - do nothing | Transform (Fresh Stroke) - do nothing |
-| FINGER_UP | Idle (Normal) - exit Fresh Stroke | Idle (Normal) - exit Fresh Stroke |
+| FINGER_UP | Idle (Normal) | Idle (Fresh Stroke) |
 | TIMEOUT | Transform (Normal) - set TIMEOUT_HAPPENED flag | Transform (Fresh Stroke) - set TIMEOUT_HAPPENED flag |
 | FINGER_MOVED_FAR | Transform (Normal) - set flag | Transform (Fresh Stroke) - set flag |
-| UNDO | Idle (Normal) - exit transform, process undo, exit Fresh Stroke | Idle (Normal) - exit transform, process undo, exit Fresh Stroke |
-| CLEAR | Idle (Normal) - exit transform, process clear, exit Fresh Stroke | Idle (Normal) - exit transform, process clear, exit Fresh Stroke |
+| UNDO | Idle (Normal) - process undo | Idle (Normal) - process undo, exit Fresh Stroke |
+| CLEAR | Idle (Normal) - process clear | Idle (Normal) - process clear, exit Fresh Stroke |
 
 ## Implementation Notes
 
@@ -137,7 +137,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 - CLEAR button pressed
 - Starting a new stroke (F2_DOWN in MovingMarker)
 - Marker movement >30px from fresh stroke position (FINGER_MOVED_FAR in MovingMarker)
-- 3-finger transform completion (FINGER_UP in Transform)
+- Canvas transform completion (FINGER_UP in Transform when in Normal mode)
 
 **Behavior:**
 - In Fresh Stroke mode, transform only affects the last stroke
