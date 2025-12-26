@@ -28,6 +28,11 @@ let strokeHistory: Stroke[] = [];
 type GestureMode = 'none' | 'drawing' | 'transform';
 let gestureMode: GestureMode = 'none';
 
+// Fresh stroke state - when true, 3-finger gesture transforms only the last stroke
+let isFreshStroke = false;
+let freshStrokeMarkerPos: Point | null = null; // Marker position when stroke was completed
+const FRESH_STROKE_MOVEMENT_THRESHOLD = 30; // pixels in screen space
+
 // Pointer tracking
 let primaryPointerId: number | null = null;
 let secondaryPointerId: number | null = null;
@@ -54,6 +59,7 @@ let transformStart: {
     fingerAngles: number[];  // Initial raw angle from pivot to each finger (for unwrapping)
     unwrappedRotation: number;  // Accumulated unwrapped rotation
     initialTransform: typeof viewTransform;
+    initialStrokePoints?: Point[];  // For fresh stroke transformation
 } | null = null;
 
 // Indicator anchor point (in canvas coordinates, not screen coordinates)
@@ -72,6 +78,10 @@ let lastTapTime = 0;
 let lastTapPos: Point | null = null;
 const DOUBLE_TAP_DELAY = 300; // ms
 const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps for double-tap
+
+// Single-tap detection for exiting fresh stroke mode
+let primaryFingerDownTime = 0;
+const SINGLE_TAP_MAX_DURATION = 200; // ms - max duration for a tap to count as a single tap
 
 // Track when second finger touches down for stroke protection
 let secondFingerDownTime = 0;
@@ -349,10 +359,10 @@ function redraw() {
         const outerColor = isWhite ? 'black' : drawColor;
 
         // Always draw the same indicator style (two rings)
-        // Inner ring (white)
+        // Inner ring (white, or green if in fresh stroke mode)
         ctx.beginPath();
         ctx.arc(indicatorPos.x, indicatorPos.y, renderedSize / 2 + 2, 0, Math.PI * 2);
-        ctx.strokeStyle = 'white';
+        ctx.strokeStyle = isFreshStroke ? 'lime' : 'white';
         ctx.lineWidth = 2;
         ctx.stroke();
 
@@ -412,7 +422,7 @@ function normalizeAngleDelta(delta: number): number {
 function initThreeFingerTransform() {
     if (!primaryPos || !secondaryPos || !tertiaryPos) return;
 
-    // Calculate pivot as average of all three finger positions
+    // Calculate pivot as average of all three finger positions (screen space)
     const pivot = {
         x: (primaryPos.x + secondaryPos.x + tertiaryPos.x) / 3,
         y: (primaryPos.y + secondaryPos.y + tertiaryPos.y) / 3
@@ -429,13 +439,24 @@ function initThreeFingerTransform() {
     const angle2 = getAngle(pivot, secondaryPos);
     const angle3 = getAngle(pivot, tertiaryPos);
 
-    transformStart = {
+    const baseTransformStart = {
         pivot,
         initialScale,
         fingerAngles: [angle1, angle2, angle3],
         unwrappedRotation: 0,  // Start with no rotation
         initialTransform: { ...viewTransform }
     };
+
+    // If in fresh stroke state, store initial stroke points for transformation
+    if (isFreshStroke && strokeHistory.length > 0) {
+        const lastStroke = strokeHistory[strokeHistory.length - 1];
+        transformStart = {
+            ...baseTransformStart,
+            initialStrokePoints: lastStroke.points.map(p => ({ ...p }))
+        };
+    } else {
+        transformStart = baseTransformStart;
+    }
 }
 
 // Handle pointer down
@@ -449,6 +470,9 @@ function handlePointerDown(e: PointerEvent) {
         primaryPointerId = e.pointerId;
         primaryPos = pos;
         lastPrimaryPos = null; // Don't set yet - let first move event establish baseline
+
+        // Track when primary finger goes down for single-tap detection
+        primaryFingerDownTime = Date.now();
 
         // Capture pointer to continue tracking even outside canvas
         canvas.setPointerCapture(e.pointerId);
@@ -464,6 +488,10 @@ function handlePointerDown(e: PointerEvent) {
             setIndicatorToDefaultPosition(pos);
             lastTapTime = 0; // Prevent triple-tap detection
             lastTapPos = null;
+
+            // Exit fresh stroke state
+            isFreshStroke = false;
+            freshStrokeMarkerPos = null;
         } else {
             lastTapTime = now;
             lastTapPos = pos;
@@ -502,6 +530,9 @@ function handlePointerDown(e: PointerEvent) {
                     size: sizePicker.getSize(),
                     points: [{ ...startPoint }]
                 };
+
+                // Don't exit fresh stroke state yet - wait for actual drawing movement
+                // This allows for sequential finger placement for 3-finger gesture
             }
             redraw();
         }
@@ -523,10 +554,14 @@ function handlePointerDown(e: PointerEvent) {
         // Check if stroke should be protected (save if >250ms elapsed)
         const elapsedTime = Date.now() - secondFingerDownTime;
         if (currentStroke && elapsedTime > STROKE_PROTECTION_DELAY) {
-            // Save the stroke instead of aborting
-            if (currentStroke.points.length > 0) {
+            // Save the stroke instead of aborting (but only if it has more than just the start point)
+            if (currentStroke.points.length > 1) {
                 strokeHistory.push(currentStroke);
                 updateUndoButton();
+
+                // Enter fresh stroke state
+                isFreshStroke = true;
+                freshStrokeMarkerPos = indicatorAnchor ? { ...indicatorAnchor } : null;
             }
         }
 
@@ -608,38 +643,73 @@ function handlePointerMove(e: PointerEvent) {
 
         // Calculate scale and rotation changes
         const scaleFactor = currentScale / transformStart.initialScale;
-        const newScale = transformStart.initialTransform.scale * scaleFactor;
-        const newRotation = transformStart.initialTransform.rotation + transformStart.unwrappedRotation;
+        const rotationDelta = transformStart.unwrappedRotation;
 
-        // Calculate pan to keep the point under the initial pivot under the current pivot
-        const startPivot = transformStart.pivot;
-        const initT = transformStart.initialTransform;
-        const cx = canvas.width / 2;
-        const cy = canvas.height / 2;
+        // Check if we're transforming a fresh stroke or the entire canvas
+        if (transformStart.initialStrokePoints && strokeHistory.length > 0) {
+            // Transform only the last stroke
+            const lastStroke = strokeHistory[strokeHistory.length - 1];
 
-        // Convert initial pivot from screen to canvas coordinates
-        const cos0 = Math.cos(-initT.rotation);
-        const sin0 = Math.sin(-initT.rotation);
-        const sx1 = startPivot.x - initT.panX;
-        const sy1 = startPivot.y - initT.panY;
-        const sx2 = cos0 * (sx1 - cx) - sin0 * (sy1 - cy) + cx;
-        const sy2 = sin0 * (sx1 - cx) + cos0 * (sy1 - cy) + cy;
-        const canvasX = (sx2 - cx) / initT.scale + cx;
-        const canvasY = (sy2 - cy) / initT.scale + cy;
+            // Convert screen pivot to canvas coordinates
+            const canvasPivot = screenToCanvas(transformStart.pivot);
 
-        // Apply new scale and rotation to this canvas point
-        const cos1 = Math.cos(newRotation);
-        const sin1 = Math.sin(newRotation);
-        const tx1 = (canvasX - cx) * newScale + cx;
-        const ty1 = (canvasY - cy) * newScale + cy;
-        const tx2 = cos1 * (tx1 - cx) - sin1 * (ty1 - cy) + cx;
-        const ty2 = sin1 * (tx1 - cx) + cos1 * (ty1 - cy) + cy;
+            // Apply transformation to each point in the stroke
+            lastStroke.points = transformStart.initialStrokePoints.map(point => {
+                // Translate to pivot
+                const dx = point.x - canvasPivot.x;
+                const dy = point.y - canvasPivot.y;
 
-        // Update transform
-        viewTransform.scale = newScale;
-        viewTransform.rotation = newRotation;
-        viewTransform.panX = currentPivot.x - tx2;
-        viewTransform.panY = currentPivot.y - ty2;
+                // Apply rotation
+                const cos = Math.cos(rotationDelta);
+                const sin = Math.sin(rotationDelta);
+                const rotatedX = dx * cos - dy * sin;
+                const rotatedY = dx * sin + dy * cos;
+
+                // Apply scale
+                const scaledX = rotatedX * scaleFactor;
+                const scaledY = rotatedY * scaleFactor;
+
+                // Translate back
+                return {
+                    x: scaledX + canvasPivot.x,
+                    y: scaledY + canvasPivot.y
+                };
+            });
+        } else {
+            // Transform the entire canvas view
+            const newScale = transformStart.initialTransform.scale * scaleFactor;
+            const newRotation = transformStart.initialTransform.rotation + rotationDelta;
+
+            // Calculate pan to keep the point under the initial pivot under the current pivot
+            const startPivot = transformStart.pivot;
+            const initT = transformStart.initialTransform;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            // Convert initial pivot from screen to canvas coordinates
+            const cos0 = Math.cos(-initT.rotation);
+            const sin0 = Math.sin(-initT.rotation);
+            const sx1 = startPivot.x - initT.panX;
+            const sy1 = startPivot.y - initT.panY;
+            const sx2 = cos0 * (sx1 - cx) - sin0 * (sy1 - cy) + cx;
+            const sy2 = sin0 * (sx1 - cx) + cos0 * (sy1 - cy) + cy;
+            const canvasX = (sx2 - cx) / initT.scale + cx;
+            const canvasY = (sy2 - cy) / initT.scale + cy;
+
+            // Apply new scale and rotation to this canvas point
+            const cos1 = Math.cos(newRotation);
+            const sin1 = Math.sin(newRotation);
+            const tx1 = (canvasX - cx) * newScale + cx;
+            const ty1 = (canvasY - cy) * newScale + cy;
+            const tx2 = cos1 * (tx1 - cx) - sin1 * (ty1 - cy) + cx;
+            const ty2 = sin1 * (tx1 - cx) + cos1 * (ty1 - cy) + cy;
+
+            // Update transform
+            viewTransform.scale = newScale;
+            viewTransform.rotation = newRotation;
+            viewTransform.panX = currentPivot.x - tx2;
+            viewTransform.panY = currentPivot.y - ty2;
+        }
 
         redraw();
         return;
@@ -647,6 +717,19 @@ function handlePointerMove(e: PointerEvent) {
 
     // Move indicator anchor based on finger movement delta
     if (gestureMode === 'drawing' && indicatorAnchor) {
+        // Check if we should exit fresh stroke state due to marker movement
+        if (isFreshStroke && freshStrokeMarkerPos && primaryPos && !secondaryPos) {
+            // Only check in single-finger mode (when not drawing)
+            const currentScreenPos = canvasToScreen(indicatorAnchor);
+            const freshStrokeScreenPos = canvasToScreen(freshStrokeMarkerPos);
+            const distance = getDistance(currentScreenPos, freshStrokeScreenPos);
+
+            if (distance > FRESH_STROKE_MOVEMENT_THRESHOLD) {
+                isFreshStroke = false;
+                freshStrokeMarkerPos = null;
+            }
+        }
+
         let finalDeltaX = 0;
         let finalDeltaY = 0;
 
@@ -772,6 +855,12 @@ function handlePointerMove(e: PointerEvent) {
         const shouldDraw = isDrawing && currentStroke && secondaryPointerId !== null;
 
         if (shouldDraw && indicatorAnchor && (deltaX !== 0 || deltaY !== 0)) {
+            // Exit fresh stroke state when we start actually drawing
+            if (isFreshStroke) {
+                isFreshStroke = false;
+                freshStrokeMarkerPos = null;
+            }
+
             // In X+ mode, only add points when moving a full cell size away from last junction
             if (xPlusModeCheckbox.checked) {
                 const cellSize = getGridCellSize();
@@ -857,6 +946,10 @@ function handlePointerUp(e: PointerEvent) {
                 currentStroke = null;
                 isDrawing = false;
                 lastGridPosition = null;
+
+                // Enter fresh stroke state
+                isFreshStroke = true;
+                freshStrokeMarkerPos = indicatorAnchor ? { ...indicatorAnchor } : null;
             }
 
             redraw();
@@ -884,6 +977,10 @@ function handlePointerUp(e: PointerEvent) {
                     currentStroke = null;
                     isDrawing = false;
                     lastGridPosition = null;
+
+                    // Enter fresh stroke state
+                    isFreshStroke = true;
+                    freshStrokeMarkerPos = indicatorAnchor ? { ...indicatorAnchor } : null;
                 }
 
                 redraw();
@@ -894,7 +991,16 @@ function handlePointerUp(e: PointerEvent) {
             if (currentStroke && currentStroke.points.length > 0) {
                 strokeHistory.push(currentStroke);
                 updateUndoButton();
+            } else if (isFreshStroke) {
+                // Check if this was a quick tap (not just lifting the finger after drawing)
+                const tapDuration = Date.now() - primaryFingerDownTime;
+                if (tapDuration < SINGLE_TAP_MAX_DURATION) {
+                    // Single tap detected - exit fresh stroke state
+                    isFreshStroke = false;
+                    freshStrokeMarkerPos = null;
+                }
             }
+
             primaryPointerId = null;
             primaryPos = null;
             lastPrimaryPos = null;
@@ -934,6 +1040,11 @@ function undo() {
         }
 
         strokeHistory.pop();
+
+        // Exit fresh stroke state
+        isFreshStroke = false;
+        freshStrokeMarkerPos = null;
+
         redraw();
         updateUndoButton();
     }
@@ -956,6 +1067,9 @@ function clearCanvas() {
     isDrawing = false;
     gestureMode = 'none';
     transformStart = null;
+    // Exit fresh stroke state
+    isFreshStroke = false;
+    freshStrokeMarkerPos = null;
     // Reset view transform and indicator to center
     viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
     indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
