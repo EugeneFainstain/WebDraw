@@ -67,57 +67,65 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 ## Transition Tables
 
+**Table Format:** Each cell shows: `NewState (NewModifier) - [Actions]`
+- When modifier doesn't change, it's inherited from the current state
+- Empty actions list means no actions are executed
+
 ### FROM Idle State
 
-| Event | Normal Mode → | Fresh Stroke Mode → |
-|-------|---------------|---------------------|
-| F1_DOWN | MovingMarker (Normal) | MovingMarker (Fresh Stroke) |
-| F2_DOWN | Idle (Normal) - do nothing | Idle (Fresh Stroke) - do nothing |
-| F3_DOWN | Idle (Normal) - do nothing | Idle (Fresh Stroke) - do nothing |
-| FINGER_UP | Idle (Normal) - do nothing | Idle (Fresh Stroke) - do nothing |
-| TIMEOUT | Idle (Normal) - set TIMEOUT_HAPPENED flag | Idle (Fresh Stroke) - set TIMEOUT_HAPPENED flag |
-| FINGER_MOVED_FAR | Idle (Normal) - do nothing | Idle (Fresh Stroke) - do nothing |
-| UNDO | Idle (Normal) - process undo, exit Fresh Stroke | Idle (Normal) - process undo, exit Fresh Stroke |
-| CLEAR | Idle (Normal) - process clear, exit Fresh Stroke | Idle (Normal) - process clear, exit Fresh Stroke |
+| Event | IF Normal Mode → | IF Fresh Stroke Mode → |
+|-------|------------------|------------------------|
+| F1_DOWN | MovingMarker (keep Normal) | MovingMarker (keep Fresh) |
+| F2_DOWN | Idle (keep Normal) | Idle (keep Fresh) |
+| F3_DOWN | Idle (keep Normal) | Idle (keep Fresh) |
+| FINGER_UP | Idle (keep Normal) | Idle (keep Fresh) |
+| TIMEOUT | Idle (keep Normal) - [SET_TIMEOUT_FLAG] | Idle (keep Fresh) - [SET_TIMEOUT_FLAG] |
+| FINGER_MOVED_FAR | Idle (keep Normal) | Idle (keep Fresh) |
+| UNDO | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] |
+| CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] |
 
 ### FROM MovingMarker State
 
-| Event | Normal Mode → | Fresh Stroke Mode → |
-|-------|---------------|---------------------|
-| F1_DOWN | MovingMarker (Normal) - do nothing | MovingMarker (Fresh Stroke) - do nothing |
-| F2_DOWN | Drawing (Normal) - create stroke | Drawing (Fresh Stroke) - create stroke |
-| F3_DOWN | Idle (Normal) - abort, exit Fresh Stroke | Idle (Normal) - abort, exit Fresh Stroke |
-| FINGER_UP | Idle (Normal) | Idle (Fresh Stroke) |
-| TIMEOUT | MovingMarker (Normal) - set TIMEOUT_HAPPENED flag | MovingMarker (Fresh Stroke) - set TIMEOUT_HAPPENED flag |
-| FINGER_MOVED_FAR | MovingMarker (Normal) - exit Fresh Stroke, set flag | MovingMarker (Normal) - exit Fresh Stroke, set flag |
-| UNDO | MovingMarker (Normal) - process undo, exit Fresh Stroke | MovingMarker (Normal) - process undo, exit Fresh Stroke |
-| CLEAR | MovingMarker (Normal) - process clear, exit Fresh Stroke | MovingMarker (Normal) - process clear, exit Fresh Stroke |
+| Event | IF Normal Mode → | IF Fresh Stroke Mode → |
+|-------|------------------|------------------------|
+| F1_DOWN | MovingMarker (keep Normal) | MovingMarker (keep Fresh) |
+| F2_DOWN | Drawing (keep Normal) - [CREATE_STROKE] | Drawing (keep Fresh) - [CREATE_STROKE] |
+| F3_DOWN | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, EXIT_FRESH_STROKE] | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, EXIT_FRESH_STROKE] |
+| FINGER_UP | Idle (keep Normal) | Idle (keep Fresh) |
+| TIMEOUT | MovingMarker (keep Normal) - [SET_TIMEOUT_FLAG] | MovingMarker (keep Fresh) - [SET_TIMEOUT_FLAG] |
+| FINGER_MOVED_FAR | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] |
+| UNDO | MovingMarker (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] | MovingMarker (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] |
+| CLEAR | MovingMarker (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] | MovingMarker (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] |
 
 ### FROM Drawing State
 
-| Event | Normal Mode → | Fresh Stroke Mode → |
-|-------|---------------|---------------------|
-| F1_DOWN | Drawing (Normal) - do nothing | Drawing (Fresh Stroke) - do nothing |
-| F2_DOWN | Drawing (Normal) - do nothing | Drawing (Fresh Stroke) - do nothing |
-| F3_DOWN | Transform (Normal) - save stroke if FINGER_MOVED_FAR_HAPPENED, else abandon | Transform (Fresh Stroke) - save stroke if FINGER_MOVED_FAR_HAPPENED, else abandon |
-| FINGER_UP | Idle (Fresh Stroke) - save stroke, enter Fresh Stroke | Idle (Fresh Stroke) - save stroke, stay Fresh Stroke |
-| TIMEOUT | Drawing (Normal) - set TIMEOUT_HAPPENED flag | Drawing (Fresh Stroke) - set TIMEOUT_HAPPENED flag |
-| FINGER_MOVED_FAR | Drawing (Normal) - exit Fresh Stroke, set flag | Drawing (Normal) - exit Fresh Stroke, set flag |
-| UNDO | Idle (Normal) - exit drawing, process undo, exit Fresh Stroke | Idle (Normal) - exit drawing, process undo, exit Fresh Stroke |
-| CLEAR | Idle (Normal) - exit drawing, process clear, exit Fresh Stroke | Idle (Normal) - exit drawing, process clear, exit Fresh Stroke |
+| Event | IF Normal Mode → | IF Fresh Stroke Mode → |
+|-------|------------------|------------------------|
+| F1_DOWN | Drawing (keep Normal) | Drawing (keep Fresh) |
+| F2_DOWN | Drawing (keep Normal) | Drawing (keep Fresh) |
+| F3_DOWN | Transform (keep Normal) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] | Transform (keep Fresh) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] |
+| FINGER_UP | Idle (→ Fresh Stroke) - [SAVE_STROKE, ENTER_FRESH_STROKE] | Idle (keep Fresh) - [SAVE_STROKE] |
+| TIMEOUT | Drawing (keep Normal) - [SET_TIMEOUT_FLAG] | Drawing (keep Fresh) - [SET_TIMEOUT_FLAG] |
+| FINGER_MOVED_FAR | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, EXIT_FRESH_STROKE] |
+| UNDO | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] |
+| CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] |
+
+**Note on F3_DOWN:** Actions depend on FINGER_MOVED_FAR_HAPPENED flag:
+- If flag is true: [SAVE_STROKE, INIT_TRANSFORM]
+- If flag is false: [ABANDON_STROKE, INIT_TRANSFORM]
 
 ### FROM Transform State
 
-| Event | Normal Mode → | Fresh Stroke Mode → |
-|-------|---------------|---------------------|
-| F1_DOWN | Transform (Normal) - do nothing | Transform (Fresh Stroke) - do nothing |
-| F2_DOWN | Transform (Normal) - do nothing | Transform (Fresh Stroke) - do nothing |
-| F3_DOWN | Transform (Normal) - do nothing | Transform (Fresh Stroke) - do nothing |
-| FINGER_UP | Idle (Normal) | Idle (Fresh Stroke) |
-| TIMEOUT | Transform (Normal) - set TIMEOUT_HAPPENED flag | Transform (Fresh Stroke) - set TIMEOUT_HAPPENED flag |
-| FINGER_MOVED_FAR | Transform (Normal) - set flag | Transform (Fresh Stroke) - set flag |
-| UNDO | Idle (Normal) - process undo | Idle (Normal) - process undo, exit Fresh Stroke |
-| CLEAR | Idle (Normal) - process clear | Idle (Normal) - process clear, exit Fresh Stroke |
+| Event | IF Normal Mode → | IF Fresh Stroke Mode → |
+|-------|------------------|------------------------|
+| F1_DOWN | Transform (keep Normal) | Transform (keep Fresh) |
+| F2_DOWN | Transform (keep Normal) | Transform (keep Fresh) |
+| F3_DOWN | Transform (keep Normal) | Transform (keep Fresh) |
+| FINGER_UP | Idle (keep Normal) | Idle (keep Fresh) |
+| TIMEOUT | Transform (keep Normal) - [SET_TIMEOUT_FLAG] | Transform (keep Fresh) - [SET_TIMEOUT_FLAG] |
+| FINGER_MOVED_FAR | Transform (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG] | Transform (keep Fresh) - [SET_FINGER_MOVED_FAR_FLAG] |
+| UNDO | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, EXIT_FRESH_STROKE] |
+| CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, EXIT_FRESH_STROKE] |
 
 ## Implementation Notes
 
