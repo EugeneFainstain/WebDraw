@@ -158,6 +158,22 @@ function canvasToScreen(canvasPos: Point): Point {
     return { x: x3, y: y3 };
 }
 
+// Transform a delta/vector from screen space to canvas space
+// Deltas only need rotation and scale, no translation
+function screenDeltaToCanvasDelta(screenDelta: Point): Point {
+    const cos = Math.cos(-viewTransform.rotation);
+    const sin = Math.sin(-viewTransform.rotation);
+    const canvasDeltaX = (cos * screenDelta.x - sin * screenDelta.y) / viewTransform.scale;
+    const canvasDeltaY = (sin * screenDelta.x + cos * screenDelta.y) / viewTransform.scale;
+    return { x: canvasDeltaX, y: canvasDeltaY };
+}
+
+// Convert a screen-space vector length to canvas-space vector length
+// Only scale matters for lengths, not rotation or translation
+function screenLengthToCanvasLength(screenLength: number): number {
+    return screenLength / viewTransform.scale;
+}
+
 // ============================================================================
 // GRID FUNCTIONS (X+ MODE)
 // ============================================================================
@@ -179,7 +195,7 @@ function drawGrid() {
     const cellSize = getGridCellSize();
 
     ctx.strokeStyle = 'lightblue';
-    ctx.lineWidth = 1 / viewTransform.scale;
+    ctx.lineWidth = screenLengthToCanvasLength(1);
     ctx.lineCap = 'butt';
     ctx.lineJoin = 'miter';
 
@@ -293,7 +309,7 @@ function getIndicatorScreenPos(): Point {
 // ============================================================================
 
 function drawStroke(stroke: Stroke) {
-    const minSize = 1 / viewTransform.scale;
+    const minSize = screenLengthToCanvasLength(1);
     const renderSize = Math.max(stroke.size, minSize);
 
     if (stroke.points.length < 2) {
@@ -576,13 +592,9 @@ function updateMarkerPosition() {
     if (positions.primary && positions.secondary) {
         // Process batched delta first
         if (batchedDelta !== null) {
-            const cos = Math.cos(-viewTransform.rotation);
-            const sin = Math.sin(-viewTransform.rotation);
-            const canvasDeltaX = (cos * batchedDelta.x - sin * batchedDelta.y) / viewTransform.scale;
-            const canvasDeltaY = (sin * batchedDelta.x + cos * batchedDelta.y) / viewTransform.scale;
-
-            indicatorAnchor.x += canvasDeltaX;
-            indicatorAnchor.y += canvasDeltaY;
+            const canvasDelta = screenDeltaToCanvasDelta(batchedDelta);
+            indicatorAnchor.x += canvasDelta.x;
+            indicatorAnchor.y += canvasDelta.y;
             panToKeepIndicatorInView();
 
             if (currentStroke) {
@@ -599,13 +611,9 @@ function updateMarkerPosition() {
 
                 if (sameFingerTwice) {
                     // Same finger moved twice - process first delta immediately
-                    const cos = Math.cos(-viewTransform.rotation);
-                    const sin = Math.sin(-viewTransform.rotation);
-                    const canvasDeltaX = (cos * lastDelta.x - sin * lastDelta.y) / viewTransform.scale;
-                    const canvasDeltaY = (sin * lastDelta.x + cos * lastDelta.y) / viewTransform.scale;
-
-                    indicatorAnchor.x += canvasDeltaX;
-                    indicatorAnchor.y += canvasDeltaY;
+                    const canvasDelta = screenDeltaToCanvasDelta(lastDelta);
+                    indicatorAnchor.x += canvasDelta.x;
+                    indicatorAnchor.y += canvasDelta.y;
                     panToKeepIndicatorInView();
 
                     if (currentStroke) {
@@ -616,16 +624,14 @@ function updateMarkerPosition() {
                     lastDelta = { x: deltaX, y: deltaY, pointerId: movedPointerId! };
                 } else {
                     // Different fingers - average them
-                    const avgDeltaX = (lastDelta.x + deltaX) / 2;
-                    const avgDeltaY = (lastDelta.y + deltaY) / 2;
+                    const avgDelta = {
+                        x: (lastDelta.x + deltaX) / 2,
+                        y: (lastDelta.y + deltaY) / 2
+                    };
 
-                    const cos = Math.cos(-viewTransform.rotation);
-                    const sin = Math.sin(-viewTransform.rotation);
-                    const canvasDeltaX = (cos * avgDeltaX - sin * avgDeltaY) / viewTransform.scale;
-                    const canvasDeltaY = (sin * avgDeltaX + cos * avgDeltaY) / viewTransform.scale;
-
-                    indicatorAnchor.x += canvasDeltaX;
-                    indicatorAnchor.y += canvasDeltaY;
+                    const canvasDelta = screenDeltaToCanvasDelta(avgDelta);
+                    indicatorAnchor.x += canvasDelta.x;
+                    indicatorAnchor.y += canvasDelta.y;
                     panToKeepIndicatorInView();
 
                     if (currentStroke) {
@@ -643,13 +649,9 @@ function updateMarkerPosition() {
     } else {
         // Single finger mode - process any batched work first
         if (batchedDelta !== null) {
-            const cos = Math.cos(-viewTransform.rotation);
-            const sin = Math.sin(-viewTransform.rotation);
-            const canvasDeltaX = (cos * batchedDelta.x - sin * batchedDelta.y) / viewTransform.scale;
-            const canvasDeltaY = (sin * batchedDelta.x + cos * batchedDelta.y) / viewTransform.scale;
-
-            indicatorAnchor.x += canvasDeltaX;
-            indicatorAnchor.y += canvasDeltaY;
+            const canvasDelta = screenDeltaToCanvasDelta(batchedDelta);
+            indicatorAnchor.x += canvasDelta.x;
+            indicatorAnchor.y += canvasDelta.y;
             panToKeepIndicatorInView();
 
             batchedDelta = null;
@@ -657,13 +659,9 @@ function updateMarkerPosition() {
 
         // Process current delta immediately
         if (deltaX !== 0 || deltaY !== 0) {
-            const cos = Math.cos(-viewTransform.rotation);
-            const sin = Math.sin(-viewTransform.rotation);
-            const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale;
-            const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale;
-
-            indicatorAnchor.x += canvasDeltaX;
-            indicatorAnchor.y += canvasDeltaY;
+            const canvasDelta = screenDeltaToCanvasDelta({ x: deltaX, y: deltaY });
+            indicatorAnchor.x += canvasDelta.x;
+            indicatorAnchor.y += canvasDelta.y;
 
             panToKeepIndicatorInView();
         }
