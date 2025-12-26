@@ -40,6 +40,9 @@ export class EventHandler {
     // Event callback
     private eventCallback: ((event: Event) => void) | null = null;
 
+    // Finger promotion tracking - stores the position delta when a finger is promoted
+    private lastPromotionDelta: Point | null = null;
+
     /**
      * Set the callback for state machine events
      */
@@ -196,18 +199,58 @@ export class EventHandler {
      */
     public handlePointerUp(pointerId: number): void {
         let fingerLifted = false;
+        this.lastPromotionDelta = null;
 
         if (pointerId === this.primaryPointerId) {
-            this.primaryPointerId = null;
-            this.primaryPos = null;
-            this.primaryReferencePos = null;
+            // Calculate the position delta before promotion
+            const oldPrimaryPos = this.primaryPos;
+            const newPrimaryPos = this.secondaryPos;
+
+            // Primary finger lifted - promote secondary to primary, tertiary to secondary
+            this.primaryPointerId = this.secondaryPointerId;
+            this.primaryPos = this.secondaryPos;
+            this.primaryReferencePos = this.secondaryReferencePos;
+
+            this.secondaryPointerId = this.tertiaryPointerId;
+            this.secondaryPos = this.tertiaryPos;
+            this.secondaryReferencePos = null; // tertiary doesn't have a reference pos
+
+            this.tertiaryPointerId = null;
+            this.tertiaryPos = null;
+
+            // Store the delta if we promoted a finger
+            if (oldPrimaryPos && newPrimaryPos) {
+                this.lastPromotionDelta = {
+                    x: newPrimaryPos.x - oldPrimaryPos.x,
+                    y: newPrimaryPos.y - oldPrimaryPos.y
+                };
+            }
+
             fingerLifted = true;
         } else if (pointerId === this.secondaryPointerId) {
-            this.secondaryPointerId = null;
-            this.secondaryPos = null;
-            this.secondaryReferencePos = null;
+            // Calculate the position delta before promotion
+            const oldSecondaryPos = this.secondaryPos;
+            const newSecondaryPos = this.tertiaryPos;
+
+            // Secondary finger lifted - promote tertiary to secondary
+            this.secondaryPointerId = this.tertiaryPointerId;
+            this.secondaryPos = this.tertiaryPos;
+            this.secondaryReferencePos = null; // tertiary doesn't have a reference pos
+
+            this.tertiaryPointerId = null;
+            this.tertiaryPos = null;
+
+            // Store the delta if we promoted a finger
+            if (oldSecondaryPos && newSecondaryPos) {
+                this.lastPromotionDelta = {
+                    x: newSecondaryPos.x - oldSecondaryPos.x,
+                    y: newSecondaryPos.y - oldSecondaryPos.y
+                };
+            }
+
             fingerLifted = true;
         } else if (pointerId === this.tertiaryPointerId) {
+            // Tertiary finger lifted - just clear it
             this.tertiaryPointerId = null;
             this.tertiaryPos = null;
             fingerLifted = true;
@@ -264,5 +307,16 @@ export class EventHandler {
      */
     public getTimeSinceLastFingerDown(): number {
         return Date.now() - this.lastFingerDownTime;
+    }
+
+    /**
+     * Get and clear the last finger promotion delta
+     * Returns the screen space position delta that occurred when a finger was promoted,
+     * or null if no promotion occurred in the last event.
+     */
+    public getAndClearPromotionDelta(): Point | null {
+        const delta = this.lastPromotionDelta;
+        this.lastPromotionDelta = null;
+        return delta;
     }
 }

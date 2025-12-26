@@ -775,6 +775,20 @@ function handleActions(actions: Action[]): void {
 eventHandler.setEventCallback((event: Event) => {
     const result = stateMachine.processEvent(event);
     handleActions(result.actions);
+
+    // Handle finger promotion discontinuity
+    if (event === Event.FINGER_UP) {
+        const promotionDelta = eventHandler.getAndClearPromotionDelta();
+        if (promotionDelta) {
+            // When fingers are promoted, we need to update the tracking positions
+            // to match the new finger assignments, otherwise the next delta calculation
+            // will use the old positions and create a jump
+            const positions = eventHandler.getFingerPositions();
+            lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
+            lastSecondaryPos = positions.secondary ? { ...positions.secondary } : null;
+        }
+    }
+
     redraw();
 });
 
