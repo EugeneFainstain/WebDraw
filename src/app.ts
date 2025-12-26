@@ -643,14 +643,38 @@ function handlePointerMove(e: PointerEvent) {
             // Transform only the last stroke
             const lastStroke = strokeHistory[strokeHistory.length - 1];
 
-            // Convert screen pivot to canvas coordinates
-            const canvasPivot = screenToCanvas(transformStart.pivot);
+            // Calculate the center of the stroke's bounding box (from initial points)
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const point of transformStart.initialStrokePoints) {
+                minX = Math.min(minX, point.x);
+                minY = Math.min(minY, point.y);
+                maxX = Math.max(maxX, point.x);
+                maxY = Math.max(maxY, point.y);
+            }
+            const initialStrokeCenter = {
+                x: (minX + maxX) / 2,
+                y: (minY + maxY) / 2
+            };
+
+            // Convert initial and current pivots from screen to canvas coordinates
+            const initialCanvasPivot = screenToCanvas(transformStart.pivot);
+            const currentCanvasPivot = screenToCanvas(currentPivot);
+
+            // Calculate pan delta in canvas coordinates
+            const panDeltaX = currentCanvasPivot.x - initialCanvasPivot.x;
+            const panDeltaY = currentCanvasPivot.y - initialCanvasPivot.y;
+
+            // Calculate new stroke center after panning
+            const newStrokeCenter = {
+                x: initialStrokeCenter.x + panDeltaX,
+                y: initialStrokeCenter.y + panDeltaY
+            };
 
             // Apply transformation to each point in the stroke
             lastStroke.points = transformStart.initialStrokePoints.map(point => {
-                // Translate to pivot
-                const dx = point.x - canvasPivot.x;
-                const dy = point.y - canvasPivot.y;
+                // Translate to initial stroke center
+                const dx = point.x - initialStrokeCenter.x;
+                const dy = point.y - initialStrokeCenter.y;
 
                 // Apply rotation
                 const cos = Math.cos(rotationDelta);
@@ -662,10 +686,10 @@ function handlePointerMove(e: PointerEvent) {
                 const scaledX = rotatedX * scaleFactor;
                 const scaledY = rotatedY * scaleFactor;
 
-                // Translate back
+                // Translate to new stroke center (with pan applied)
                 return {
-                    x: scaledX + canvasPivot.x,
-                    y: scaledY + canvasPivot.y
+                    x: scaledX + newStrokeCenter.x,
+                    y: scaledY + newStrokeCenter.y
                 };
             });
         } else {
