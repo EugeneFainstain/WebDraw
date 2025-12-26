@@ -536,48 +536,112 @@ function updateMarkerPosition() {
     const positions = eventHandler.getFingerPositions();
     if (!indicatorAnchor) return;
 
+    // Determine which finger moved
+    let movedPointerId: number | null = null;
     let deltaX = 0;
     let deltaY = 0;
 
-    // Calculate deltas
     if (positions.primary && lastPrimaryPos) {
-        deltaX = positions.primary.x - lastPrimaryPos.x;
-        deltaY = positions.primary.y - lastPrimaryPos.y;
+        const primaryDeltaX = positions.primary.x - lastPrimaryPos.x;
+        const primaryDeltaY = positions.primary.y - lastPrimaryPos.y;
+        if (primaryDeltaX !== 0 || primaryDeltaY !== 0) {
+            deltaX = primaryDeltaX;
+            deltaY = primaryDeltaY;
+            movedPointerId = 1; // Primary finger
+        }
     }
 
     if (positions.secondary && lastSecondaryPos) {
         const secondaryDeltaX = positions.secondary.x - lastSecondaryPos.x;
         const secondaryDeltaY = positions.secondary.y - lastSecondaryPos.y;
+        if (secondaryDeltaX !== 0 || secondaryDeltaY !== 0) {
+            if (movedPointerId !== null) {
+                // Both fingers moved - average them
+                deltaX = (deltaX + secondaryDeltaX) / 2;
+                deltaY = (deltaY + secondaryDeltaY) / 2;
+                movedPointerId = 3; // Both fingers
+            } else {
+                deltaX = secondaryDeltaX;
+                deltaY = secondaryDeltaY;
+                movedPointerId = 2; // Secondary finger
+            }
+        }
+    }
 
-        // When two fingers are touching, use averaging logic
-        if (positions.primary && lastPrimaryPos) {
-            // Process batched delta first
-            if (batchedDelta !== null) {
-                const cos = Math.cos(-viewTransform.rotation);
-                const sin = Math.sin(-viewTransform.rotation);
-                const canvasDeltaX = (cos * batchedDelta.x - sin * batchedDelta.y) / viewTransform.scale;
-                const canvasDeltaY = (sin * batchedDelta.x + cos * batchedDelta.y) / viewTransform.scale;
+    // Update last positions
+    lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
+    lastSecondaryPos = positions.secondary ? { ...positions.secondary } : null;
 
-                indicatorAnchor.x += canvasDeltaX;
-                indicatorAnchor.y += canvasDeltaY;
-                panToKeepIndicatorInView();
+    // Two-finger mode: buffer and average alternating finger movements
+    if (positions.primary && positions.secondary) {
+        // Process batched delta first
+        if (batchedDelta !== null) {
+            const cos = Math.cos(-viewTransform.rotation);
+            const sin = Math.sin(-viewTransform.rotation);
+            const canvasDeltaX = (cos * batchedDelta.x - sin * batchedDelta.y) / viewTransform.scale;
+            const canvasDeltaY = (sin * batchedDelta.x + cos * batchedDelta.y) / viewTransform.scale;
 
-                if (currentStroke) {
-                    currentStroke.points.push({ ...indicatorAnchor });
-                }
+            indicatorAnchor.x += canvasDeltaX;
+            indicatorAnchor.y += canvasDeltaY;
+            panToKeepIndicatorInView();
 
-                batchedDelta = null;
+            if (currentStroke) {
+                currentStroke.points.push({ ...indicatorAnchor });
             }
 
-            // Average the two deltas
-            deltaX = (deltaX + secondaryDeltaX) / 2;
-            deltaY = (deltaY + secondaryDeltaY) / 2;
-        } else {
-            deltaX = secondaryDeltaX;
-            deltaY = secondaryDeltaY;
+            batchedDelta = null;
+        }
+
+        // Process current delta with lastDelta buffering
+        if (deltaX !== 0 || deltaY !== 0 && movedPointerId !== null) {
+            if (lastDelta !== null) {
+                const sameFingerTwice = (lastDelta.pointerId === movedPointerId);
+
+                if (sameFingerTwice) {
+                    // Same finger moved twice - process first delta immediately
+                    const cos = Math.cos(-viewTransform.rotation);
+                    const sin = Math.sin(-viewTransform.rotation);
+                    const canvasDeltaX = (cos * lastDelta.x - sin * lastDelta.y) / viewTransform.scale;
+                    const canvasDeltaY = (sin * lastDelta.x + cos * lastDelta.y) / viewTransform.scale;
+
+                    indicatorAnchor.x += canvasDeltaX;
+                    indicatorAnchor.y += canvasDeltaY;
+                    panToKeepIndicatorInView();
+
+                    if (currentStroke) {
+                        currentStroke.points.push({ ...indicatorAnchor });
+                    }
+
+                    // Store current delta for next iteration
+                    lastDelta = { x: deltaX, y: deltaY, pointerId: movedPointerId! };
+                } else {
+                    // Different fingers - average them
+                    const avgDeltaX = (lastDelta.x + deltaX) / 2;
+                    const avgDeltaY = (lastDelta.y + deltaY) / 2;
+
+                    const cos = Math.cos(-viewTransform.rotation);
+                    const sin = Math.sin(-viewTransform.rotation);
+                    const canvasDeltaX = (cos * avgDeltaX - sin * avgDeltaY) / viewTransform.scale;
+                    const canvasDeltaY = (sin * avgDeltaX + cos * avgDeltaY) / viewTransform.scale;
+
+                    indicatorAnchor.x += canvasDeltaX;
+                    indicatorAnchor.y += canvasDeltaY;
+                    panToKeepIndicatorInView();
+
+                    if (currentStroke) {
+                        currentStroke.points.push({ ...indicatorAnchor });
+                    }
+
+                    // Clear the buffer
+                    lastDelta = null;
+                }
+            } else {
+                // First delta - buffer it and wait for next
+                lastDelta = { x: deltaX, y: deltaY, pointerId: movedPointerId! };
+            }
         }
     } else {
-        // Single finger - clear batched work
+        // Single finger mode - process any batched work first
         if (batchedDelta !== null) {
             const cos = Math.cos(-viewTransform.rotation);
             const sin = Math.sin(-viewTransform.rotation);
@@ -590,23 +654,26 @@ function updateMarkerPosition() {
 
             batchedDelta = null;
         }
-    }
 
-    // Update last positions
-    lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
-    lastSecondaryPos = positions.secondary ? { ...positions.secondary } : null;
+        // Process current delta immediately
+        if (deltaX !== 0 || deltaY !== 0) {
+            const cos = Math.cos(-viewTransform.rotation);
+            const sin = Math.sin(-viewTransform.rotation);
+            const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale;
+            const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale;
 
-    // Apply delta to indicator
-    if (deltaX !== 0 || deltaY !== 0) {
-        const cos = Math.cos(-viewTransform.rotation);
-        const sin = Math.sin(-viewTransform.rotation);
-        const canvasDeltaX = (cos * deltaX - sin * deltaY) / viewTransform.scale;
-        const canvasDeltaY = (sin * deltaX + cos * deltaY) / viewTransform.scale;
+            indicatorAnchor.x += canvasDeltaX;
+            indicatorAnchor.y += canvasDeltaY;
 
-        indicatorAnchor.x += canvasDeltaX;
-        indicatorAnchor.y += canvasDeltaY;
+            panToKeepIndicatorInView();
+        }
 
-        panToKeepIndicatorInView();
+        // Clear lastDelta when transitioning from two-finger to one-finger
+        if (lastDelta !== null) {
+            // Save it as batchedDelta for when we transition back
+            batchedDelta = { x: lastDelta.x, y: lastDelta.y };
+            lastDelta = null;
+        }
     }
 }
 
