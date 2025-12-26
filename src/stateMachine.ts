@@ -154,9 +154,9 @@ export class StateMachine {
             this.flags.FINGER_MOVED_FAR_HAPPENED = true;
         }
 
-        // Clear flags on certain events
-        if (event === Event.F1_DOWN && this.currentState === State.Idle) {
-            // Reset flags when starting a new gesture sequence
+        // Clear flags on every finger down event
+        if (event === Event.F1_DOWN || event === Event.F2_DOWN || event === Event.F3_DOWN) {
+            // Reset flags when any finger touches down
             this.flags.TIMEOUT_HAPPENED = false;
             this.flags.FINGER_MOVED_FAR_HAPPENED = false;
         }

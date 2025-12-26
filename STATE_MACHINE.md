@@ -42,7 +42,7 @@ The state machine maintains **2 persistent flags** that are set by events and ch
 1. **TIMEOUT_HAPPENED** - Set when TIMEOUT event fires
 2. **FINGER_MOVED_FAR_HAPPENED** - Set when FINGER_MOVED_FAR event fires
 
-These flags are reset when a new gesture sequence begins (F1_DOWN in Idle state).
+These flags are reset on every finger down event (F1_DOWN, F2_DOWN, or F3_DOWN).
 
 ## Actions
 
