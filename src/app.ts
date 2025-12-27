@@ -766,7 +766,7 @@ function addPointToStroke() {
         if (!lastGridPosition) return; // Should already be initialized in CREATE_STROKE
 
         const cellSize = getGridCellSize();
-        const threshold = cellSize;
+        const threshold = cellSize * 0.9;
 
         const deltaFromLastX = Math.abs(indicatorAnchor.x - lastGridPosition.x);
         const deltaFromLastY = Math.abs(indicatorAnchor.y - lastGridPosition.y);
