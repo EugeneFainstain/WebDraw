@@ -121,6 +121,43 @@ function normalizeAngleDelta(delta: number): number {
     return delta;
 }
 
+function findClosestStrokeAndPoint(): { strokeIdx: number; point: Point } | null {
+    if (strokeHistory.length === 0 || !indicatorAnchor) {
+        return null;
+    }
+
+    let closestStrokeIdx = -1;
+    let closestPoint: Point | null = null;
+    let minDistanceSquared = Infinity;
+
+    // Iterate through all strokes
+    for (let i = 0; i < strokeHistory.length; i++) {
+        const stroke = strokeHistory[i];
+
+        // Find closest point in this stroke
+        for (const point of stroke.points) {
+            const dx = point.x - indicatorAnchor.x;
+            const dy = point.y - indicatorAnchor.y;
+            const distanceSquared = dx * dx + dy * dy;
+
+            if (distanceSquared < minDistanceSquared) {
+                minDistanceSquared = distanceSquared;
+                closestStrokeIdx = i;
+                closestPoint = point;
+            }
+        }
+    }
+
+    if (closestPoint === null) {
+        return null;
+    }
+
+    return {
+        strokeIdx: closestStrokeIdx,
+        point: { ...closestPoint }
+    };
+}
+
 // ============================================================================
 // COORDINATE TRANSFORMATIONS
 // ============================================================================
@@ -859,14 +896,22 @@ function handlePointerDown(e: PointerEvent) {
 
     const pos = getPointerPos(e);
 
-    // Check for double-tap to reset indicator position
+    // Check for double-tap to select closest stroke
     const now = Date.now();
     const isDoubleTap = now - lastTapTime < DOUBLE_TAP_DELAY &&
                         lastTapPos !== null &&
                         getDistance(pos, lastTapPos) < DOUBLE_TAP_DISTANCE;
 
     if (isDoubleTap && eventHandler.getFingerCount() === 0) {
-        setIndicatorToDefaultPosition(pos);
+        // Find closest stroke and point to the current marker position
+        const result = findClosestStrokeAndPoint();
+        if (result) {
+            // Move marker to the closest point
+            indicatorAnchor = result.point;
+            // Select the stroke
+            selectedStrokeIdx = result.strokeIdx;
+            selectedStrokeMarkerPos = { ...result.point };
+        }
         lastTapTime = 0;
         lastTapPos = null;
         redraw();
