@@ -270,10 +270,10 @@ export class EventHandler {
     }
 
     /**
-     * Handle undo button press
+     * Handle delete button press
      */
-    public handleUndo(): void {
-        this.emitEvent(Event.UNDO);
+    public handleDelete(): void {
+        this.emitEvent(Event.DELETE);
     }
 
     /**

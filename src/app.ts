@@ -12,7 +12,7 @@ const canvas = document.getElementById('drawingCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const colorPickerEl = document.getElementById('colorPicker') as HTMLElement;
 const sizePickerEl = document.getElementById('sizePicker') as HTMLElement;
-const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
+const delBtn = document.getElementById('delBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 const xPlusModeCheckbox = document.getElementById('xPlusMode') as HTMLInputElement;
 
@@ -777,7 +777,7 @@ function handleActions(actions: Action[]): void {
             case Action.SAVE_STROKE:
                 if (currentStroke && currentStroke.points.length > 0) {
                     strokeHistory.push(currentStroke);
-                    updateUndoButton();
+                    updateDelButton();
                 }
                 currentStroke = null;
                 lastGridPosition = null;
@@ -799,20 +799,22 @@ function handleActions(actions: Action[]): void {
                         selectedStrokePointIdx = selectedStroke.points.length - 1;
                     }
                 }
+                updateDelButton();
                 break;
 
             case Action.DESELECT_STROKE:
                 selectedStrokeMarkerPos = null;
                 selectedStrokeIdx = null;
                 selectedStrokePointIdx = null;
+                updateDelButton();
                 break;
 
             case Action.INIT_TRANSFORM:
                 initThreeFingerTransform();
                 break;
 
-            case Action.PROCESS_UNDO:
-                processUndo();
+            case Action.PROCESS_DELETE:
+                processDelete();
                 break;
 
             case Action.PROCESS_CLEAR:
@@ -860,23 +862,50 @@ eventHandler.setEventCallback((event: Event) => {
 // UNDO AND CLEAR
 // ============================================================================
 
-function updateUndoButton() {
-    undoBtn.disabled = strokeHistory.length === 0;
+function updateDelButton() {
+    delBtn.disabled = selectedStrokeIdx === null;
 }
 
-function processUndo() {
-    if (strokeHistory.length > 0) {
-        const lastStroke = strokeHistory[strokeHistory.length - 1];
+function processDelete() {
+    if (selectedStrokeIdx === null) return;
 
-        // Move marker to the beginning of the stroke being removed
-        if (lastStroke.points.length > 0) {
-            indicatorAnchor = { ...lastStroke.points[0] };
-            panToKeepIndicatorInView();
+    const deletedStroke = strokeHistory[selectedStrokeIdx];
+
+    // Move marker to the beginning of the stroke being removed
+    if (deletedStroke.points.length > 0) {
+        indicatorAnchor = { ...deletedStroke.points[0] };
+        panToKeepIndicatorInView();
+    }
+
+    // Remove the stroke
+    strokeHistory.splice(selectedStrokeIdx, 1);
+
+    // Select the preceding stroke, or if it was the first, select the last stroke
+    if (strokeHistory.length > 0) {
+        if (selectedStrokeIdx === 0) {
+            // Very first stroke was deleted - select the very last stroke
+            selectedStrokeIdx = strokeHistory.length - 1;
+        } else {
+            // Select the preceding stroke
+            selectedStrokeIdx = selectedStrokeIdx - 1;
         }
 
-        strokeHistory.pop();
-        updateUndoButton();
+        // Update marker to point to the selected stroke
+        const newSelectedStroke = strokeHistory[selectedStrokeIdx];
+        if (newSelectedStroke.points.length > 0) {
+            selectedStrokePointIdx = newSelectedStroke.points.length - 1;
+            indicatorAnchor = { ...newSelectedStroke.points[selectedStrokePointIdx] };
+            selectedStrokeMarkerPos = { ...indicatorAnchor };
+            panToKeepIndicatorInView();
+        }
+    } else {
+        // No more strokes - deselect
+        selectedStrokeIdx = null;
+        selectedStrokePointIdx = null;
+        selectedStrokeMarkerPos = null;
     }
+
+    updateDelButton();
 }
 
 function processClear() {
@@ -886,7 +915,7 @@ function processClear() {
     transformStart = null;
     viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
     indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
-    updateUndoButton();
+    updateDelButton();
 
     // Reset state machine and event handler
     stateMachine.reset();
@@ -926,6 +955,7 @@ function handlePointerDown(e: PointerEvent) {
             selectedStrokeIdx = result.strokeIdx;
             selectedStrokePointIdx = result.pointIdx;
             selectedStrokeMarkerPos = { ...result.point };
+            updateDelButton();
         }
         lastTapTime = 0;
         lastTapPos = null;
@@ -1018,7 +1048,7 @@ canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false }
 canvas.addEventListener('touchend', e => e.preventDefault(), { passive: false });
 canvas.addEventListener('touchcancel', e => e.preventDefault(), { passive: false });
 
-undoBtn.addEventListener('click', () => eventHandler.handleUndo());
+delBtn.addEventListener('click', () => eventHandler.handleDelete());
 clearBtn.addEventListener('click', () => eventHandler.handleClear());
 
 xPlusModeCheckbox.addEventListener('change', () => {
@@ -1035,6 +1065,6 @@ window.addEventListener('resize', resizeCanvas);
 // ============================================================================
 
 resizeCanvas();
-updateUndoButton();
+updateDelButton();
 indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
 redraw();

@@ -33,7 +33,7 @@ The state machine responds to **8 events**:
 4. **FINGER_UP** - Any finger lifts from screen
 5. **TIMEOUT** - 250ms has elapsed since ANY finger down
 6. **FINGER_MOVED_FAR** - Finger moved >30px from reference point
-7. **UNDO** - Undo button pressed
+7. **DELETE** - Delete button pressed
 8. **CLEAR** - Clear button pressed
 
 ## Event Flags
@@ -59,7 +59,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `DESELECT_STROKE` | Deselect stroke (exit selected stroke mode) |
 | `INIT_TRANSFORM` | Initialize 3-finger transform |
 | `APPLY_TRANSFORM` | Apply transform (continuous) |
-| `PROCESS_UNDO` | Execute undo operation |
+| `PROCESS_DELETE` | Execute delete operation |
 | `PROCESS_CLEAR` | Execute clear operation |
 | `ABORT_TOO_MANY_FINGERS` | Abort gesture (too many fingers) |
 | `SET_TIMEOUT_FLAG` | Set TIMEOUT_HAPPENED flag |
@@ -82,7 +82,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | Idle (keep Normal) - [SET_TIMEOUT_FLAG] | Idle (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | Idle (keep Normal) | Idle (keep Selected) |
-| UNDO | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] |
+| DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
 ### FROM MovingMarker State
@@ -95,7 +95,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | MovingMarker (keep Normal) - [SET_TIMEOUT_FLAG] | MovingMarker (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
-| UNDO | MovingMarker (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] | MovingMarker (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] |
+| DELETE | MovingMarker (keep) - [PROCESS_DELETE] | MovingMarker (keep) - [PROCESS_DELETE] |
 | CLEAR | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
 ### FROM Drawing State
@@ -108,7 +108,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_UP | MovingMarker (→ Selected) - [SAVE_STROKE, SELECT_STROKE] | MovingMarker (keep Selected) - [SAVE_STROKE] |
 | TIMEOUT | Drawing (keep Normal) - [SET_TIMEOUT_FLAG] | Drawing (keep Selected) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
-| UNDO | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] |
+| DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
 **Note on F3_DOWN:** Actions depend on FINGER_MOVED_FAR_HAPPENED flag:
@@ -125,7 +125,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | Transform (keep Normal) - [SET_TIMEOUT_FLAG] | Transform (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | Transform (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG] | Transform (keep Fresh) - [SET_FINGER_MOVED_FAR_FLAG] |
-| UNDO | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_UNDO, DESELECT_STROKE] |
+| DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
 ## Implementation Notes
@@ -144,7 +144,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 **Exit Conditions:**
 - Single tap (quick tap without timeout or movement)
-- UNDO button pressed
+- DELETE button pressed (removes selected stroke, selects another)
 - CLEAR button pressed
 - Marker movement >30px from selected stroke position (FINGER_MOVED_FAR in MovingMarker)
 - Too many fingers (F3_DOWN in MovingMarker)

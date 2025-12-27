@@ -54,7 +54,7 @@ export enum Event {
     FINGER_UP = 'FINGER_UP',          // Any finger lifts from screen
     TIMEOUT = 'TIMEOUT',              // 250ms has elapsed since ANY finger down
     FINGER_MOVED_FAR = 'FINGER_MOVED_FAR', // Finger moved >30px from reference point
-    UNDO = 'UNDO',                    // Undo button pressed
+    DELETE = 'DELETE',                // Delete button pressed
     CLEAR = 'CLEAR'                   // Clear button pressed
 }
 
@@ -95,7 +95,7 @@ export enum Action {
     APPLY_TRANSFORM = 'APPLY_TRANSFORM',
 
     // Global actions
-    PROCESS_UNDO = 'PROCESS_UNDO',
+    PROCESS_DELETE = 'PROCESS_DELETE',
     PROCESS_CLEAR = 'PROCESS_CLEAR',
     ABORT_TOO_MANY_FINGERS = 'ABORT_TOO_MANY_FINGERS',
 
@@ -256,12 +256,12 @@ export class StateMachine {
                     actions: [Action.SET_TIMEOUT_FLAG, Action.DO_NOTHING]
                 };
 
-            case Event.UNDO:
-                // Deselect stroke (→ Normal)
+            case Event.DELETE:
+                // Delete keeps selection mode unchanged (processDelete handles selection logic)
                 return {
                     newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.PROCESS_UNDO, Action.DESELECT_STROKE]
+                    newModifier: { isStrokeSelected },  // keep (processDelete will manage)
+                    actions: [Action.PROCESS_DELETE]
                 };
 
             case Event.CLEAR:
@@ -349,12 +349,12 @@ export class StateMachine {
                     actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.DESELECT_STROKE, Action.MOVE_MARKER]
                 };
 
-            case Event.UNDO:
-                // Deselect stroke (→ Normal)
+            case Event.DELETE:
+                // Delete keeps selection mode unchanged (processDelete handles selection logic)
                 return {
                     newState: State.MovingMarker,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.PROCESS_UNDO, Action.DESELECT_STROKE]
+                    newModifier: { isStrokeSelected },  // keep (processDelete will manage)
+                    actions: [Action.PROCESS_DELETE]
                 };
 
             case Event.CLEAR:
@@ -439,12 +439,12 @@ export class StateMachine {
                     actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.DESELECT_STROKE]
                 };
 
-            case Event.UNDO:
-                // Deselect stroke (→ Normal)
+            case Event.DELETE:
+                // Delete keeps selection mode unchanged (processDelete handles selection logic)
                 return {
                     newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.PROCESS_UNDO, Action.DESELECT_STROKE]
+                    newModifier: { isStrokeSelected },  // keep (processDelete will manage)
+                    actions: [Action.PROCESS_DELETE]
                 };
 
             case Event.CLEAR:
@@ -504,12 +504,12 @@ export class StateMachine {
                     actions: [Action.SET_FINGER_MOVED_FAR_FLAG]
                 };
 
-            case Event.UNDO:
-                // Deselect stroke (→ Normal)
+            case Event.DELETE:
+                // Delete keeps selection mode unchanged (processDelete handles selection logic)
                 return {
                     newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.PROCESS_UNDO, Action.DESELECT_STROKE]
+                    newModifier: modifier,  // keep (processDelete will manage)
+                    actions: [Action.PROCESS_DELETE]
                 };
 
             case Event.CLEAR:

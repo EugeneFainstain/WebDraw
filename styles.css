@@ -78,16 +78,16 @@ button {
     transition: background-color 0.2s;
 }
 
-#undoBtn {
+#delBtn {
     background: #4a90d9;
     color: #fff;
 }
 
-#undoBtn:hover {
+#delBtn:hover {
     background: #357abd;
 }
 
-#undoBtn:disabled {
+#delBtn:disabled {
     background: #666;
     cursor: not-allowed;
 }
