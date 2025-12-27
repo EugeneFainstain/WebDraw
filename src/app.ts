@@ -58,6 +58,10 @@ let selectedStrokeMarkerPos: Point | null = null;
 // Track if we're in "fresh stroke" mode (just drew, not manually selected)
 let isFreshStroke: boolean = false;
 
+// Track transformation undo state
+let transformSnapshot: Point[] | null = null;  // Original points before transformation
+let hasUndoableTransform: boolean = false;     // True if selected stroke has been transformed
+
 // Track last grid position for X+ mode
 let lastGridPosition: Point | null = null;
 
@@ -506,6 +510,11 @@ function initThreeFingerTransform() {
             ...baseTransformStart,
             initialStrokePoints: selectedStroke.points.map(p => ({ ...p }))
         };
+
+        // Save snapshot for undo functionality (only if not already saved)
+        if (!hasUndoableTransform) {
+            transformSnapshot = selectedStroke.points.map(p => ({ ...p }));
+        }
     } else {
         transformStart = baseTransformStart;
     }
@@ -833,6 +842,9 @@ function handleActions(actions: Action[]): void {
                         selectedStrokePointIdx = selectedStroke.points.length - 1;
                     }
                 }
+                // Clear transformation undo state when selecting new stroke
+                transformSnapshot = null;
+                hasUndoableTransform = false;
                 // Mark as fresh stroke (just drew)
                 isFreshStroke = true;
                 updateDelButton();
@@ -842,6 +854,9 @@ function handleActions(actions: Action[]): void {
                 selectedStrokeMarkerPos = null;
                 selectedStrokeIdx = null;
                 selectedStrokePointIdx = null;
+                // Clear transformation undo state on deselection
+                transformSnapshot = null;
+                hasUndoableTransform = false;
                 // Don't change isFreshStroke - it persists through deselection
                 updateDelButton();
                 break;
@@ -905,8 +920,9 @@ function updateDelButton() {
     // Determine button state based on requirements:
     // a) No strokes → disabled "Undo" (ONLY scenario for disabled "Undo")
     // b) Fresh stroke (just drew) → enabled "Undo"
-    // c) Manually selected stroke → enabled "Del"
-    // d) Exited selected mode (not fresh) → disabled "Del"
+    // c) Transformed stroke → enabled "Undo"
+    // d) Manually selected stroke → enabled "Del"
+    // e) Exited selected mode (not fresh) → disabled "Del"
 
     if (!hasStrokes) {
         // a) No strokes - disabled "Undo" (ONLY time disabled shows "Undo")
@@ -916,12 +932,16 @@ function updateDelButton() {
         // b) Fresh stroke mode - enabled "Undo"
         delBtn.disabled = false;
         delBtn.textContent = 'Undo';
+    } else if (hasUndoableTransform && selectedStrokeIdx !== null) {
+        // c) Transformed stroke - enabled "Undo"
+        delBtn.disabled = false;
+        delBtn.textContent = 'Undo';
     } else if (selectedStrokeIdx !== null) {
-        // c) Manually selected stroke - enabled "Del"
+        // d) Manually selected stroke - enabled "Del"
         delBtn.disabled = false;
         delBtn.textContent = 'Del';
     } else {
-        // d) Exited selected mode (not fresh) - disabled "Del"
+        // e) Exited selected mode (not fresh) - disabled "Del"
         delBtn.disabled = true;
         delBtn.textContent = 'Del';
     }
@@ -929,6 +949,28 @@ function updateDelButton() {
 
 function processDelete() {
     if (strokeHistory.length === 0) return;
+
+    // Check if we should undo transformation instead of deleting
+    if (hasUndoableTransform && transformSnapshot && selectedStrokeIdx !== null) {
+        // Restore the stroke to its pre-transformation state
+        strokeHistory[selectedStrokeIdx].points = transformSnapshot.map(p => ({ ...p }));
+
+        // Update marker position to follow the stroke back to its original position
+        if (selectedStrokePointIdx !== null && selectedStrokePointIdx < transformSnapshot.length) {
+            indicatorAnchor = { ...transformSnapshot[selectedStrokePointIdx] };
+            selectedStrokeMarkerPos = { ...indicatorAnchor };
+            panToKeepIndicatorInView();
+        }
+
+        // Clear the transformation undo state
+        transformSnapshot = null;
+        hasUndoableTransform = false;
+
+        // Update button to show "Del" now
+        updateDelButton();
+        redraw();
+        return;
+    }
 
     // Determine which stroke to delete
     let indexToDelete: number;
@@ -955,6 +997,10 @@ function processDelete() {
 
     // Remove the stroke FIRST (before finding closest, to avoid index shift issues)
     strokeHistory.splice(indexToDelete, 1);
+
+    // Clear transformation undo state when deleting a stroke
+    transformSnapshot = null;
+    hasUndoableTransform = false;
 
     // After deletion, always exit fresh stroke mode and keep selection
     const wasFresh = isFreshStroke;
@@ -1017,6 +1063,8 @@ function processClear() {
     currentStroke = null;
     lastGridPosition = null;
     transformStart = null;
+    transformSnapshot = null;
+    hasUndoableTransform = false;
     viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
     indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
     isFreshStroke = false;
@@ -1066,6 +1114,9 @@ function handlePointerDown(e: PointerEvent) {
             selectedStrokeMarkerPos = { ...result.point };
             // Manual selection exits fresh stroke mode
             isFreshStroke = false;
+            // Clear transformation undo state when manually selecting a stroke
+            transformSnapshot = null;
+            hasUndoableTransform = false;
             // Update state machine to reflect selection
             stateMachine.setStrokeSelected(true);
             updateDelButton();
@@ -1122,6 +1173,12 @@ function handlePointerUp(e: PointerEvent) {
         lastSecondaryPos = null;
         lastDelta = null;
         batchedDelta = null;
+
+        // Mark transformation as complete if a stroke was transformed
+        if (transformStart && transformStart.initialStrokePoints && transformSnapshot) {
+            hasUndoableTransform = true;
+            updateDelButton();
+        }
         transformStart = null;
 
         // Clamp indicator after transform
