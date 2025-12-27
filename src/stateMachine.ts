@@ -152,6 +152,11 @@ export class StateMachine {
         return this.modifier.isStrokeSelected;
     }
 
+    // Manually set stroke selection state (for double-tap manual selection)
+    public setStrokeSelected(selected: boolean): void {
+        this.modifier.isStrokeSelected = selected;
+    }
+
     // Process an event and return the transition result
     public processEvent(event: Event): TransitionResult {
         const result = this.transition(this.currentState, this.modifier, event, this.flags);

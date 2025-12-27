@@ -1026,6 +1026,8 @@ function handlePointerDown(e: PointerEvent) {
             selectedStrokeMarkerPos = { ...result.point };
             // Manual selection exits fresh stroke mode
             isFreshStroke = false;
+            // Update state machine to reflect selection
+            stateMachine.setStrokeSelected(true);
             updateDelButton();
         }
         lastTapTime = 0;

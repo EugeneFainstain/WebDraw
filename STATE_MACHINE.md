@@ -17,11 +17,12 @@ The application has **4 distinct states**:
 
 ## State Modifier
 
-**Selected Stroke Mode** (`isFreshStroke: boolean`)
+**Selected Stroke Mode** (`isStrokeSelected: boolean`)
 
 - When `true`: A stroke is selected (marker shows green), and 3-finger transform affects only the selected stroke
 - When `false`: No selection (normal mode), 3-finger transform affects entire canvas
 - The actual selected stroke index is tracked separately in `app.ts` as `selectedStrokeIdx`
+- Note: `app.ts` also tracks `isFreshStroke` to distinguish between freshly-drawn selections vs manual selections
 
 ## Events
 
@@ -139,11 +140,12 @@ When a state transition occurs, the state machine returns a list of **actions** 
 ### Selected Stroke Mode
 
 **Entry Conditions:**
-- Only entered when completing a stroke (FINGER_UP in Drawing state)
-- Automatically selects the stroke that was just drawn
+- Automatically when completing a stroke (FINGER_UP in Drawing state) - selects the stroke that was just drawn
+- Manually via double-tap (handled in `app.ts`) - selects the closest stroke to the marker
+  - Manual selection calls `stateMachine.setStrokeSelected(true)` to update the state machine
 
 **Exit Conditions:**
-- Single tap (quick tap without timeout or movement)
+- Single tap (quick tap without timeout or movement) - works for both automatic and manual selections
 - DELETE button pressed (removes selected stroke, selects another)
 - CLEAR button pressed
 - Marker movement >30px from selected stroke position (FINGER_MOVED_FAR in MovingMarker)
@@ -154,6 +156,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 - When no stroke is selected (Normal mode): 3-finger transform affects the entire canvas
 - Visual indicator: marker shows green ring when a stroke is selected, white ring otherwise
 - The selected stroke index is tracked in `app.ts` as `selectedStrokeIdx` (null = no selection)
+- The `isFreshStroke` flag in `app.ts` distinguishes freshly-drawn vs manually-selected strokes (for button behavior)
 
 ### Stroke Protection
 
@@ -198,8 +201,12 @@ console.log(result.actions);    // []
 // Check current state
 console.log(stateMachine.getState());  // State.MovingMarker
 
-// Check if in fresh stroke mode
-console.log(stateMachine.isFreshStroke());  // false
+// Check if a stroke is selected
+console.log(stateMachine.isStrokeSelected());  // false
+
+// Manually set stroke selection (for double-tap manual selection)
+stateMachine.setStrokeSelected(true);
+console.log(stateMachine.isStrokeSelected());  // true
 ```
 
 ### Debugging Utilities
