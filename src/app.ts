@@ -1043,6 +1043,10 @@ function handlePointerDown(e: PointerEvent) {
             // Update state machine to reflect selection
             stateMachine.setStrokeSelected(true);
             updateDelButton();
+            // Update color and size pickers to match selected stroke
+            const selectedStroke = strokeHistory[result.strokeIdx];
+            colorPicker.setColor(selectedStroke.color);
+            sizePicker.setSize(selectedStroke.size);
         }
         lastTapTime = 0;
         lastTapPos = null;
