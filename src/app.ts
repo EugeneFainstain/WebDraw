@@ -97,14 +97,22 @@ const DOUBLE_TAP_DISTANCE = 50; // pixels
 
 const colorPicker = createColorPicker(
     colorPickerEl,
-    () => {
+    (color: string) => {
+        // If a stroke is selected, update its color
+        if (selectedStrokeIdx !== null) {
+            strokeHistory[selectedStrokeIdx].color = color;
+        }
         redraw();
     },
     () => sizePicker.close() // Close size picker when color picker opens
 );
 const sizePicker = createSizePicker(
     sizePickerEl,
-    () => {
+    (size: number) => {
+        // If a stroke is selected, update its size
+        if (selectedStrokeIdx !== null) {
+            strokeHistory[selectedStrokeIdx].size = size;
+        }
         redraw();
     },
     () => colorPicker.close() // Close color picker when size picker opens
@@ -118,6 +126,15 @@ function getDistance(p1: Point, p2: Point): number {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Helper function to update color and size pickers when a stroke is selected
+function updatePickersForSelectedStroke() {
+    if (selectedStrokeIdx !== null) {
+        const stroke = strokeHistory[selectedStrokeIdx];
+        colorPicker.setColor(stroke.color);
+        sizePicker.setSize(stroke.size);
+    }
 }
 
 function getAngle(p1: Point, p2: Point): number {
@@ -951,6 +968,8 @@ function processDelete() {
                 indicatorAnchor = { ...result.point };
                 selectedStrokeMarkerPos = { ...indicatorAnchor };
                 panToKeepIndicatorInView();
+                // Update pickers to match the newly selected stroke
+                updatePickersForSelectedStroke();
             }
         } else {
             // Fresh stroke mode (Undo button) - select preceding stroke
@@ -975,6 +994,9 @@ function processDelete() {
             if (wasFresh) {
                 isFreshStroke = true;
             }
+
+            // Update pickers to match the newly selected stroke
+            updatePickersForSelectedStroke();
         }
     } else {
         // No more strokes - deselect
@@ -1044,9 +1066,7 @@ function handlePointerDown(e: PointerEvent) {
             stateMachine.setStrokeSelected(true);
             updateDelButton();
             // Update color and size pickers to match selected stroke
-            const selectedStroke = strokeHistory[result.strokeIdx];
-            colorPicker.setColor(selectedStroke.color);
-            sizePicker.setSize(selectedStroke.size);
+            updatePickersForSelectedStroke();
         }
         lastTapTime = 0;
         lastTapPos = null;
