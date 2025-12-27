@@ -901,6 +901,8 @@ function processDelete() {
 
     // Determine which stroke to delete
     let indexToDelete: number;
+    const wasManualSelection = !isFreshStroke && selectedStrokeIdx !== null;
+
     if (isFreshStroke || selectedStrokeIdx === null) {
         // Fresh stroke mode or no selection - delete (undo) the last stroke
         indexToDelete = strokeHistory.length - 1;
@@ -911,13 +913,16 @@ function processDelete() {
 
     const deletedStroke = strokeHistory[indexToDelete];
 
+    // Save marker position before deletion (for finding closest stroke after)
+    const markerPosBeforeDeletion = indicatorAnchor ? { ...indicatorAnchor } : null;
+
     // Move marker to the beginning of the stroke being removed
     if (deletedStroke.points.length > 0) {
         indicatorAnchor = { ...deletedStroke.points[0] };
         panToKeepIndicatorInView();
     }
 
-    // Remove the stroke
+    // Remove the stroke FIRST (before finding closest, to avoid index shift issues)
     strokeHistory.splice(indexToDelete, 1);
 
     // After deletion, always exit fresh stroke mode and keep selection
@@ -926,26 +931,40 @@ function processDelete() {
 
     // Determine the new selection state
     if (strokeHistory.length > 0) {
-        if (indexToDelete === 0) {
-            // Very first stroke was deleted - select the very last stroke
-            selectedStrokeIdx = strokeHistory.length - 1;
+        if (wasManualSelection && markerPosBeforeDeletion) {
+            // Manual selection (Del button) - restore marker position and find closest stroke
+            indicatorAnchor = markerPosBeforeDeletion;
+            const result = findClosestStrokeAndPoint();
+            if (result) {
+                selectedStrokeIdx = result.strokeIdx;
+                selectedStrokePointIdx = result.pointIdx;
+                indicatorAnchor = { ...result.point };
+                selectedStrokeMarkerPos = { ...indicatorAnchor };
+                panToKeepIndicatorInView();
+            }
         } else {
-            // Select the preceding stroke
-            selectedStrokeIdx = indexToDelete - 1;
-        }
+            // Fresh stroke mode (Undo button) - select preceding stroke
+            if (indexToDelete === 0) {
+                // Very first stroke was deleted - select the very last stroke
+                selectedStrokeIdx = strokeHistory.length - 1;
+            } else {
+                // Select the preceding stroke (index is now shifted after deletion)
+                selectedStrokeIdx = indexToDelete - 1;
+            }
 
-        // Update marker to point to the selected stroke
-        const newSelectedStroke = strokeHistory[selectedStrokeIdx];
-        if (newSelectedStroke.points.length > 0) {
-            selectedStrokePointIdx = newSelectedStroke.points.length - 1;
-            indicatorAnchor = { ...newSelectedStroke.points[selectedStrokePointIdx] };
-            selectedStrokeMarkerPos = { ...indicatorAnchor };
-            panToKeepIndicatorInView();
-        }
+            // Update marker to point to the selected stroke
+            const newSelectedStroke = strokeHistory[selectedStrokeIdx];
+            if (newSelectedStroke.points.length > 0) {
+                selectedStrokePointIdx = newSelectedStroke.points.length - 1;
+                indicatorAnchor = { ...newSelectedStroke.points[selectedStrokePointIdx] };
+                selectedStrokeMarkerPos = { ...indicatorAnchor };
+                panToKeepIndicatorInView();
+            }
 
-        // If it was fresh, keep fresh mode; otherwise it's now a manual selection
-        if (wasFresh) {
-            isFreshStroke = true;
+            // If it was fresh, keep fresh mode
+            if (wasFresh) {
+                isFreshStroke = true;
+            }
         }
     } else {
         // No more strokes - deselect
