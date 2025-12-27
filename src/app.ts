@@ -95,10 +95,20 @@ const DOUBLE_TAP_DISTANCE = 50; // pixels
 // CUSTOM UI COMPONENTS
 // ============================================================================
 
-const colorPicker = createColorPicker(colorPickerEl, () => {});
-const sizePicker = createSizePicker(sizePickerEl, () => {
-    redraw();
-});
+const colorPicker = createColorPicker(
+    colorPickerEl,
+    () => {
+        redraw();
+    },
+    () => sizePicker.close() // Close size picker when color picker opens
+);
+const sizePicker = createSizePicker(
+    sizePickerEl,
+    () => {
+        redraw();
+    },
+    () => colorPicker.close() // Close color picker when size picker opens
+);
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -1005,6 +1015,10 @@ function getPointerPos(e: PointerEvent): Point {
 
 function handlePointerDown(e: PointerEvent) {
     e.preventDefault();
+
+    // Close any open pickers on canvas tap
+    colorPicker.close();
+    sizePicker.close();
 
     const pos = getPointerPos(e);
 

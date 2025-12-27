@@ -3,7 +3,8 @@ const SIZES = [1, 2, 3, 4, 6, 8, 10, 13, 16, 20, 25, 30, 36, 42, 48, 50];
 
 export function createSizePicker(
     triggerElement: HTMLElement,
-    onChange: (size: number) => void
+    onChange: (size: number) => void,
+    onOpen?: () => void
 ) {
     let currentSize = SIZES[4]; // Default to 6
     let popup: HTMLElement | null = null;
@@ -93,6 +94,8 @@ export function createSizePicker(
 
     function openPopup() {
         if (popup) return;
+        // Notify that this picker is opening (to close other pickers)
+        if (onOpen) onOpen();
         popup = createPopup();
         document.body.appendChild(popup);
         positionPopup();
@@ -135,6 +138,8 @@ export function createSizePicker(
                 currentSize = size;
                 updateTrigger();
             }
-        }
+        },
+        close: closePopup,
+        isOpen: () => popup !== null
     };
 }

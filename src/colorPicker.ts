@@ -18,7 +18,8 @@ const COLORS = [
 
 export function createColorPicker(
     triggerElement: HTMLElement,
-    onChange: (color: string) => void
+    onChange: (color: string) => void,
+    onOpen?: () => void
 ) {
     let currentColor = COLORS[0];
     let popup: HTMLElement | null = null;
@@ -78,6 +79,8 @@ export function createColorPicker(
 
     function openPopup() {
         if (popup) return;
+        // Notify that this picker is opening (to close other pickers)
+        if (onOpen) onOpen();
         popup = createPopup();
         document.body.appendChild(popup);
         positionPopup();
@@ -120,6 +123,8 @@ export function createColorPicker(
                 currentColor = color;
                 updateTrigger();
             }
-        }
+        },
+        close: closePopup,
+        isOpen: () => popup !== null
     };
 }
