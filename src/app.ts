@@ -55,6 +55,9 @@ let selectedStrokePointIdx: number | null = null;
 // Reference position for selected stroke tracking
 let selectedStrokeMarkerPos: Point | null = null;
 
+// Track if we're in "fresh stroke" mode (just drew, not manually selected)
+let isFreshStroke: boolean = false;
+
 // Track last grid position for X+ mode
 let lastGridPosition: Point | null = null;
 
@@ -799,6 +802,8 @@ function handleActions(actions: Action[]): void {
                         selectedStrokePointIdx = selectedStroke.points.length - 1;
                     }
                 }
+                // Mark as fresh stroke (just drew)
+                isFreshStroke = true;
                 updateDelButton();
                 break;
 
@@ -806,6 +811,7 @@ function handleActions(actions: Action[]): void {
                 selectedStrokeMarkerPos = null;
                 selectedStrokeIdx = null;
                 selectedStrokePointIdx = null;
+                // Don't change isFreshStroke - it persists through deselection
                 updateDelButton();
                 break;
 
@@ -863,13 +869,47 @@ eventHandler.setEventCallback((event: Event) => {
 // ============================================================================
 
 function updateDelButton() {
-    delBtn.disabled = selectedStrokeIdx === null;
+    const hasStrokes = strokeHistory.length > 0;
+
+    // Determine button state based on requirements:
+    // a) No strokes → disabled "Undo" (ONLY scenario for disabled "Undo")
+    // b) Fresh stroke (just drew) → enabled "Undo"
+    // c) Manually selected stroke → enabled "Del"
+    // d) Exited selected mode (not fresh) → disabled "Del"
+
+    if (!hasStrokes) {
+        // a) No strokes - disabled "Undo" (ONLY time disabled shows "Undo")
+        delBtn.disabled = true;
+        delBtn.textContent = 'Undo';
+    } else if (isFreshStroke) {
+        // b) Fresh stroke mode - enabled "Undo"
+        delBtn.disabled = false;
+        delBtn.textContent = 'Undo';
+    } else if (selectedStrokeIdx !== null) {
+        // c) Manually selected stroke - enabled "Del"
+        delBtn.disabled = false;
+        delBtn.textContent = 'Del';
+    } else {
+        // d) Exited selected mode (not fresh) - disabled "Del"
+        delBtn.disabled = true;
+        delBtn.textContent = 'Del';
+    }
 }
 
 function processDelete() {
-    if (selectedStrokeIdx === null) return;
+    if (strokeHistory.length === 0) return;
 
-    const deletedStroke = strokeHistory[selectedStrokeIdx];
+    // Determine which stroke to delete
+    let indexToDelete: number;
+    if (isFreshStroke || selectedStrokeIdx === null) {
+        // Fresh stroke mode or no selection - delete (undo) the last stroke
+        indexToDelete = strokeHistory.length - 1;
+    } else {
+        // Delete the selected stroke
+        indexToDelete = selectedStrokeIdx;
+    }
+
+    const deletedStroke = strokeHistory[indexToDelete];
 
     // Move marker to the beginning of the stroke being removed
     if (deletedStroke.points.length > 0) {
@@ -878,16 +918,20 @@ function processDelete() {
     }
 
     // Remove the stroke
-    strokeHistory.splice(selectedStrokeIdx, 1);
+    strokeHistory.splice(indexToDelete, 1);
 
-    // Select the preceding stroke, or if it was the first, select the last stroke
+    // After deletion, always exit fresh stroke mode and keep selection
+    const wasFresh = isFreshStroke;
+    isFreshStroke = false;
+
+    // Determine the new selection state
     if (strokeHistory.length > 0) {
-        if (selectedStrokeIdx === 0) {
+        if (indexToDelete === 0) {
             // Very first stroke was deleted - select the very last stroke
             selectedStrokeIdx = strokeHistory.length - 1;
         } else {
             // Select the preceding stroke
-            selectedStrokeIdx = selectedStrokeIdx - 1;
+            selectedStrokeIdx = indexToDelete - 1;
         }
 
         // Update marker to point to the selected stroke
@@ -897,6 +941,11 @@ function processDelete() {
             indicatorAnchor = { ...newSelectedStroke.points[selectedStrokePointIdx] };
             selectedStrokeMarkerPos = { ...indicatorAnchor };
             panToKeepIndicatorInView();
+        }
+
+        // If it was fresh, keep fresh mode; otherwise it's now a manual selection
+        if (wasFresh) {
+            isFreshStroke = true;
         }
     } else {
         // No more strokes - deselect
@@ -915,6 +964,7 @@ function processClear() {
     transformStart = null;
     viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
     indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
+    isFreshStroke = false;
     updateDelButton();
 
     // Reset state machine and event handler
@@ -955,6 +1005,8 @@ function handlePointerDown(e: PointerEvent) {
             selectedStrokeIdx = result.strokeIdx;
             selectedStrokePointIdx = result.pointIdx;
             selectedStrokeMarkerPos = { ...result.point };
+            // Manual selection exits fresh stroke mode
+            isFreshStroke = false;
             updateDelButton();
         }
         lastTapTime = 0;
