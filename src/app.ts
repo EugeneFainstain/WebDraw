@@ -680,7 +680,7 @@ function updateMarkerPosition() {
             indicatorAnchor.y += canvasDelta.y;
             panToKeepIndicatorInView();
 
-            if (currentStroke) {
+            if (currentStroke && !xPlusModeCheckbox.checked) {
                 currentStroke.points.push({ ...indicatorAnchor });
             }
 
@@ -699,7 +699,7 @@ function updateMarkerPosition() {
                     indicatorAnchor.y += canvasDelta.y;
                     panToKeepIndicatorInView();
 
-                    if (currentStroke) {
+                    if (currentStroke && !xPlusModeCheckbox.checked) {
                         currentStroke.points.push({ ...indicatorAnchor });
                     }
 
@@ -717,7 +717,7 @@ function updateMarkerPosition() {
                     indicatorAnchor.y += canvasDelta.y;
                     panToKeepIndicatorInView();
 
-                    if (currentStroke) {
+                    if (currentStroke && !xPlusModeCheckbox.checked) {
                         currentStroke.points.push({ ...indicatorAnchor });
                     }
 
@@ -763,21 +763,19 @@ function addPointToStroke() {
 
     // In X+ mode, only add points when moving a full cell size away
     if (xPlusModeCheckbox.checked) {
+        if (!lastGridPosition) return; // Should already be initialized in CREATE_STROKE
+
         const cellSize = getGridCellSize();
         const threshold = cellSize;
 
-        if (lastGridPosition === null) {
-            lastGridPosition = snapToGrid(indicatorAnchor);
-        } else {
-            const deltaFromLastX = Math.abs(indicatorAnchor.x - lastGridPosition.x);
-            const deltaFromLastY = Math.abs(indicatorAnchor.y - lastGridPosition.y);
+        const deltaFromLastX = Math.abs(indicatorAnchor.x - lastGridPosition.x);
+        const deltaFromLastY = Math.abs(indicatorAnchor.y - lastGridPosition.y);
 
-            if (deltaFromLastX >= threshold || deltaFromLastY >= threshold) {
-                const gridPoint = snapToGrid(indicatorAnchor);
-                currentStroke.points.push(gridPoint);
-                lastGridPosition = gridPoint;
-                indicatorAnchor = gridPoint;
-            }
+        if (deltaFromLastX >= threshold || deltaFromLastY >= threshold) {
+            const gridPoint = snapToGrid(indicatorAnchor);
+            currentStroke.points.push(gridPoint);
+            lastGridPosition = gridPoint;
+            // Don't snap indicatorAnchor - let it move freely for smooth visual feedback
         }
     } else {
         // Normal mode: add every point
@@ -800,7 +798,13 @@ function handleActions(actions: Action[]): void {
                         size: sizePicker.getSize(),
                         points: [{ ...startPoint }]
                     };
-                    lastGridPosition = null;
+                    // In X+ mode, initialize lastGridPosition to the start point
+                    // but don't snap indicatorAnchor - let it move freely
+                    if (xPlusModeCheckbox.checked) {
+                        lastGridPosition = { ...startPoint };
+                    } else {
+                        lastGridPosition = null;
+                    }
                 }
                 break;
 
