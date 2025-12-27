@@ -49,6 +49,9 @@ let indicatorAnchor: Point | null = null;
 // Selected stroke index (null = no selection, number = index in strokeHistory)
 let selectedStrokeIdx: number | null = null;
 
+// Index of the point within the selected stroke where the marker is positioned
+let selectedStrokePointIdx: number | null = null;
+
 // Reference position for selected stroke tracking
 let selectedStrokeMarkerPos: Point | null = null;
 
@@ -70,7 +73,7 @@ let transformStart: {
     fingerAngles: number[];
     unwrappedRotation: number;
     initialTransform: typeof viewTransform;
-    initialStrokePoints?: Point[];  // For fresh stroke transformation
+    initialStrokePoints?: Point[];  // For selected stroke transformation
 } | null = null;
 
 // Movement tracking for continuous updates
@@ -121,12 +124,13 @@ function normalizeAngleDelta(delta: number): number {
     return delta;
 }
 
-function findClosestStrokeAndPoint(): { strokeIdx: number; point: Point } | null {
+function findClosestStrokeAndPoint(): { strokeIdx: number; pointIdx: number; point: Point } | null {
     if (strokeHistory.length === 0 || !indicatorAnchor) {
         return null;
     }
 
     let closestStrokeIdx = -1;
+    let closestPointIdx = -1;
     let closestPoint: Point | null = null;
     let minDistanceSquared = Infinity;
 
@@ -135,7 +139,8 @@ function findClosestStrokeAndPoint(): { strokeIdx: number; point: Point } | null
         const stroke = strokeHistory[i];
 
         // Find closest point in this stroke
-        for (const point of stroke.points) {
+        for (let j = 0; j < stroke.points.length; j++) {
+            const point = stroke.points[j];
             const dx = point.x - indicatorAnchor.x;
             const dy = point.y - indicatorAnchor.y;
             const distanceSquared = dx * dx + dy * dy;
@@ -143,6 +148,7 @@ function findClosestStrokeAndPoint(): { strokeIdx: number; point: Point } | null
             if (distanceSquared < minDistanceSquared) {
                 minDistanceSquared = distanceSquared;
                 closestStrokeIdx = i;
+                closestPointIdx = j;
                 closestPoint = point;
             }
         }
@@ -154,6 +160,7 @@ function findClosestStrokeAndPoint(): { strokeIdx: number; point: Point } | null
 
     return {
         strokeIdx: closestStrokeIdx,
+        pointIdx: closestPointIdx,
         point: { ...closestPoint }
     };
 }
@@ -534,6 +541,7 @@ function applyThreeFingerTransform() {
             y: initialStrokeCenter.y + panDeltaY
         };
 
+        // Transform all stroke points
         selectedStroke.points = transformStart.initialStrokePoints.map(point => {
             const dx = point.x - initialStrokeCenter.x;
             const dy = point.y - initialStrokeCenter.y;
@@ -552,9 +560,9 @@ function applyThreeFingerTransform() {
             };
         });
 
-        // Move the marker to the last point of the transformed stroke
-        if (selectedStroke.points.length > 0) {
-            indicatorAnchor = { ...selectedStroke.points[selectedStroke.points.length - 1] };
+        // Update marker to the transformed position of the same point
+        if (selectedStrokePointIdx !== null && selectedStrokePointIdx < selectedStroke.points.length) {
+            indicatorAnchor = { ...selectedStroke.points[selectedStrokePointIdx] };
         }
     } else {
         // Transform the entire canvas view
@@ -785,12 +793,18 @@ function handleActions(actions: Action[]): void {
                 // Set selected stroke to the last stroke in history
                 if (strokeHistory.length > 0) {
                     selectedStrokeIdx = strokeHistory.length - 1;
+                    const selectedStroke = strokeHistory[selectedStrokeIdx];
+                    // Set marker to the last point of the stroke
+                    if (selectedStroke.points.length > 0) {
+                        selectedStrokePointIdx = selectedStroke.points.length - 1;
+                    }
                 }
                 break;
 
             case Action.DESELECT_STROKE:
                 selectedStrokeMarkerPos = null;
                 selectedStrokeIdx = null;
+                selectedStrokePointIdx = null;
                 break;
 
             case Action.INIT_TRANSFORM:
@@ -908,8 +922,9 @@ function handlePointerDown(e: PointerEvent) {
         if (result) {
             // Move marker to the closest point
             indicatorAnchor = result.point;
-            // Select the stroke
+            // Select the stroke and store the point index
             selectedStrokeIdx = result.strokeIdx;
+            selectedStrokePointIdx = result.pointIdx;
             selectedStrokeMarkerPos = { ...result.point };
         }
         lastTapTime = 0;
