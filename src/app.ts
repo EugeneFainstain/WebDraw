@@ -15,6 +15,7 @@ const sizePickerEl = document.getElementById('sizePicker') as HTMLElement;
 const delBtn = document.getElementById('delBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 const gridToggleBtn = document.getElementById('gridToggle') as HTMLButtonElement;
+const fitBtn = document.getElementById('fitBtn') as HTMLButtonElement;
 
 // ============================================================================
 // DATA STRUCTURES
@@ -67,6 +68,9 @@ let lastGridPosition: Point | null = null;
 
 // Grid mode state
 let isGridMode: boolean = false;
+
+// Fit mode state
+let isFitMode: boolean = false;
 
 // View transform (for 3-finger canvas transformation)
 let viewTransform = {
@@ -1214,6 +1218,14 @@ gridToggleBtn.addEventListener('click', () => {
         indicatorAnchor = snapToGrid(indicatorAnchor);
     }
     redraw();
+});
+
+fitBtn.addEventListener('click', () => {
+    isFitMode = !isFitMode;
+    fitBtn.classList.toggle('active', isFitMode);
+
+    // TODO: Implement fit functionality
+    console.log('Fit mode:', isFitMode);
 });
 
 window.addEventListener('resize', resizeCanvas);

@@ -125,6 +125,34 @@ button {
     display: block;
 }
 
+.fit-btn {
+    width: 36px;
+    height: 36px;
+    padding: 8px;
+    background: #555;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.fit-btn:hover {
+    background: #666;
+}
+
+.fit-btn.active {
+    background: #4a90d9;
+}
+
+.fit-btn.active:hover {
+    background: #357abd;
+}
+
+.fit-btn svg {
+    display: block;
+}
+
 #drawingCanvas {
     position: fixed;
     top: 60px;
