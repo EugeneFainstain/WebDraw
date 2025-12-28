@@ -195,7 +195,8 @@ function calculateEllipseMaxError(
 }
 
 /**
- * Calculate mean squared error for an ellipse fit using bidirectional distance
+ * Calculate maximum distance error for an ellipse fit using bidirectional distance
+ * Uses worst-case outlier distance instead of RMS
  * This prevents degenerate fits (e.g., huge ellipse fitting a small curve)
  */
 function calculateEllipseError(
@@ -207,18 +208,17 @@ function calculateEllipseError(
 ): number {
     const ellipse = { center, radiusX, radiusY, rotation };
 
-    // Direction 1: Stroke points to ellipse
-    let strokeToEllipseError = 0;
+    // Direction 1: Stroke points to ellipse - take max
+    let maxStrokeToEllipse = 0;
     for (const p of points) {
         const dist = distanceToEllipse(p, ellipse);
-        strokeToEllipseError += dist * dist;
+        maxStrokeToEllipse = Math.max(maxStrokeToEllipse, dist * dist);
     }
-    strokeToEllipseError /= points.length;
 
-    // Direction 2: Ellipse to stroke points
+    // Direction 2: Ellipse to stroke points - take max
     // Sample points uniformly along the ellipse
     const numSamples = 64;
-    let ellipseToStrokeError = 0;
+    let maxEllipseToStroke = 0;
 
     for (let i = 0; i < numSamples; i++) {
         const angle = (i / numSamples) * 2 * Math.PI;
@@ -244,12 +244,11 @@ function calculateEllipseError(
             minDist = Math.min(minDist, dist);
         }
 
-        ellipseToStrokeError += minDist * minDist;
+        maxEllipseToStroke = Math.max(maxEllipseToStroke, minDist * minDist);
     }
-    ellipseToStrokeError /= numSamples;
 
-    // Return average of both directions
-    return (strokeToEllipseError + ellipseToStrokeError) / 2;
+    // Return max of both directions (Hausdorff distance squared)
+    return Math.max(maxStrokeToEllipse, maxEllipseToStroke);
 }
 
 /**
