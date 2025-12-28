@@ -153,6 +153,22 @@ button {
     display: block;
 }
 
+#debugOverlay {
+    position: fixed;
+    top: 70px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #0f0;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 12px;
+    border-radius: 5px;
+    z-index: 1000;
+    max-width: 90%;
+    pointer-events: none;
+    white-space: pre-wrap;
+}
+
 #drawingCanvas {
     position: fixed;
     top: 60px;

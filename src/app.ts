@@ -3,6 +3,8 @@ import { createColorPicker } from './colorPicker';
 import { createSizePicker } from './sizePicker';
 import { StateMachine, State, Event, Action, TransitionResult } from './stateMachine';
 import { EventHandler, Point } from './eventHandler';
+import { resampleStroke } from './resample';
+import { fitCircle, generateCirclePoints, isMostlyClosed } from './fitters/circleFitter';
 
 // ============================================================================
 // DOM ELEMENTS
@@ -16,6 +18,20 @@ const delBtn = document.getElementById('delBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 const gridToggleBtn = document.getElementById('gridToggle') as HTMLButtonElement;
 const fitBtn = document.getElementById('fitBtn') as HTMLButtonElement;
+const debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
+
+// Debug helper
+let debugMessages: string[] = [];
+function showDebug(message: string) {
+    debugMessages.push(message);
+    debugOverlay.textContent = debugMessages.join('\n---\n');
+    debugOverlay.style.display = 'block';
+}
+
+function clearDebug() {
+    debugOverlay.style.display = 'none';
+    debugMessages = [];
+}
 
 // ============================================================================
 // DATA STRUCTURES
@@ -24,7 +40,11 @@ const fitBtn = document.getElementById('fitBtn') as HTMLButtonElement;
 interface Stroke {
     color: string;
     size: number;
-    points: Point[];
+    points: Point[];              // Currently displayed points
+    originalPoints?: Point[];     // Original hand-drawn points
+    fittedPoints?: Point[];       // Fitted analytical curve points
+    fitType?: string;             // Type of fit: 'circle', 'ellipse', 'line', etc.
+    showingFitted?: boolean;      // True if currently showing fitted version
 }
 
 // ============================================================================
@@ -866,6 +886,7 @@ function handleActions(actions: Action[]): void {
                 transformSnapshot = null;
                 hasUndoableTransform = false;
                 // Don't change isFreshStroke - it persists through deselection
+                clearDebug();
                 updateDelButton();
                 break;
 
@@ -917,6 +938,51 @@ eventHandler.setEventCallback((event: Event) => {
 
     redraw();
 });
+
+// ============================================================================
+// SHAPE FITTING
+// ============================================================================
+
+function fitStroke(stroke: Stroke): void {
+    if (stroke.points.length < 3) {
+        showDebug('Too few points!');
+        return; // Not enough points to fit
+    }
+
+    // Store original points if not already stored
+    if (!stroke.originalPoints) {
+        stroke.originalPoints = stroke.points.map(p => ({ ...p }));
+    }
+
+    showDebug(`Original: ${stroke.originalPoints.length} pts`);
+
+    // Resample with 2x the original point count for better fitting
+    const targetPoints = stroke.originalPoints.length * 2;
+    const resampled = resampleStroke(stroke.originalPoints, targetPoints);
+    showDebug(`Resampled: ${resampled.length} pts (target: ${targetPoints})`);
+
+    // Check if stroke is mostly closed
+    const closureInfo = isMostlyClosed(resampled);
+    showDebug(`Closed: ${closureInfo.closed}\nDist: ${closureInfo.distance.toFixed(1)}\nThreshold: ${closureInfo.threshold.toFixed(1)}\nMaxDim: ${closureInfo.maxDim.toFixed(1)}`);
+
+    if (closureInfo.closed) {
+        // Try to fit a circle
+        const circleFit = fitCircle(resampled);
+        showDebug(`Circle fit: ${circleFit ? 'OK' : 'FAIL'}`);
+
+        if (circleFit) {
+            // For now, just use circle fit
+            // Later we'll compare with other shapes (ellipse, square, etc.)
+            stroke.fittedPoints = generateCirclePoints(circleFit.center, circleFit.radius, 64);
+            stroke.fitType = 'circle';
+
+            showDebug(`Fitted circle!\nR=${circleFit.radius.toFixed(1)}\nerr=${circleFit.error.toFixed(2)}`);
+        }
+    } else {
+        // For open strokes, we'll add line fitting later
+        showDebug('Open stroke!\nLine fit TODO');
+    }
+}
 
 // ============================================================================
 // UNDO AND CLEAR
@@ -1034,12 +1100,14 @@ function processDelete() {
             selectedStrokeIdx = null;
             selectedStrokePointIdx = null;
             selectedStrokeMarkerPos = null;
+            clearDebug();
         }
     } else {
         // No more strokes - deselect
         selectedStrokeIdx = null;
         selectedStrokePointIdx = null;
         selectedStrokeMarkerPos = null;
+        clearDebug();
     }
 
     updateDelButton();
@@ -1224,8 +1292,32 @@ fitBtn.addEventListener('click', () => {
     isFitMode = !isFitMode;
     fitBtn.classList.toggle('active', isFitMode);
 
-    // TODO: Implement fit functionality
-    console.log('Fit mode:', isFitMode);
+    // If a stroke is selected, toggle between fitted and original
+    if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+        const stroke = strokeHistory[selectedStrokeIdx];
+
+        showDebug(`Selected: idx=${selectedStrokeIdx}\nPoints: ${stroke.points.length}\nHas fit: ${!!stroke.fittedPoints}`);
+
+        // If fit mode is ON and stroke hasn't been fitted yet, fit it now
+        if (isFitMode && !stroke.fittedPoints) {
+            fitStroke(stroke);
+        }
+
+        // Show fitting result
+        if (stroke.fittedPoints && stroke.fitType) {
+            showDebug(`Fitted ${stroke.fitType}!\nPoints: ${stroke.fittedPoints.length}`);
+        }
+
+        // Toggle display between fitted and original
+        if (stroke.fittedPoints && stroke.originalPoints) {
+            stroke.showingFitted = isFitMode;
+            stroke.points = isFitMode ? stroke.fittedPoints : stroke.originalPoints;
+            showDebug(`Showing: ${isFitMode ? 'fitted' : 'original'}`);
+            redraw();
+        }
+    } else {
+        showDebug('No stroke selected!\nDouble-tap to select.');
+    }
 });
 
 window.addEventListener('resize', resizeCanvas);
