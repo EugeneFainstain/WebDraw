@@ -11,10 +11,11 @@
     <div class="toolbar">
         <div id="colorPicker" style="width: 36px; height: 28px; display: inline-block; vertical-align: middle;"></div>
         <div id="sizePicker" style="width: 36px; height: 28px; display: inline-block; vertical-align: middle;"></div>
-        <label class="checkbox-label">
-            <input type="checkbox" id="xPlusMode">
-            <span>X+</span>
-        </label>
+        <button id="gridToggle" class="grid-toggle" aria-label="Toggle Grid">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/>
+            </svg>
+        </button>
         <button id="delBtn">Undo</button>
         <button id="clearBtn">Clear</button>
     </div>

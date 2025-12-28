@@ -14,7 +14,7 @@ const colorPickerEl = document.getElementById('colorPicker') as HTMLElement;
 const sizePickerEl = document.getElementById('sizePicker') as HTMLElement;
 const delBtn = document.getElementById('delBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
-const xPlusModeCheckbox = document.getElementById('xPlusMode') as HTMLInputElement;
+const gridToggleBtn = document.getElementById('gridToggle') as HTMLButtonElement;
 
 // ============================================================================
 // DATA STRUCTURES
@@ -62,8 +62,11 @@ let isFreshStroke: boolean = false;
 let transformSnapshot: Point[] | null = null;  // Original points before transformation
 let hasUndoableTransform: boolean = false;     // True if selected stroke has been transformed
 
-// Track last grid position for X+ mode
+// Track last grid position for grid mode
 let lastGridPosition: Point | null = null;
+
+// Grid mode state
+let isGridMode: boolean = false;
 
 // View transform (for 3-finger canvas transformation)
 let viewTransform = {
@@ -256,7 +259,7 @@ function screenLengthToCanvasLength(screenLength: number): number {
 }
 
 // ============================================================================
-// GRID FUNCTIONS (X+ MODE)
+// GRID FUNCTIONS
 // ============================================================================
 
 function getGridCellSize(): number {
@@ -427,8 +430,8 @@ function redraw() {
     ctx.scale(viewTransform.scale, viewTransform.scale);
     ctx.translate(-cx, -cy);
 
-    // Draw grid if X+ mode is enabled
-    if (xPlusModeCheckbox.checked) {
+    // Draw grid if grid mode is enabled
+    if (isGridMode) {
         drawGrid();
     }
 
@@ -689,7 +692,7 @@ function updateMarkerPosition() {
             indicatorAnchor.y += canvasDelta.y;
             panToKeepIndicatorInView();
 
-            if (currentStroke && !xPlusModeCheckbox.checked) {
+            if (currentStroke && !isGridMode) {
                 currentStroke.points.push({ ...indicatorAnchor });
             }
 
@@ -708,7 +711,7 @@ function updateMarkerPosition() {
                     indicatorAnchor.y += canvasDelta.y;
                     panToKeepIndicatorInView();
 
-                    if (currentStroke && !xPlusModeCheckbox.checked) {
+                    if (currentStroke && !isGridMode) {
                         currentStroke.points.push({ ...indicatorAnchor });
                     }
 
@@ -726,7 +729,7 @@ function updateMarkerPosition() {
                     indicatorAnchor.y += canvasDelta.y;
                     panToKeepIndicatorInView();
 
-                    if (currentStroke && !xPlusModeCheckbox.checked) {
+                    if (currentStroke && !isGridMode) {
                         currentStroke.points.push({ ...indicatorAnchor });
                     }
 
@@ -770,8 +773,8 @@ function updateMarkerPosition() {
 function addPointToStroke() {
     if (!currentStroke || !indicatorAnchor) return;
 
-    // In X+ mode, only add points when moving a full cell size away
-    if (xPlusModeCheckbox.checked) {
+    // In grid mode, only add points when moving a full cell size away
+    if (isGridMode) {
         if (!lastGridPosition) return; // Should already be initialized in CREATE_STROKE
 
         const cellSize = getGridCellSize();
@@ -802,15 +805,15 @@ function handleActions(actions: Action[]): void {
         switch (action) {
             case Action.CREATE_STROKE:
                 if (indicatorAnchor) {
-                    const startPoint = xPlusModeCheckbox.checked ? snapToGrid(indicatorAnchor) : indicatorAnchor;
+                    const startPoint = isGridMode ? snapToGrid(indicatorAnchor) : indicatorAnchor;
                     currentStroke = {
                         color: colorPicker.getColor(),
                         size: sizePicker.getSize(),
                         points: [{ ...startPoint }]
                     };
-                    // In X+ mode, initialize lastGridPosition to the start point
+                    // In grid mode, initialize lastGridPosition to the start point
                     // but don't snap indicatorAnchor - let it move freely
-                    if (xPlusModeCheckbox.checked) {
+                    if (isGridMode) {
                         lastGridPosition = { ...startPoint };
                     } else {
                         lastGridPosition = null;
@@ -1164,8 +1167,8 @@ function handlePointerUp(e: PointerEvent) {
         // Clamp indicator after transform
         clampIndicatorToView();
 
-        // Snap to grid in X+ mode
-        if (xPlusModeCheckbox.checked && indicatorAnchor) {
+        // Snap to grid in grid mode
+        if (isGridMode && indicatorAnchor) {
             indicatorAnchor = snapToGrid(indicatorAnchor);
         }
 
@@ -1203,8 +1206,11 @@ canvas.addEventListener('touchcancel', e => e.preventDefault(), { passive: false
 delBtn.addEventListener('click', () => eventHandler.handleDelete());
 clearBtn.addEventListener('click', () => eventHandler.handleClear());
 
-xPlusModeCheckbox.addEventListener('change', () => {
-    if (xPlusModeCheckbox.checked && indicatorAnchor) {
+gridToggleBtn.addEventListener('click', () => {
+    isGridMode = !isGridMode;
+    gridToggleBtn.classList.toggle('active', isGridMode);
+
+    if (isGridMode && indicatorAnchor) {
         indicatorAnchor = snapToGrid(indicatorAnchor);
     }
     redraw();
