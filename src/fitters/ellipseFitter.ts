@@ -13,6 +13,12 @@ export interface EllipseFit {
     radiusY: number;
     rotation: number;  // in radians
     error: number;     // Mean squared error
+    debugInfo?: {
+        radiusXBefore: number;
+        radiusXAfter: number;
+        errorBefore: number;
+        errorAfter: number;
+    };
 }
 
 /**
@@ -87,6 +93,35 @@ export function fitEllipse(points: Point[]): EllipseFit | null {
         rotation += Math.PI / 2;
     }
 
+    // Step 4: Refine radiusX using 1D gradient descent with max error
+    // This helps with highly eccentric ellipses where the initial guess underestimates
+    const errorBeforeOptimization = calculateEllipseError(points, center, radiusX, radiusY, rotation);
+    const radiusXBefore = radiusX;
+
+    const maxIterations = 20;
+    const learningRate = 0.5;
+    const epsilon = 0.01;
+
+    for (let iter = 0; iter < maxIterations; iter++) {
+        const currentError = calculateEllipseMaxError(points, center, radiusX, radiusY, rotation);
+
+        // Calculate numerical gradient with respect to radiusX
+        const deltaRx = radiusX * 0.01;
+        const errorPlus = calculateEllipseMaxError(points, center, radiusX + deltaRx, radiusY, rotation);
+        const errorMinus = calculateEllipseMaxError(points, center, radiusX - deltaRx, radiusY, rotation);
+        const gradient = (errorPlus - errorMinus) / (2 * deltaRx);
+
+        // Update radiusX (with constraint: must stay >= radiusY)
+        const newRadiusX = radiusX - learningRate * gradient;
+        radiusX = Math.max(newRadiusX, radiusY);
+
+        // Check for convergence
+        const newError = calculateEllipseMaxError(points, center, radiusX, radiusY, rotation);
+        if (Math.abs(newError - currentError) < epsilon) {
+            break;
+        }
+    }
+
     const finalError = calculateEllipseError(points, center, radiusX, radiusY, rotation);
 
     return {
@@ -94,12 +129,74 @@ export function fitEllipse(points: Point[]): EllipseFit | null {
         radiusX,
         radiusY,
         rotation,
-        error: finalError
+        error: finalError,
+        debugInfo: {
+            radiusXBefore,
+            radiusXAfter: radiusX,
+            errorBefore: errorBeforeOptimization,
+            errorAfter: finalError
+        }
     };
 }
 
 /**
- * Calculate mean squared error for an ellipse fit
+ * Calculate maximum error for an ellipse fit (for optimization)
+ * Uses bidirectional distance to prevent degenerate fits
+ */
+function calculateEllipseMaxError(
+    points: Point[],
+    center: Point,
+    radiusX: number,
+    radiusY: number,
+    rotation: number
+): number {
+    const ellipse = { center, radiusX, radiusY, rotation };
+
+    // Direction 1: Stroke points to ellipse - take max
+    let maxStrokeToEllipse = 0;
+    for (const p of points) {
+        const dist = distanceToEllipse(p, ellipse);
+        maxStrokeToEllipse = Math.max(maxStrokeToEllipse, dist * dist);
+    }
+
+    // Direction 2: Ellipse to stroke points - take max
+    const numSamples = 64;
+    let maxEllipseToStroke = 0;
+
+    for (let i = 0; i < numSamples; i++) {
+        const angle = (i / numSamples) * 2 * Math.PI;
+
+        // Point on ellipse in local coordinates
+        const x_local = radiusX * Math.cos(angle);
+        const y_local = radiusY * Math.sin(angle);
+
+        // Rotate to world coordinates
+        const cos_theta = Math.cos(rotation);
+        const sin_theta = Math.sin(rotation);
+        const ellipsePoint: Point = {
+            x: center.x + x_local * cos_theta - y_local * sin_theta,
+            y: center.y + x_local * sin_theta + y_local * cos_theta
+        };
+
+        // Find closest stroke point
+        let minDist = Infinity;
+        for (const p of points) {
+            const dx = p.x - ellipsePoint.x;
+            const dy = p.y - ellipsePoint.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            minDist = Math.min(minDist, dist);
+        }
+
+        maxEllipseToStroke = Math.max(maxEllipseToStroke, minDist * minDist);
+    }
+
+    // Return max of both directions
+    return Math.max(maxStrokeToEllipse, maxEllipseToStroke);
+}
+
+/**
+ * Calculate mean squared error for an ellipse fit using bidirectional distance
+ * This prevents degenerate fits (e.g., huge ellipse fitting a small curve)
  */
 function calculateEllipseError(
     points: Point[],
@@ -108,15 +205,51 @@ function calculateEllipseError(
     radiusY: number,
     rotation: number
 ): number {
-    let errorSum = 0;
     const ellipse = { center, radiusX, radiusY, rotation };
 
+    // Direction 1: Stroke points to ellipse
+    let strokeToEllipseError = 0;
     for (const p of points) {
         const dist = distanceToEllipse(p, ellipse);
-        errorSum += dist * dist;
+        strokeToEllipseError += dist * dist;
     }
+    strokeToEllipseError /= points.length;
 
-    return errorSum / points.length;
+    // Direction 2: Ellipse to stroke points
+    // Sample points uniformly along the ellipse
+    const numSamples = 64;
+    let ellipseToStrokeError = 0;
+
+    for (let i = 0; i < numSamples; i++) {
+        const angle = (i / numSamples) * 2 * Math.PI;
+
+        // Point on ellipse in local coordinates
+        const x_local = radiusX * Math.cos(angle);
+        const y_local = radiusY * Math.sin(angle);
+
+        // Rotate to world coordinates
+        const cos_theta = Math.cos(rotation);
+        const sin_theta = Math.sin(rotation);
+        const ellipsePoint: Point = {
+            x: center.x + x_local * cos_theta - y_local * sin_theta,
+            y: center.y + x_local * sin_theta + y_local * cos_theta
+        };
+
+        // Find closest stroke point
+        let minDist = Infinity;
+        for (const p of points) {
+            const dx = p.x - ellipsePoint.x;
+            const dy = p.y - ellipsePoint.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            minDist = Math.min(minDist, dist);
+        }
+
+        ellipseToStrokeError += minDist * minDist;
+    }
+    ellipseToStrokeError /= numSamples;
+
+    // Return average of both directions
+    return (strokeToEllipseError + ellipseToStrokeError) / 2;
 }
 
 /**

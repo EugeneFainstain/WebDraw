@@ -109,16 +109,45 @@ export function fitCircle(points: Point[]): CircleFit | null {
 
     const radius = Math.sqrt(centerX * centerX + centerY * centerY + Mz + 2 * X);
 
-    // Calculate error (mean squared distance from circle)
-    let errorSum = 0;
+    // Calculate error using bidirectional distance
+    // Direction 1: Stroke points to circle
+    let strokeToCircleError = 0;
     for (const p of points) {
         const dx = p.x - center.x;
         const dy = p.y - center.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         const err = dist - radius;
-        errorSum += err * err;
+        strokeToCircleError += err * err;
     }
-    const error = errorSum / n;
+    strokeToCircleError /= n;
+
+    // Direction 2: Circle to stroke points
+    // Sample points uniformly around the circle
+    const numSamples = 64;
+    let circleToStrokeError = 0;
+
+    for (let i = 0; i < numSamples; i++) {
+        const angle = (i / numSamples) * 2 * Math.PI;
+        const circlePoint = {
+            x: center.x + radius * Math.cos(angle),
+            y: center.y + radius * Math.sin(angle)
+        };
+
+        // Find closest stroke point
+        let minDist = Infinity;
+        for (const p of points) {
+            const dx = p.x - circlePoint.x;
+            const dy = p.y - circlePoint.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            minDist = Math.min(minDist, dist);
+        }
+
+        circleToStrokeError += minDist * minDist;
+    }
+    circleToStrokeError /= numSamples;
+
+    // Return average of both directions
+    const error = (strokeToCircleError + circleToStrokeError) / 2;
 
     return { center, radius, error };
 }

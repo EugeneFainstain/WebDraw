@@ -1023,6 +1023,10 @@ function fitStroke(stroke: Stroke): void {
         const ellipseFit = fitEllipse(resampled);
 
         if (ellipseFit) {
+            // Display optimization debug info
+            if (ellipseFit.debugInfo) {
+                showDebug(`Ellipse optimization:\nRx: ${ellipseFit.debugInfo.radiusXBefore.toFixed(2)} → ${ellipseFit.debugInfo.radiusXAfter.toFixed(2)}\nErr: ${ellipseFit.debugInfo.errorBefore.toFixed(2)} → ${ellipseFit.debugInfo.errorAfter.toFixed(2)}`);
+            }
             showDebug(`Ellipse: err=${ellipseFit.error.toFixed(2)}`);
 
             // Calculate eccentricity to determine if it's significantly different from a circle
