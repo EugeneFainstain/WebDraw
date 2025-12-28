@@ -784,7 +784,8 @@ function addPointToStroke() {
             const gridPoint = snapToGrid(indicatorAnchor);
             currentStroke.points.push(gridPoint);
             lastGridPosition = gridPoint;
-            // Don't snap indicatorAnchor - let it move freely for smooth visual feedback
+            // Snap the marker to the grid point while drawing
+            indicatorAnchor = { ...gridPoint };
         }
     } else {
         // Normal mode: add every point
