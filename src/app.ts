@@ -5,6 +5,7 @@ import { StateMachine, State, Event, Action, TransitionResult } from './stateMac
 import { EventHandler, Point } from './eventHandler';
 import { resampleStroke } from './resample';
 import { fitCircle, generateCirclePoints, isMostlyClosed } from './fitters/circleFitter';
+import { fitEllipse, generateEllipsePoints } from './fitters/ellipseFitter';
 
 // ============================================================================
 // DOM ELEMENTS
@@ -966,17 +967,86 @@ function fitStroke(stroke: Stroke): void {
     showDebug(`Closed: ${closureInfo.closed}\nDist: ${closureInfo.distance.toFixed(1)}\nThreshold: ${closureInfo.threshold.toFixed(1)}\nMaxDim: ${closureInfo.maxDim.toFixed(1)}`);
 
     if (closureInfo.closed) {
-        // Try to fit a circle
+        // Step 1: Fit circle first
         const circleFit = fitCircle(resampled);
-        showDebug(`Circle fit: ${circleFit ? 'OK' : 'FAIL'}`);
 
-        if (circleFit) {
-            // For now, just use circle fit
-            // Later we'll compare with other shapes (ellipse, square, etc.)
+        if (!circleFit) {
+            showDebug('Circle fit failed!');
+            return;
+        }
+
+        showDebug(`Circle: err=${circleFit.error.toFixed(2)}`);
+
+        // VERIFICATION: Calculate circle error using ellipse distance method
+        // Treat circle as ellipse with radiusX = radiusY = radius
+        const circleAsEllipse = {
+            center: circleFit.center,
+            radiusX: circleFit.radius,
+            radiusY: circleFit.radius,
+            rotation: 0
+        };
+
+        let ellipseMethodError = 0;
+        for (const p of resampled) {
+            // Use the ellipse distance calculation from ellipseFitter
+            const dx = p.x - circleAsEllipse.center.x;
+            const dy = p.y - circleAsEllipse.center.y;
+            const a = circleAsEllipse.radiusX;
+            const b = circleAsEllipse.radiusY;
+
+            // Initial guess
+            let t = Math.atan2(dy / b, dx / a);
+
+            // Gradient descent
+            for (let iter = 0; iter < 10; iter++) {
+                const ex = a * Math.cos(t);
+                const ey = b * Math.sin(t);
+                const vx = dx - ex;
+                const vy = dy - ey;
+                const tx = -a * Math.sin(t);
+                const ty = b * Math.cos(t);
+                const gradient = vx * tx + vy * ty;
+                t += 0.5 * gradient / (tx * tx + ty * ty + 1e-10);
+                if (Math.abs(gradient) < 1e-6) break;
+            }
+
+            const ex = a * Math.cos(t);
+            const ey = b * Math.sin(t);
+            const dist = Math.sqrt((dx - ex) * (dx - ex) + (dy - ey) * (dy - ey));
+            ellipseMethodError += dist * dist;
+        }
+        ellipseMethodError /= resampled.length;
+
+        showDebug(`Circle error check:\nCircleFit: ${circleFit.error.toFixed(2)}\nEllipse method: ${ellipseMethodError.toFixed(2)}`);
+
+        // Step 2: Fit ellipse
+        const ellipseFit = fitEllipse(resampled);
+
+        if (ellipseFit) {
+            showDebug(`Ellipse: err=${ellipseFit.error.toFixed(2)}`);
+
+            // Calculate eccentricity to determine if it's significantly different from a circle
+            const a = Math.max(ellipseFit.radiusX, ellipseFit.radiusY);
+            const b = Math.min(ellipseFit.radiusX, ellipseFit.radiusY);
+            const eccentricity = Math.sqrt(1 - (b * b) / (a * a));
+            showDebug(`Ecc: ${eccentricity.toFixed(2)}`);
+
+            // TEMPORARY: Always use ellipse for visual testing
+            showDebug('Forcing ellipse for testing');
+            stroke.fittedPoints = generateEllipsePoints(
+                ellipseFit.center,
+                ellipseFit.radiusX,
+                ellipseFit.radiusY,
+                ellipseFit.rotation,
+                64
+            );
+            stroke.fitType = 'ellipse';
+            showDebug(`Final: ellipse\nRx=${ellipseFit.radiusX.toFixed(1)}\nRy=${ellipseFit.radiusY.toFixed(1)}`);
+        } else {
+            // Ellipse fit failed, use circle
             stroke.fittedPoints = generateCirclePoints(circleFit.center, circleFit.radius, 64);
             stroke.fitType = 'circle';
-
-            showDebug(`Fitted circle!\nR=${circleFit.radius.toFixed(1)}\nerr=${circleFit.error.toFixed(2)}`);
+            showDebug(`Final: circle\nR=${circleFit.radius.toFixed(1)}`);
         }
     } else {
         // For open strokes, we'll add line fitting later
