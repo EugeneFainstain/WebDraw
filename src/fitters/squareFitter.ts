@@ -1,32 +1,34 @@
 /**
- * Square fitting algorithm
+ * Rectangle/Square fitting algorithm
  *
- * Uses minimum area bounding box to find the best square orientation
+ * Uses minimum area bounding box to find the best rectangle orientation
  */
 
 import { Point } from '../eventHandler';
 import { calculateShapeError } from './shapeError';
 
-export interface SquareFit {
+export interface RectangleFit {
     center: Point;
-    sideLength: number; // Side length of the square
-    rotation: number;   // in radians
-    error: number;      // Mean squared error
+    width: number;     // Width (along major axis)
+    height: number;    // Height (along minor axis)
+    rotation: number;  // in radians
+    error: number;     // Mean squared error
+    squareness: number; // 1 - (min/max side length). 0 = perfect square, approaching 1 = very rectangular
 }
 
 /**
- * Fit a square to a set of points using minimum area bounding box
+ * Fit a rectangle to a set of points using minimum area bounding box
  * Algorithm:
  * 1. Calculate centroid (geometric center)
  * 2. Try multiple rotation angles and find the one with minimum bounding box area
- * 3. Use the average of width and height as the side length
+ * 3. Refine width, height, and angle iteratively
  *
  * @param points - Resampled stroke points
- * @returns Square fit parameters and error metric
+ * @returns Rectangle fit parameters and error metric
  */
-export function fitSquare(points: Point[]): SquareFit | null {
+export function fitSquare(points: Point[]): RectangleFit | null {
     if (points.length < 4) {
-        return null;  // Need at least 4 points to fit a square
+        return null;  // Need at least 4 points to fit a rectangle
     }
 
     // Step 1: Calculate the centroid (geometric center) of all points
@@ -79,51 +81,79 @@ export function fitSquare(points: Point[]): SquareFit | null {
         }
     }
 
-    // Step 3: Use the average of width and height as the side length for a square
-    let sideLength = (bestWidth + bestHeight) / 2;
+    // Step 3: Initialize with bounding box dimensions
+    let width = bestWidth;
+    let height = bestHeight;
     let rotation = bestRotation;
 
-    // Step 4: Iterative refinement - alternate between optimizing size and angle
+    // Step 4: Iterative refinement - alternate between optimizing width, height, and angle
     const numOuterIterations = 3;
-    const maxSizeSteps = 5;
+    const maxWidthSteps = 5;
+    const maxHeightSteps = 5;
     const maxAngleSteps = 5;
     const epsilon = 0.001;
 
     for (let outerIter = 0; outerIter < numOuterIterations; outerIter++) {
-        // Step 4a: Optimize side length
-        for (let sizeIter = 0; sizeIter < maxSizeSteps; sizeIter++) {
-            const currentError = calculateSquareError(points, center, sideLength, rotation);
+        // Step 4a: Optimize width
+        for (let widthIter = 0; widthIter < maxWidthSteps; widthIter++) {
+            const currentError = calculateRectangleError(points, center, width, height, rotation);
 
-            // Calculate numerical gradient with respect to side length
-            const deltaSide = sideLength * 0.01;
-            const errorPlus = calculateSquareError(points, center, sideLength + deltaSide, rotation);
-            const errorMinus = calculateSquareError(points, center, sideLength - deltaSide, rotation);
-            const gradient = (errorPlus - errorMinus) / (2 * deltaSide);
+            // Calculate numerical gradient with respect to width
+            const deltaWidth = width * 0.01;
+            const errorPlus = calculateRectangleError(points, center, width + deltaWidth, height, rotation);
+            const errorMinus = calculateRectangleError(points, center, width - deltaWidth, height, rotation);
+            const gradient = (errorPlus - errorMinus) / (2 * deltaWidth);
 
             // Gradient descent step
             const learningRate = 0.1;
-            const newSideLength = sideLength - learningRate * gradient;
+            const newWidth = width - learningRate * gradient;
 
             // Only accept if it improves error
-            const newError = calculateSquareError(points, center, newSideLength, rotation);
+            const newError = calculateRectangleError(points, center, newWidth, height, rotation);
             if (newError < currentError) {
-                sideLength = newSideLength;
+                width = newWidth;
                 if (Math.abs(newError - currentError) < epsilon) {
                     break;
                 }
             } else {
-                break; // No improvement, stop size optimization
+                break; // No improvement, stop width optimization
             }
         }
 
-        // Step 4b: Optimize rotation angle
+        // Step 4b: Optimize height
+        for (let heightIter = 0; heightIter < maxHeightSteps; heightIter++) {
+            const currentError = calculateRectangleError(points, center, width, height, rotation);
+
+            // Calculate numerical gradient with respect to height
+            const deltaHeight = height * 0.01;
+            const errorPlus = calculateRectangleError(points, center, width, height + deltaHeight, rotation);
+            const errorMinus = calculateRectangleError(points, center, width, height - deltaHeight, rotation);
+            const gradient = (errorPlus - errorMinus) / (2 * deltaHeight);
+
+            // Gradient descent step
+            const learningRate = 0.1;
+            const newHeight = height - learningRate * gradient;
+
+            // Only accept if it improves error
+            const newError = calculateRectangleError(points, center, width, newHeight, rotation);
+            if (newError < currentError) {
+                height = newHeight;
+                if (Math.abs(newError - currentError) < epsilon) {
+                    break;
+                }
+            } else {
+                break; // No improvement, stop height optimization
+            }
+        }
+
+        // Step 4c: Optimize rotation angle
         for (let angleIter = 0; angleIter < maxAngleSteps; angleIter++) {
-            const currentError = calculateSquareError(points, center, sideLength, rotation);
+            const currentError = calculateRectangleError(points, center, width, height, rotation);
 
             // Calculate numerical gradient with respect to rotation
             const deltaAngle = 0.01; // ~0.57 degrees
-            const errorPlus = calculateSquareError(points, center, sideLength, rotation + deltaAngle);
-            const errorMinus = calculateSquareError(points, center, sideLength, rotation - deltaAngle);
+            const errorPlus = calculateRectangleError(points, center, width, height, rotation + deltaAngle);
+            const errorMinus = calculateRectangleError(points, center, width, height, rotation - deltaAngle);
             const gradient = (errorPlus - errorMinus) / (2 * deltaAngle);
 
             // Gradient descent step
@@ -131,7 +161,7 @@ export function fitSquare(points: Point[]): SquareFit | null {
             const newRotation = rotation - learningRate * gradient;
 
             // Only accept if it improves error
-            const newError = calculateSquareError(points, center, sideLength, newRotation);
+            const newError = calculateRectangleError(points, center, width, height, newRotation);
             if (newError < currentError) {
                 rotation = newRotation;
                 if (Math.abs(newError - currentError) < epsilon) {
@@ -143,41 +173,48 @@ export function fitSquare(points: Point[]): SquareFit | null {
         }
     }
 
-    // Calculate final error
-    const error = calculateSquareError(points, center, sideLength, rotation);
+    // Calculate final error and squareness
+    const error = calculateRectangleError(points, center, width, height, rotation);
+    const minSide = Math.min(width, height);
+    const maxSide = Math.max(width, height);
+    const squareness = 1 - (minSide / maxSide);
 
     return {
         center,
-        sideLength,
+        width,
+        height,
         rotation,
-        error
+        error,
+        squareness
     };
 }
 
 /**
- * Calculate error for a square fit using bidirectional Hausdorff distance
+ * Calculate error for a rectangle fit using bidirectional Hausdorff distance
  */
-function calculateSquareError(
+function calculateRectangleError(
     points: Point[],
     center: Point,
-    sideLength: number,
+    width: number,
+    height: number,
     rotation: number
 ): number {
-    const distanceToSquareFn = (p: Point) => distanceToSquare(p, center, sideLength, rotation);
-    const squareSamplePoints = generateSquarePoints(center, sideLength, rotation, 64);
-    return calculateShapeError(points, distanceToSquareFn, squareSamplePoints);
+    const distanceToRectangleFn = (p: Point) => distanceToRectangle(p, center, width, height, rotation);
+    const rectangleSamplePoints = generateRectanglePoints(center, width, height, rotation, 64);
+    return calculateShapeError(points, distanceToRectangleFn, rectangleSamplePoints);
 }
 
 /**
- * Calculate distance from a point to a square
+ * Calculate distance from a point to a rectangle
  */
-function distanceToSquare(
+function distanceToRectangle(
     p: Point,
     center: Point,
-    sideLength: number,
+    width: number,
+    height: number,
     rotation: number
 ): number {
-    // Rotate point to square's coordinate system
+    // Rotate point to rectangle's coordinate system
     const dx = p.x - center.x;
     const dy = p.y - center.y;
 
@@ -187,19 +224,20 @@ function distanceToSquare(
     const x_rot = dx * cos_theta - dy * sin_theta;
     const y_rot = dx * sin_theta + dy * cos_theta;
 
-    // Half side length
-    const halfSide = sideLength / 2;
+    // Half dimensions
+    const halfWidth = width / 2;
+    const halfHeight = height / 2;
 
-    // Clamp to square boundary
-    const closestX = Math.max(-halfSide, Math.min(halfSide, x_rot));
-    const closestY = Math.max(-halfSide, Math.min(halfSide, y_rot));
+    // Clamp to rectangle boundary
+    const closestX = Math.max(-halfWidth, Math.min(halfWidth, x_rot));
+    const closestY = Math.max(-halfHeight, Math.min(halfHeight, y_rot));
 
     // If point is inside, find distance to nearest edge
-    if (Math.abs(x_rot) <= halfSide && Math.abs(y_rot) <= halfSide) {
-        const distToLeft = Math.abs(x_rot + halfSide);
-        const distToRight = Math.abs(x_rot - halfSide);
-        const distToTop = Math.abs(y_rot + halfSide);
-        const distToBottom = Math.abs(y_rot - halfSide);
+    if (Math.abs(x_rot) <= halfWidth && Math.abs(y_rot) <= halfHeight) {
+        const distToLeft = Math.abs(x_rot + halfWidth);
+        const distToRight = Math.abs(x_rot - halfWidth);
+        const distToTop = Math.abs(y_rot + halfHeight);
+        const distToBottom = Math.abs(y_rot - halfHeight);
         return Math.min(distToLeft, distToRight, distToTop, distToBottom);
     }
 
@@ -210,17 +248,19 @@ function distanceToSquare(
 }
 
 /**
- * Generate points along a square boundary
+ * Generate points along a rectangle boundary
  *
- * @param center - Square center
- * @param sideLength - Square side length
+ * @param center - Rectangle center
+ * @param width - Rectangle width
+ * @param height - Rectangle height
  * @param rotation - Rotation angle in radians
  * @param numPoints - Number of points to generate
- * @returns Array of points forming a square
+ * @returns Array of points forming a rectangle
  */
-export function generateSquarePoints(
+export function generateRectanglePoints(
     center: Point,
-    sideLength: number,
+    width: number,
+    height: number,
     rotation: number,
     numPoints: number = 64
 ): Point[] {
@@ -229,16 +269,21 @@ export function generateSquarePoints(
     const cos_theta = Math.cos(rotation);
     const sin_theta = Math.sin(rotation);
 
-    const halfSide = sideLength / 2;
+    const halfWidth = width / 2;
+    const halfHeight = height / 2;
 
-    // Distribute points evenly along all 4 edges
-    const pointsPerEdge = Math.floor(numPoints / 4);
+    // Distribute points along the perimeter proportionally to side lengths
+    const perimeter = 2 * (width + height);
+    const pointsPerUnit = numPoints / perimeter;
+
+    const pointsOnWidth = Math.max(1, Math.round(width * pointsPerUnit));
+    const pointsOnHeight = Math.max(1, Math.round(height * pointsPerUnit));
 
     // Top edge (left to right)
-    for (let i = 0; i < pointsPerEdge; i++) {
-        const t = i / pointsPerEdge;
-        const x_local = -halfSide + t * sideLength;
-        const y_local = -halfSide;
+    for (let i = 0; i < pointsOnWidth; i++) {
+        const t = i / pointsOnWidth;
+        const x_local = -halfWidth + t * width;
+        const y_local = -halfHeight;
         points.push({
             x: center.x + x_local * cos_theta - y_local * sin_theta,
             y: center.y + x_local * sin_theta + y_local * cos_theta
@@ -246,10 +291,10 @@ export function generateSquarePoints(
     }
 
     // Right edge (top to bottom)
-    for (let i = 0; i < pointsPerEdge; i++) {
-        const t = i / pointsPerEdge;
-        const x_local = halfSide;
-        const y_local = -halfSide + t * sideLength;
+    for (let i = 0; i < pointsOnHeight; i++) {
+        const t = i / pointsOnHeight;
+        const x_local = halfWidth;
+        const y_local = -halfHeight + t * height;
         points.push({
             x: center.x + x_local * cos_theta - y_local * sin_theta,
             y: center.y + x_local * sin_theta + y_local * cos_theta
@@ -257,10 +302,10 @@ export function generateSquarePoints(
     }
 
     // Bottom edge (right to left)
-    for (let i = 0; i < pointsPerEdge; i++) {
-        const t = i / pointsPerEdge;
-        const x_local = halfSide - t * sideLength;
-        const y_local = halfSide;
+    for (let i = 0; i < pointsOnWidth; i++) {
+        const t = i / pointsOnWidth;
+        const x_local = halfWidth - t * width;
+        const y_local = halfHeight;
         points.push({
             x: center.x + x_local * cos_theta - y_local * sin_theta,
             y: center.y + x_local * sin_theta + y_local * cos_theta
@@ -268,10 +313,10 @@ export function generateSquarePoints(
     }
 
     // Left edge (bottom to top)
-    for (let i = 0; i < pointsPerEdge; i++) {
-        const t = i / pointsPerEdge;
-        const x_local = -halfSide;
-        const y_local = halfSide - t * sideLength;
+    for (let i = 0; i < pointsOnHeight; i++) {
+        const t = i / pointsOnHeight;
+        const x_local = -halfWidth;
+        const y_local = halfHeight - t * height;
         points.push({
             x: center.x + x_local * cos_theta - y_local * sin_theta,
             y: center.y + x_local * sin_theta + y_local * cos_theta

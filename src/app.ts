@@ -6,7 +6,7 @@ import { EventHandler, Point } from './eventHandler';
 import { resampleStroke } from './resample';
 import { fitCircle, generateCirclePoints, isMostlyClosed } from './fitters/circleFitter';
 import { fitEllipse, generateEllipsePoints } from './fitters/ellipseFitter';
-import { fitSquare, generateSquarePoints } from './fitters/squareFitter';
+import { fitSquare, generateRectanglePoints } from './fitters/squareFitter';
 
 // ============================================================================
 // DOM ELEMENTS
@@ -979,17 +979,20 @@ function fitStroke(stroke: Stroke): void {
         debugText += `\nEllipticity: ${ellipseFit.ellipticity.toFixed(3)}`;
         debugText += `\nEllipse err before 1D: ${ellipseFit.debugInfo?.errorBefore1D.toFixed(2)}`;
         debugText += `\nEllipse err after 1D: ${ellipseFit.debugInfo?.errorAfter1D.toFixed(2)}`;
-        debugText += `\nSquare fit error: ${squareFit.error.toFixed(2)}`;
+        debugText += `\nSquareness: ${squareFit.squareness.toFixed(3)}`;
+        debugText += `\nRectangle fit error: ${squareFit.error.toFixed(2)}`;
         showDebug(debugText);
 
-        // DEBUG: Always use square fit (for debugging)
-        stroke.fittedPoints = generateSquarePoints(
+        // DEBUG: Always use rectangle/square fit (for debugging)
+        stroke.fittedPoints = generateRectanglePoints(
             squareFit.center,
-            squareFit.sideLength,
+            squareFit.width,
+            squareFit.height,
             squareFit.rotation,
             64
         );
-        stroke.fitType = 'square';
+        const squarenessThreshold = 0.20;
+        stroke.fitType = squareFit.squareness < squarenessThreshold ? 'square' : 'rectangle';
     } else {
         // For open strokes, we'll add line fitting later
         showDebug('Open stroke - line fit TODO');
