@@ -8,6 +8,7 @@ import { fitCircle, generateCirclePoints, isMostlyClosed } from './fitters/circl
 import { fitEllipse, generateEllipsePoints } from './fitters/ellipseFitter';
 import { fitSquare, generateRectanglePoints } from './fitters/squareFitter';
 import { fitPolyline, generatePolylinePoints } from './fitters/polylineFitter';
+import { fitEquilateralPolygon, generateEquilateralPolygonPoints } from './fitters/equilateralPolygonFitter';
 
 // ============================================================================
 // DOM ELEMENTS
@@ -966,10 +967,11 @@ function fitStroke(stroke: Stroke): void {
     const closureInfo = isMostlyClosed(resampled);
 
     if (closureInfo.closed) {
-        // Fit all three shapes: circle, ellipse, and square/rectangle
+        // Fit all shapes: circle, ellipse, square/rectangle, and equilateral polygon
         const circleFit = fitCircle(resampled);
         const ellipseFit = fitEllipse(resampled);
         const squareFit = fitSquare(resampled);
+        const polygonFit = fitEquilateralPolygon(resampled, stroke.size);
 
         if (!circleFit || !ellipseFit || !squareFit) {
             showDebug('One or more fits failed!');
@@ -983,18 +985,31 @@ function fitStroke(stroke: Stroke): void {
         debugText += `\nEllipse err after 1D: ${ellipseFit.debugInfo?.errorAfter1D.toFixed(2)}`;
         debugText += `\nSquareness: ${squareFit.squareness.toFixed(3)}`;
         debugText += `\nRectangle fit error: ${squareFit.error.toFixed(2)}`;
+
+        if (polygonFit) {
+            debugText += `\nPolygon: ${polygonFit.sides} sides`;
+            debugText += `\nPolygon error: ${polygonFit.error.toFixed(2)}`;
+        }
+
         showDebug(debugText);
 
-        // DEBUG: Always use rectangle/square fit (for debugging)
-        stroke.fittedPoints = generateRectanglePoints(
-            squareFit.center,
-            squareFit.width,
-            squareFit.height,
-            squareFit.rotation,
-            64
-        );
-        const squarenessThreshold = 0.20;
-        stroke.fitType = squareFit.squareness < squarenessThreshold ? 'square' : 'rectangle';
+        // For now, always use equilateral polygon fit for closed strokes
+        if (polygonFit) {
+            stroke.fittedPoints = polygonFit.vertices;
+            stroke.fitType = `polygon-${polygonFit.sides}`;
+            stroke.fittedWithSize = stroke.size;  // Track the size used for fitting
+        } else {
+            // Fallback to rectangle/square fit if polygon fit fails
+            stroke.fittedPoints = generateRectanglePoints(
+                squareFit.center,
+                squareFit.width,
+                squareFit.height,
+                squareFit.rotation,
+                64
+            );
+            const squarenessThreshold = 0.20;
+            stroke.fitType = squareFit.squareness < squarenessThreshold ? 'square' : 'rectangle';
+        }
     } else {
         // For open strokes, use polyline fitting with RDP algorithm
         const polylineFit = fitPolyline(resampled, stroke.size);
@@ -1331,10 +1346,11 @@ fitBtn.addEventListener('click', () => {
 
         showDebug(`Selected: idx=${selectedStrokeIdx}\nPoints: ${stroke.points.length}\nHas fit: ${!!stroke.fittedPoints}`);
 
-        // If fit mode is ON and stroke hasn't been fitted yet, or if it's a polyline
+        // If fit mode is ON and stroke hasn't been fitted yet, or if it's a polyline/polygon
         // that was fitted with a different stroke size, fit it now
+        const isSizeDependentFit = stroke.fitType === 'polyline' || stroke.fitType?.startsWith('polygon-');
         const needsRefit = !stroke.fittedPoints ||
-                          (stroke.fitType === 'polyline' && stroke.fittedWithSize !== stroke.size);
+                          (isSizeDependentFit && stroke.fittedWithSize !== stroke.size);
 
         if (isFitMode && needsRefit) {
             fitStroke(stroke);
