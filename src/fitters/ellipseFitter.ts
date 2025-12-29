@@ -14,12 +14,10 @@ export interface EllipseFit {
     radiusY: number;
     rotation: number;  // in radians
     error: number;     // Mean squared error
+    ellipticity: number; // 1 - (minor/major variance). 0 = circle, approaching 1 = very elongated
     debugInfo?: {
-        radiusXBefore: number;
-        radiusXAfter: number;
-        errorBefore: number;
+        errorBefore1D: number;
         errorAfter1D: number;
-        errorAfter5D: number;
     };
 }
 
@@ -98,7 +96,6 @@ export function fitEllipse(points: Point[]): EllipseFit | null {
     // Step 4: Refine radiusX using 1D gradient descent with max error
     // This helps with highly eccentric ellipses where the initial guess underestimates
     const errorBeforeOptimization = calculateEllipseError(points, center, radiusX, radiusY, rotation);
-    const radiusXBefore = radiusX;
 
     const maxIterations = 20;
     let learningRate1D = 0.1;
@@ -141,159 +138,22 @@ export function fitEllipse(points: Point[]): EllipseFit | null {
 
     const errorAfter1D = calculateEllipseError(points, center, radiusX, radiusY, rotation);
 
-    // Step 5: 5D gradient descent on foci positions and path length
-    // Parameters: f1x, f1y, f2x, f2y, L (where L = 2*radiusX)
-    const c = Math.sqrt(radiusX * radiusX - radiusY * radiusY); // distance from center to focus
-    const cos_theta = Math.cos(rotation);
-    const sin_theta = Math.sin(rotation);
-
-    let f1x = center.x + c * cos_theta;
-    let f1y = center.y + c * sin_theta;
-    let f2x = center.x - c * cos_theta;
-    let f2y = center.y - c * sin_theta;
-    let L = 2 * radiusX; // Path length (sum of distances to foci)
-
-    const fociIterations = 10;
-    let fociLearningRate = 0.1;  // Start with a larger learning rate
-    const fociEpsilon = 0.001;
-
-    for (let iter = 0; iter < fociIterations; iter++) {
-        const currentError = calculateEllipseErrorFromFociAndLength(points, f1x, f1y, f2x, f2y, L);
-
-        // Calculate gradients for all 5 parameters
-        const delta = 0.1;
-
-        const gradF1x = (calculateEllipseErrorFromFociAndLength(points, f1x + delta, f1y, f2x, f2y, L) -
-                        calculateEllipseErrorFromFociAndLength(points, f1x - delta, f1y, f2x, f2y, L)) / (2 * delta);
-        const gradF1y = (calculateEllipseErrorFromFociAndLength(points, f1x, f1y + delta, f2x, f2y, L) -
-                        calculateEllipseErrorFromFociAndLength(points, f1x, f1y - delta, f2x, f2y, L)) / (2 * delta);
-        const gradF2x = (calculateEllipseErrorFromFociAndLength(points, f1x, f1y, f2x + delta, f2y, L) -
-                        calculateEllipseErrorFromFociAndLength(points, f1x, f1y, f2x - delta, f2y, L)) / (2 * delta);
-        const gradF2y = (calculateEllipseErrorFromFociAndLength(points, f1x, f1y, f2x, f2y + delta, L) -
-                        calculateEllipseErrorFromFociAndLength(points, f1x, f1y, f2x, f2y - delta, L)) / (2 * delta);
-        const gradL = (calculateEllipseErrorFromFociAndLength(points, f1x, f1y, f2x, f2y, L + delta) -
-                      calculateEllipseErrorFromFociAndLength(points, f1x, f1y, f2x, f2y, L - delta)) / (2 * delta);
-
-        // Backtracking line search: try to find a step size that improves error
-        let stepSize = fociLearningRate;
-        let accepted = false;
-
-        for (let backtrack = 0; backtrack < 5; backtrack++) {
-            // Try update with current step size
-            const newF1x = f1x - stepSize * gradF1x;
-            const newF1y = f1y - stepSize * gradF1y;
-            const newF2x = f2x - stepSize * gradF2x;
-            const newF2y = f2y - stepSize * gradF2y;
-            const newL = L - stepSize * gradL;
-
-            const newError = calculateEllipseErrorFromFociAndLength(points, newF1x, newF1y, newF2x, newF2y, newL);
-
-            if (newError < currentError) {
-                // Accept update
-                f1x = newF1x;
-                f1y = newF1y;
-                f2x = newF2x;
-                f2y = newF2y;
-                L = newL;
-                accepted = true;
-
-                // Check for convergence
-                if (Math.abs(newError - currentError) < fociEpsilon) {
-                    return {
-                        center: { x: (f1x + f2x) / 2, y: (f1y + f2y) / 2 },
-                        radiusX: L / 2,
-                        radiusY: Math.sqrt(Math.max(0, (L / 2) * (L / 2) - ((Math.sqrt((f1x - f2x) * (f1x - f2x) + (f1y - f2y) * (f1y - f2y)) / 2) * (Math.sqrt((f1x - f2x) * (f1x - f2x) + (f1y - f2y) * (f1y - f2y)) / 2)))),
-                        rotation: Math.atan2(f1y - f2y, f1x - f2x),
-                        error: newError,
-                        debugInfo: {
-                            radiusXBefore,
-                            radiusXAfter: L / 2,
-                            errorBefore: errorBeforeOptimization,
-                            errorAfter1D: errorAfter1D,
-                            errorAfter5D: newError
-                        }
-                    };
-                }
-
-                break;
-            }
-
-            // Reduce step size and try again
-            stepSize *= 0.5;
-        }
-
-        // If no step size worked, we've converged
-        if (!accepted) {
-            break;
-        }
-    }
-
-    // Convert back from (f1, f2, L) to (center, radiusX, radiusY, rotation)
-    const newCenterX = (f1x + f2x) / 2;
-    const newCenterY = (f1y + f2y) / 2;
-    const newCenter = { x: newCenterX, y: newCenterY };
-
-    const dx = f1x - f2x;
-    const dy = f1y - f2y;
-    const newRotation = Math.atan2(dy, dx);
-    const newC = Math.sqrt(dx * dx + dy * dy) / 2; // half distance between foci
-
-    radiusX = L / 2;
-    radiusY = Math.sqrt(Math.max(0, radiusX * radiusX - newC * newC));
-
-    const finalError = calculateEllipseError(points, newCenter, radiusX, radiusY, newRotation);
+    // Calculate ellipticity: 1 - (minor axis variance / major axis variance)
+    // This gives 0 for a perfect circle, and approaches 1 for very elongated ellipses
+    const ellipticity = 1 - (lambda2 / lambda1);
 
     return {
-        center: newCenter,
+        center,
         radiusX,
         radiusY,
-        rotation: newRotation,
-        error: finalError,
+        rotation,
+        error: errorAfter1D,
+        ellipticity,
         debugInfo: {
-            radiusXBefore,
-            radiusXAfter: radiusX,
-            errorBefore: errorBeforeOptimization,
-            errorAfter1D: errorAfter1D,
-            errorAfter5D: finalError
+            errorBefore1D: errorBeforeOptimization,
+            errorAfter1D: errorAfter1D
         }
     };
-}
-
-/**
- * Helper function to calculate ellipse error from foci and path length
- * Converts (f1, f2, L) to ellipse parameters and calculates error
- *
- * @param points - Stroke points
- * @param f1x, f1y - First focus coordinates
- * @param f2x, f2y - Second focus coordinates
- * @param L - Path length (sum of distances from any ellipse point to both foci = 2*radiusX)
- */
-function calculateEllipseErrorFromFociAndLength(
-    points: Point[],
-    f1x: number,
-    f1y: number,
-    f2x: number,
-    f2y: number,
-    L: number
-): number {
-    // Calculate center
-    const centerX = (f1x + f2x) / 2;
-    const centerY = (f1y + f2y) / 2;
-    const center = { x: centerX, y: centerY };
-
-    // Calculate rotation
-    const dx = f1x - f2x;
-    const dy = f1y - f2y;
-    const rotation = Math.atan2(dy, dx);
-    const c = Math.sqrt(dx * dx + dy * dy) / 2; // half distance between foci
-
-    // radiusX is directly determined from L
-    const radiusX = L / 2;
-
-    // Calculate radiusY from the relationship: c² = radiusX² - radiusY²
-    const radiusY = Math.sqrt(Math.max(0, radiusX * radiusX - c * c));
-
-    return calculateEllipseError(points, center, radiusX, radiusY, rotation);
 }
 
 /**

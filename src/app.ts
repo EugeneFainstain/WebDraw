@@ -955,16 +955,12 @@ function fitStroke(stroke: Stroke): void {
         stroke.originalPoints = stroke.points.map(p => ({ ...p }));
     }
 
-    showDebug(`Original: ${stroke.originalPoints.length} pts`);
-
-    // Resample with 2x the original point count for better fitting
-    const targetPoints = stroke.originalPoints.length * 2;
+    // Resample with the same number of points as the original stroke
+    const targetPoints = stroke.originalPoints.length;
     const resampled = resampleStroke(stroke.originalPoints, targetPoints);
-    showDebug(`Resampled: ${resampled.length} pts (target: ${targetPoints})`);
 
     // Check if stroke is mostly closed
     const closureInfo = isMostlyClosed(resampled);
-    showDebug(`Closed: ${closureInfo.closed}\nDist: ${closureInfo.distance.toFixed(1)}\nThreshold: ${closureInfo.threshold.toFixed(1)}\nMaxDim: ${closureInfo.maxDim.toFixed(1)}`);
 
     if (closureInfo.closed) {
         // Step 1: Fit circle first
@@ -975,44 +971,39 @@ function fitStroke(stroke: Stroke): void {
             return;
         }
 
-        showDebug(`Circle: err=${circleFit.error.toFixed(2)}`);
-
         // Step 2: Fit ellipse
         const ellipseFit = fitEllipse(resampled);
 
         if (ellipseFit) {
-            // Display optimization debug info
-            if (ellipseFit.debugInfo) {
-                showDebug(`Ellipse optimization:\nRx: ${ellipseFit.debugInfo.radiusXBefore.toFixed(2)} → ${ellipseFit.debugInfo.radiusXAfter.toFixed(2)}\nErr initial: ${ellipseFit.debugInfo.errorBefore.toFixed(2)}\nErr after 1D: ${ellipseFit.debugInfo.errorAfter1D.toFixed(2)}\nErr after 5D: ${ellipseFit.debugInfo.errorAfter5D.toFixed(2)}`);
+            // Display closed shape debug info
+            showDebug(`Circle fit error: ${circleFit.error.toFixed(2)}\nEllipticity: ${ellipseFit.ellipticity.toFixed(3)}\nEllipse err before 1D: ${ellipseFit.debugInfo?.errorBefore1D.toFixed(2)}\nEllipse err after 1D: ${ellipseFit.debugInfo?.errorAfter1D.toFixed(2)}`);
+
+            // Choose between circle and ellipse based on ellipticity
+            const ellipticityThreshold = 0.20;
+            if (ellipseFit.ellipticity < ellipticityThreshold) {
+                // Use circle fit (shape is nearly circular)
+                stroke.fittedPoints = generateCirclePoints(circleFit.center, circleFit.radius, 64);
+                stroke.fitType = 'circle';
+            } else {
+                // Use ellipse fit (shape is significantly elliptical)
+                stroke.fittedPoints = generateEllipsePoints(
+                    ellipseFit.center,
+                    ellipseFit.radiusX,
+                    ellipseFit.radiusY,
+                    ellipseFit.rotation,
+                    64
+                );
+                stroke.fitType = 'ellipse';
             }
-            showDebug(`Ellipse: err=${ellipseFit.error.toFixed(2)}`);
-
-            // Calculate eccentricity to determine if it's significantly different from a circle
-            const a = Math.max(ellipseFit.radiusX, ellipseFit.radiusY);
-            const b = Math.min(ellipseFit.radiusX, ellipseFit.radiusY);
-            const eccentricity = Math.sqrt(1 - (b * b) / (a * a));
-            showDebug(`Ecc: ${eccentricity.toFixed(2)}`);
-
-            // TEMPORARY: Always use ellipse for visual testing
-            showDebug('Forcing ellipse for testing');
-            stroke.fittedPoints = generateEllipsePoints(
-                ellipseFit.center,
-                ellipseFit.radiusX,
-                ellipseFit.radiusY,
-                ellipseFit.rotation,
-                64
-            );
-            stroke.fitType = 'ellipse';
-            showDebug(`Final: ellipse\nRx=${ellipseFit.radiusX.toFixed(1)}\nRy=${ellipseFit.radiusY.toFixed(1)}`);
         } else {
             // Ellipse fit failed, use circle
+            showDebug(`Circle fit error: ${circleFit.error.toFixed(2)}`);
             stroke.fittedPoints = generateCirclePoints(circleFit.center, circleFit.radius, 64);
             stroke.fitType = 'circle';
-            showDebug(`Final: circle\nR=${circleFit.radius.toFixed(1)}`);
         }
     } else {
         // For open strokes, we'll add line fitting later
-        showDebug('Open stroke!\nLine fit TODO');
+        showDebug('Open stroke - line fit TODO');
     }
 }
 
