@@ -6,6 +6,7 @@
  */
 
 import { Point } from '../eventHandler';
+import { calculateShapeError } from './shapeError';
 
 export interface EllipseFit {
     center: Point;
@@ -100,25 +101,40 @@ export function fitEllipse(points: Point[]): EllipseFit | null {
     const radiusXBefore = radiusX;
 
     const maxIterations = 20;
-    const learningRate = 0.5;
-    const epsilon = 0.01;
+    let learningRate1D = 0.1;
+    const epsilon = 0.001;
 
     for (let iter = 0; iter < maxIterations; iter++) {
-        const currentError = calculateEllipseMaxError(points, center, radiusX, radiusY, rotation);
+        const currentError = calculateEllipseError(points, center, radiusX, radiusY, rotation);
 
         // Calculate numerical gradient with respect to radiusX
         const deltaRx = radiusX * 0.01;
-        const errorPlus = calculateEllipseMaxError(points, center, radiusX + deltaRx, radiusY, rotation);
-        const errorMinus = calculateEllipseMaxError(points, center, radiusX - deltaRx, radiusY, rotation);
+        const errorPlus = calculateEllipseError(points, center, radiusX + deltaRx, radiusY, rotation);
+        const errorMinus = calculateEllipseError(points, center, radiusX - deltaRx, radiusY, rotation);
         const gradient = (errorPlus - errorMinus) / (2 * deltaRx);
 
-        // Update radiusX (with constraint: must stay >= radiusY)
-        const newRadiusX = radiusX - learningRate * gradient;
-        radiusX = Math.max(newRadiusX, radiusY);
+        // Backtracking line search with constraint
+        let stepSize = learningRate1D;
+        let accepted = false;
 
-        // Check for convergence
-        const newError = calculateEllipseMaxError(points, center, radiusX, radiusY, rotation);
-        if (Math.abs(newError - currentError) < epsilon) {
+        for (let backtrack = 0; backtrack < 5; backtrack++) {
+            const newRadiusX = Math.max(radiusX - stepSize * gradient, radiusY);
+            const newError = calculateEllipseError(points, center, newRadiusX, radiusY, rotation);
+
+            if (newError < currentError) {
+                radiusX = newRadiusX;
+                accepted = true;
+
+                if (Math.abs(newError - currentError) < epsilon) {
+                    break;
+                }
+                break;
+            }
+
+            stepSize *= 0.5;
+        }
+
+        if (!accepted) {
             break;
         }
     }
@@ -281,61 +297,6 @@ function calculateEllipseErrorFromFociAndLength(
 }
 
 /**
- * Calculate maximum error for an ellipse fit (for optimization)
- * Uses bidirectional distance to prevent degenerate fits
- */
-function calculateEllipseMaxError(
-    points: Point[],
-    center: Point,
-    radiusX: number,
-    radiusY: number,
-    rotation: number
-): number {
-    const ellipse = { center, radiusX, radiusY, rotation };
-
-    // Direction 1: Stroke points to ellipse - take max
-    let maxStrokeToEllipse = 0;
-    for (const p of points) {
-        const dist = distanceToEllipse(p, ellipse);
-        maxStrokeToEllipse = Math.max(maxStrokeToEllipse, dist * dist);
-    }
-
-    // Direction 2: Ellipse to stroke points - take max
-    const numSamples = 64;
-    let maxEllipseToStroke = 0;
-
-    for (let i = 0; i < numSamples; i++) {
-        const angle = (i / numSamples) * 2 * Math.PI;
-
-        // Point on ellipse in local coordinates
-        const x_local = radiusX * Math.cos(angle);
-        const y_local = radiusY * Math.sin(angle);
-
-        // Rotate to world coordinates
-        const cos_theta = Math.cos(rotation);
-        const sin_theta = Math.sin(rotation);
-        const ellipsePoint: Point = {
-            x: center.x + x_local * cos_theta - y_local * sin_theta,
-            y: center.y + x_local * sin_theta + y_local * cos_theta
-        };
-
-        // Find closest stroke point
-        let minDist = Infinity;
-        for (const p of points) {
-            const dx = p.x - ellipsePoint.x;
-            const dy = p.y - ellipsePoint.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            minDist = Math.min(minDist, dist);
-        }
-
-        maxEllipseToStroke = Math.max(maxEllipseToStroke, minDist * minDist);
-    }
-
-    // Return max of both directions
-    return Math.max(maxStrokeToEllipse, maxEllipseToStroke);
-}
-
-/**
  * Calculate maximum distance error for an ellipse fit using bidirectional distance
  * Uses worst-case outlier distance instead of RMS
  * This prevents degenerate fits (e.g., huge ellipse fitting a small curve)
@@ -349,47 +310,26 @@ function calculateEllipseError(
 ): number {
     const ellipse = { center, radiusX, radiusY, rotation };
 
-    // Direction 1: Stroke points to ellipse - take max
-    let maxStrokeToEllipse = 0;
-    for (const p of points) {
-        const dist = distanceToEllipse(p, ellipse);
-        maxStrokeToEllipse = Math.max(maxStrokeToEllipse, dist * dist);
-    }
+    // Create distance function for this ellipse
+    const distanceToShapeFn = (p: Point) => distanceToEllipse(p, ellipse);
 
-    // Direction 2: Ellipse to stroke points - take max
-    // Sample points uniformly along the ellipse
+    // Generate sample points on the ellipse boundary
     const numSamples = 64;
-    let maxEllipseToStroke = 0;
+    const shapeSamplePoints: Point[] = [];
+    const cos_theta = Math.cos(rotation);
+    const sin_theta = Math.sin(rotation);
 
     for (let i = 0; i < numSamples; i++) {
         const angle = (i / numSamples) * 2 * Math.PI;
-
-        // Point on ellipse in local coordinates
         const x_local = radiusX * Math.cos(angle);
         const y_local = radiusY * Math.sin(angle);
-
-        // Rotate to world coordinates
-        const cos_theta = Math.cos(rotation);
-        const sin_theta = Math.sin(rotation);
-        const ellipsePoint: Point = {
+        shapeSamplePoints.push({
             x: center.x + x_local * cos_theta - y_local * sin_theta,
             y: center.y + x_local * sin_theta + y_local * cos_theta
-        };
-
-        // Find closest stroke point
-        let minDist = Infinity;
-        for (const p of points) {
-            const dx = p.x - ellipsePoint.x;
-            const dy = p.y - ellipsePoint.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            minDist = Math.min(minDist, dist);
-        }
-
-        maxEllipseToStroke = Math.max(maxEllipseToStroke, minDist * minDist);
+        });
     }
 
-    // Return max of both directions (Hausdorff distance squared)
-    return Math.max(maxStrokeToEllipse, maxEllipseToStroke);
+    return calculateShapeError(points, distanceToShapeFn, shapeSamplePoints);
 }
 
 /**
@@ -660,9 +600,8 @@ function distanceToEllipse(p: Point, ellipse: { center: Point; radiusX: number; 
     // Initial guess: angle from center to point
     let t = Math.atan2(y_rot / b, x_rot / a);
 
-    // Gradient descent to find closest point
-    const maxIter = 10;
-    const learningRate = 0.5;
+    // Newton's method to find closest point - more robust than gradient descent
+    const maxIter = 20;
 
     for (let iter = 0; iter < maxIter; iter++) {
         // Point on ellipse at parameter t
@@ -677,15 +616,27 @@ function distanceToEllipse(p: Point, ellipse: { center: Point; radiusX: number; 
         const tx = -a * Math.sin(t);
         const ty = b * Math.cos(t);
 
+        // Normal (derivative of tangent)
+        const nx = -a * Math.cos(t);
+        const ny = -b * Math.sin(t);
+
         // Gradient: dot product of (p - ellipse_point) and tangent
         const gradient = vx * tx + vy * ty;
 
-        // Update parameter
-        t += learningRate * gradient / (tx * tx + ty * ty + 1e-10);
+        // Second derivative for Newton's method
+        const hessian = vx * nx + vy * ny - (tx * tx + ty * ty);
 
         // Convergence check
-        if (Math.abs(gradient) < 1e-6) {
+        if (Math.abs(gradient) < 1e-8) {
             break;
+        }
+
+        // Newton's update (with safeguard against division by zero)
+        if (Math.abs(hessian) > 1e-10) {
+            t -= gradient / hessian;
+        } else {
+            // Fallback to gradient descent if hessian is too small
+            t += 0.1 * gradient / (tx * tx + ty * ty + 1e-10);
         }
     }
 

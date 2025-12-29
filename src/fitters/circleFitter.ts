@@ -6,6 +6,7 @@
  */
 
 import { Point } from '../eventHandler';
+import { calculateShapeError } from './shapeError';
 
 export interface CircleFit {
     center: Point;
@@ -109,45 +110,26 @@ export function fitCircle(points: Point[]): CircleFit | null {
 
     const radius = Math.sqrt(centerX * centerX + centerY * centerY + Mz + 2 * X);
 
-    // Calculate error using bidirectional distance
-    // Direction 1: Stroke points to circle
-    let strokeToCircleError = 0;
-    for (const p of points) {
+    // Calculate error using bidirectional Hausdorff distance
+    const distanceToCircleFn = (p: Point) => {
         const dx = p.x - center.x;
         const dy = p.y - center.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const err = dist - radius;
-        strokeToCircleError += err * err;
-    }
-    strokeToCircleError /= n;
+        const distToCenter = Math.sqrt(dx * dx + dy * dy);
+        return Math.abs(distToCenter - radius);
+    };
 
-    // Direction 2: Circle to stroke points
-    // Sample points uniformly around the circle
+    // Generate sample points on the circle boundary
     const numSamples = 64;
-    let circleToStrokeError = 0;
-
+    const circleSamplePoints: Point[] = [];
     for (let i = 0; i < numSamples; i++) {
         const angle = (i / numSamples) * 2 * Math.PI;
-        const circlePoint = {
+        circleSamplePoints.push({
             x: center.x + radius * Math.cos(angle),
             y: center.y + radius * Math.sin(angle)
-        };
-
-        // Find closest stroke point
-        let minDist = Infinity;
-        for (const p of points) {
-            const dx = p.x - circlePoint.x;
-            const dy = p.y - circlePoint.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            minDist = Math.min(minDist, dist);
-        }
-
-        circleToStrokeError += minDist * minDist;
+        });
     }
-    circleToStrokeError /= numSamples;
 
-    // Return average of both directions
-    const error = (strokeToCircleError + circleToStrokeError) / 2;
+    const error = calculateShapeError(points, distanceToCircleFn, circleSamplePoints);
 
     return { center, radius, error };
 }
@@ -177,7 +159,7 @@ export function generateCirclePoints(center: Point, radius: number, numPoints: n
 /**
  * Check if a stroke is mostly closed
  * A stroke is considered closed if the distance between start and end
- * is less than 15% of the bounding box's largest dimension
+ * is less than 20% of the bounding box's largest dimension
  */
 export function isMostlyClosed(points: Point[]): { closed: boolean; distance: number; threshold: number; maxDim: number } {
     if (points.length < 3) {
@@ -204,7 +186,7 @@ export function isMostlyClosed(points: Point[]): { closed: boolean; distance: nu
     const dy = end.y - start.y;
     const closureDistance = Math.sqrt(dx * dx + dy * dy);
 
-    const threshold = 0.15 * maxDimension;  // Increased to 15%
+    const threshold = 0.20 * maxDimension;  // 20% threshold
     const closed = closureDistance < threshold;
 
     return { closed, distance: closureDistance, threshold, maxDim: maxDimension };

@@ -977,48 +977,6 @@ function fitStroke(stroke: Stroke): void {
 
         showDebug(`Circle: err=${circleFit.error.toFixed(2)}`);
 
-        // VERIFICATION: Calculate circle error using ellipse distance method
-        // Treat circle as ellipse with radiusX = radiusY = radius
-        const circleAsEllipse = {
-            center: circleFit.center,
-            radiusX: circleFit.radius,
-            radiusY: circleFit.radius,
-            rotation: 0
-        };
-
-        let ellipseMethodError = 0;
-        for (const p of resampled) {
-            // Use the ellipse distance calculation from ellipseFitter
-            const dx = p.x - circleAsEllipse.center.x;
-            const dy = p.y - circleAsEllipse.center.y;
-            const a = circleAsEllipse.radiusX;
-            const b = circleAsEllipse.radiusY;
-
-            // Initial guess
-            let t = Math.atan2(dy / b, dx / a);
-
-            // Gradient descent
-            for (let iter = 0; iter < 10; iter++) {
-                const ex = a * Math.cos(t);
-                const ey = b * Math.sin(t);
-                const vx = dx - ex;
-                const vy = dy - ey;
-                const tx = -a * Math.sin(t);
-                const ty = b * Math.cos(t);
-                const gradient = vx * tx + vy * ty;
-                t += 0.5 * gradient / (tx * tx + ty * ty + 1e-10);
-                if (Math.abs(gradient) < 1e-6) break;
-            }
-
-            const ex = a * Math.cos(t);
-            const ey = b * Math.sin(t);
-            const dist = Math.sqrt((dx - ex) * (dx - ex) + (dy - ey) * (dy - ey));
-            ellipseMethodError += dist * dist;
-        }
-        ellipseMethodError /= resampled.length;
-
-        showDebug(`Circle error check:\nCircleFit: ${circleFit.error.toFixed(2)}\nEllipse method: ${ellipseMethodError.toFixed(2)}`);
-
         // Step 2: Fit ellipse
         const ellipseFit = fitEllipse(resampled);
 
