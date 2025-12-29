@@ -7,6 +7,7 @@ import { resampleStroke } from './resample';
 import { fitCircle, generateCirclePoints, isMostlyClosed } from './fitters/circleFitter';
 import { fitEllipse, generateEllipsePoints } from './fitters/ellipseFitter';
 import { fitSquare, generateRectanglePoints } from './fitters/squareFitter';
+import { fitPolyline, generatePolylinePoints } from './fitters/polylineFitter';
 
 // ============================================================================
 // DOM ELEMENTS
@@ -994,8 +995,23 @@ function fitStroke(stroke: Stroke): void {
         const squarenessThreshold = 0.20;
         stroke.fitType = squareFit.squareness < squarenessThreshold ? 'square' : 'rectangle';
     } else {
-        // For open strokes, we'll add line fitting later
-        showDebug('Open stroke - line fit TODO');
+        // For open strokes, use polyline fitting with RDP algorithm
+        const polylineFit = fitPolyline(resampled, stroke.size);
+
+        if (!polylineFit) {
+            showDebug('Polyline fit failed!');
+            return;
+        }
+
+        // Display debug info for polyline fit
+        let debugText = `Polyline fit: ${polylineFit.segments} segments`;
+        debugText += `\nMax error: ${polylineFit.error.toFixed(2)}`;
+        debugText += `\nEpsilon used: ${(2 * stroke.size).toFixed(2)}`;
+        showDebug(debugText);
+
+        // Use the simplified polyline points
+        stroke.fittedPoints = generatePolylinePoints(polylineFit.points);
+        stroke.fitType = 'polyline';
     }
 }
 
