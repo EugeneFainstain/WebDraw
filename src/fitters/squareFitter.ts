@@ -80,22 +80,92 @@ export function fitSquare(points: Point[]): SquareFit | null {
     }
 
     // Step 3: Use the average of width and height as the side length for a square
-    const sideLength = (bestWidth + bestHeight) / 2;
+    let sideLength = (bestWidth + bestHeight) / 2;
+    let rotation = bestRotation;
 
-    // Calculate error using bidirectional Hausdorff distance
-    const distanceToSquareFn = (p: Point) => distanceToSquare(p, center, sideLength, bestRotation);
+    // Step 4: Iterative refinement - alternate between optimizing size and angle
+    const numOuterIterations = 3;
+    const maxSizeSteps = 5;
+    const maxAngleSteps = 5;
+    const epsilon = 0.001;
 
-    // Generate sample points on the square boundary
-    const squareSamplePoints = generateSquarePoints(center, sideLength, bestRotation, 64);
+    for (let outerIter = 0; outerIter < numOuterIterations; outerIter++) {
+        // Step 4a: Optimize side length
+        for (let sizeIter = 0; sizeIter < maxSizeSteps; sizeIter++) {
+            const currentError = calculateSquareError(points, center, sideLength, rotation);
 
-    const error = calculateShapeError(points, distanceToSquareFn, squareSamplePoints);
+            // Calculate numerical gradient with respect to side length
+            const deltaSide = sideLength * 0.01;
+            const errorPlus = calculateSquareError(points, center, sideLength + deltaSide, rotation);
+            const errorMinus = calculateSquareError(points, center, sideLength - deltaSide, rotation);
+            const gradient = (errorPlus - errorMinus) / (2 * deltaSide);
+
+            // Gradient descent step
+            const learningRate = 0.1;
+            const newSideLength = sideLength - learningRate * gradient;
+
+            // Only accept if it improves error
+            const newError = calculateSquareError(points, center, newSideLength, rotation);
+            if (newError < currentError) {
+                sideLength = newSideLength;
+                if (Math.abs(newError - currentError) < epsilon) {
+                    break;
+                }
+            } else {
+                break; // No improvement, stop size optimization
+            }
+        }
+
+        // Step 4b: Optimize rotation angle
+        for (let angleIter = 0; angleIter < maxAngleSteps; angleIter++) {
+            const currentError = calculateSquareError(points, center, sideLength, rotation);
+
+            // Calculate numerical gradient with respect to rotation
+            const deltaAngle = 0.01; // ~0.57 degrees
+            const errorPlus = calculateSquareError(points, center, sideLength, rotation + deltaAngle);
+            const errorMinus = calculateSquareError(points, center, sideLength, rotation - deltaAngle);
+            const gradient = (errorPlus - errorMinus) / (2 * deltaAngle);
+
+            // Gradient descent step
+            const learningRate = 0.1;
+            const newRotation = rotation - learningRate * gradient;
+
+            // Only accept if it improves error
+            const newError = calculateSquareError(points, center, sideLength, newRotation);
+            if (newError < currentError) {
+                rotation = newRotation;
+                if (Math.abs(newError - currentError) < epsilon) {
+                    break;
+                }
+            } else {
+                break; // No improvement, stop angle optimization
+            }
+        }
+    }
+
+    // Calculate final error
+    const error = calculateSquareError(points, center, sideLength, rotation);
 
     return {
         center,
         sideLength,
-        rotation: bestRotation,
+        rotation,
         error
     };
+}
+
+/**
+ * Calculate error for a square fit using bidirectional Hausdorff distance
+ */
+function calculateSquareError(
+    points: Point[],
+    center: Point,
+    sideLength: number,
+    rotation: number
+): number {
+    const distanceToSquareFn = (p: Point) => distanceToSquare(p, center, sideLength, rotation);
+    const squareSamplePoints = generateSquarePoints(center, sideLength, rotation, 64);
+    return calculateShapeError(points, distanceToSquareFn, squareSamplePoints);
 }
 
 /**
