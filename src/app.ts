@@ -48,6 +48,7 @@ interface Stroke {
     fittedPoints?: Point[];       // Fitted analytical curve points
     fitType?: string;             // Type of fit: 'circle', 'ellipse', 'line', etc.
     showingFitted?: boolean;      // True if currently showing fitted version
+    fittedWithSize?: number;      // Stroke size used when fitting (for polylines)
 }
 
 // ============================================================================
@@ -1012,6 +1013,7 @@ function fitStroke(stroke: Stroke): void {
         // Use the simplified polyline points
         stroke.fittedPoints = generatePolylinePoints(polylineFit.points);
         stroke.fitType = 'polyline';
+        stroke.fittedWithSize = stroke.size;  // Track the size used for fitting
     }
 }
 
@@ -1329,8 +1331,12 @@ fitBtn.addEventListener('click', () => {
 
         showDebug(`Selected: idx=${selectedStrokeIdx}\nPoints: ${stroke.points.length}\nHas fit: ${!!stroke.fittedPoints}`);
 
-        // If fit mode is ON and stroke hasn't been fitted yet, fit it now
-        if (isFitMode && !stroke.fittedPoints) {
+        // If fit mode is ON and stroke hasn't been fitted yet, or if it's a polyline
+        // that was fitted with a different stroke size, fit it now
+        const needsRefit = !stroke.fittedPoints ||
+                          (stroke.fitType === 'polyline' && stroke.fittedWithSize !== stroke.size);
+
+        if (isFitMode && needsRefit) {
             fitStroke(stroke);
         }
 
