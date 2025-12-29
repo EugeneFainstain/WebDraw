@@ -6,6 +6,7 @@ import { EventHandler, Point } from './eventHandler';
 import { resampleStroke } from './resample';
 import { fitCircle, generateCirclePoints, isMostlyClosed } from './fitters/circleFitter';
 import { fitEllipse, generateEllipsePoints } from './fitters/ellipseFitter';
+import { fitSquare, generateSquarePoints } from './fitters/squareFitter';
 
 // ============================================================================
 // DOM ELEMENTS
@@ -963,44 +964,32 @@ function fitStroke(stroke: Stroke): void {
     const closureInfo = isMostlyClosed(resampled);
 
     if (closureInfo.closed) {
-        // Step 1: Fit circle first
+        // Fit all three shapes: circle, ellipse, and square/rectangle
         const circleFit = fitCircle(resampled);
+        const ellipseFit = fitEllipse(resampled);
+        const squareFit = fitSquare(resampled);
 
-        if (!circleFit) {
-            showDebug('Circle fit failed!');
+        if (!circleFit || !ellipseFit || !squareFit) {
+            showDebug('One or more fits failed!');
             return;
         }
 
-        // Step 2: Fit ellipse
-        const ellipseFit = fitEllipse(resampled);
+        // Display debug info for all fits
+        let debugText = `Circle fit error: ${circleFit.error.toFixed(2)}`;
+        debugText += `\nEllipticity: ${ellipseFit.ellipticity.toFixed(3)}`;
+        debugText += `\nEllipse err before 1D: ${ellipseFit.debugInfo?.errorBefore1D.toFixed(2)}`;
+        debugText += `\nEllipse err after 1D: ${ellipseFit.debugInfo?.errorAfter1D.toFixed(2)}`;
+        debugText += `\nSquare fit error: ${squareFit.error.toFixed(2)}`;
+        showDebug(debugText);
 
-        if (ellipseFit) {
-            // Display closed shape debug info
-            showDebug(`Circle fit error: ${circleFit.error.toFixed(2)}\nEllipticity: ${ellipseFit.ellipticity.toFixed(3)}\nEllipse err before 1D: ${ellipseFit.debugInfo?.errorBefore1D.toFixed(2)}\nEllipse err after 1D: ${ellipseFit.debugInfo?.errorAfter1D.toFixed(2)}`);
-
-            // Choose between circle and ellipse based on ellipticity
-            const ellipticityThreshold = 0.20;
-            if (ellipseFit.ellipticity < ellipticityThreshold) {
-                // Use circle fit (shape is nearly circular)
-                stroke.fittedPoints = generateCirclePoints(circleFit.center, circleFit.radius, 64);
-                stroke.fitType = 'circle';
-            } else {
-                // Use ellipse fit (shape is significantly elliptical)
-                stroke.fittedPoints = generateEllipsePoints(
-                    ellipseFit.center,
-                    ellipseFit.radiusX,
-                    ellipseFit.radiusY,
-                    ellipseFit.rotation,
-                    64
-                );
-                stroke.fitType = 'ellipse';
-            }
-        } else {
-            // Ellipse fit failed, use circle
-            showDebug(`Circle fit error: ${circleFit.error.toFixed(2)}`);
-            stroke.fittedPoints = generateCirclePoints(circleFit.center, circleFit.radius, 64);
-            stroke.fitType = 'circle';
-        }
+        // DEBUG: Always use square fit (for debugging)
+        stroke.fittedPoints = generateSquarePoints(
+            squareFit.center,
+            squareFit.sideLength,
+            squareFit.rotation,
+            64
+        );
+        stroke.fitType = 'square';
     } else {
         // For open strokes, we'll add line fitting later
         showDebug('Open stroke - line fit TODO');
