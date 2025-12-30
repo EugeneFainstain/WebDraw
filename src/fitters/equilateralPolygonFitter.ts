@@ -552,18 +552,44 @@ function generateRegularStar(
 
 /**
  * Calculate error between RDP vertices and regular polygon vertices
- * Uses simple sum of squared distances
+ * Uses bidirectional Hausdorff distance with brute-force alignment search
  */
 function calculatePolygonError(rdpVertices: Point[], regularVertices: Point[]): number {
-    let totalError = 0;
-
-    for (let i = 0; i < rdpVertices.length; i++) {
-        const dx = rdpVertices[i].x - regularVertices[i].x;
-        const dy = rdpVertices[i].y - regularVertices[i].y;
-        totalError += dx * dx + dy * dy;
+    const n = rdpVertices.length;
+    if (n !== regularVertices.length) {
+        return Infinity;
     }
 
-    return totalError;
+    // Forward direction: shape (regularVertices) -> rdp
+    // For each point in shape, find the closest point in rdp
+    let maxShapeToRdp = 0;
+    for (const shapePoint of regularVertices) {
+        let minDistSquared = Infinity;
+        for (const rdpPoint of rdpVertices) {
+            const dx = shapePoint.x - rdpPoint.x;
+            const dy = shapePoint.y - rdpPoint.y;
+            const distSquared = dx * dx + dy * dy;
+            minDistSquared = Math.min(minDistSquared, distSquared);
+        }
+        maxShapeToRdp = Math.max(maxShapeToRdp, minDistSquared);
+    }
+
+    // Reverse direction: rdp -> shape (regularVertices)
+    // For each point in rdp, find the closest point in shape
+    let maxRdpToShape = 0;
+    for (const rdpPoint of rdpVertices) {
+        let minDistSquared = Infinity;
+        for (const shapePoint of regularVertices) {
+            const dx = rdpPoint.x - shapePoint.x;
+            const dy = rdpPoint.y - shapePoint.y;
+            const distSquared = dx * dx + dy * dy;
+            minDistSquared = Math.min(minDistSquared, distSquared);
+        }
+        maxRdpToShape = Math.max(maxRdpToShape, minDistSquared);
+    }
+
+    // Return the maximum of both directions (bidirectional Hausdorff distance squared)
+    return Math.max(maxShapeToRdp, maxRdpToShape);
 }
 
 /**
