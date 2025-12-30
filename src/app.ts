@@ -1014,10 +1014,13 @@ function fitStroke(stroke: Stroke): void {
                 ? 'Polygon'
                 : polygonFit.shapeType === 'star'
                 ? 'Star'
-                : 'Self-crossing star';
+                : 'X-Star';
             debugText += `\n${shapeLabel}: ${polygonFit.sides} ${polygonFit.shapeType === 'polygon' ? 'sides' : 'points'}`;
             if (polygonFit.innerRadius !== undefined) {
                 debugText += `\nOuter R: ${polygonFit.radius.toFixed(1)}, Inner R: ${polygonFit.innerRadius.toFixed(1)}`;
+            }
+            if (polygonFit.stepPattern !== undefined) {
+                debugText += `\nStep: ${polygonFit.stepPattern}/${polygonFit.sides}`;
             }
         }
 

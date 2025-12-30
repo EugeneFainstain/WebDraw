@@ -21,6 +21,7 @@ export interface EquilateralPolygonFit {
     rotation: number;        // Rotation angle in radians
     sides: number;           // Number of sides (for polygons) or points (for stars)
     shapeType: ShapeType;    // Type of shape detected
+    stepPattern?: number;    // Step pattern for self-crossing stars (undefined for polygons/regular stars)
     error: number;           // Fitting error
 }
 
@@ -45,7 +46,7 @@ export function fitEquilateralPolygon(
         return null;
     }
 
-    // Extract vertices (remove duplicate last point if closed)
+    // Extract vertices (keep duplicate last point for error calculation)
     let vertices = [...polylineFit.points];
     const n = vertices.length;
 
@@ -55,29 +56,29 @@ export function fitEquilateralPolygon(
     vertices[0] = { x: avgX, y: avgY };
     vertices[n - 1] = { x: avgX, y: avgY };
 
-    // Remove the duplicate last point for processing
-    const workingVertices = vertices.slice(0, -1);
-    const numVertices = workingVertices.length;
+    // Number of unique vertices (excluding duplicate last point)
+    const numVertices = n - 1;
 
-    // Step 2: Calculate geometric center
+    // Step 2: Calculate geometric center (excluding duplicate last point)
     let centerX = 0, centerY = 0;
-    for (const v of workingVertices) {
-        centerX += v.x;
-        centerY += v.y;
+    for (let i = 0; i < numVertices; i++) {
+        centerX += vertices[i].x;
+        centerY += vertices[i].y;
     }
     centerX /= numVertices;
     centerY /= numVertices;
     let center: Point = { x: centerX, y: centerY };
 
-    // Step 3: Analyze vertex distances from center
-    const distances = workingVertices.map(v => {
-        const dx = v.x - center.x;
-        const dy = v.y - center.y;
-        return Math.sqrt(dx * dx + dy * dy);
-    });
+    // Step 3: Analyze vertex distances from center (excluding duplicate last point)
+    const distances: number[] = [];
+    for (let i = 0; i < numVertices; i++) {
+        const dx = vertices[i].x - center.x;
+        const dy = vertices[i].y - center.y;
+        distances.push(Math.sqrt(dx * dx + dy * dy));
+    }
 
     // Step 4: Classify shape type based on distance distribution
-    const classification = classifyShape(distances, workingVertices, center);
+    const classification = classifyShape(distances, vertices, center, numVertices);
 
     // Step 5: Generate initial shape based on classification
     let regularVertices: Point[];
@@ -86,6 +87,8 @@ export function fitEquilateralPolygon(
     let rotation: number;
     let numSides: number;
 
+    let stepPattern = 2; // Default step pattern for self-crossing stars
+
     if (classification.type === 'polygon') {
         // All vertices at same distance
         radius = classification.outerRadius;
@@ -93,8 +96,8 @@ export function fitEquilateralPolygon(
         numSides = numVertices;
 
         // Use the first vertex as reference for rotation
-        const firstDx = workingVertices[0].x - center.x;
-        const firstDy = workingVertices[0].y - center.y;
+        const firstDx = vertices[0].x - center.x;
+        const firstDy = vertices[0].y - center.y;
         rotation = Math.atan2(firstDy, firstDx);
 
         regularVertices = generateRegularPolygon(center, radius, rotation, numSides);
@@ -106,17 +109,20 @@ export function fitEquilateralPolygon(
 
         // Use the first outer vertex as reference for rotation
         const firstOuterIdx = classification.outerIndices[0];
-        const firstDx = workingVertices[firstOuterIdx].x - center.x;
-        const firstDy = workingVertices[firstOuterIdx].y - center.y;
+        const firstDx = vertices[firstOuterIdx].x - center.x;
+        const firstDy = vertices[firstOuterIdx].y - center.y;
         rotation = Math.atan2(firstDy, firstDx);
 
         const isSelfCrossing = classification.type === 'self-crossing-star';
-        regularVertices = generateRegularStar(center, radius, innerRadius, rotation, numSides, isSelfCrossing);
+        if (isSelfCrossing && classification.stepPattern) {
+            stepPattern = classification.stepPattern;
+        }
+        regularVertices = generateRegularStar(center, radius, innerRadius, rotation, numSides, isSelfCrossing, stepPattern);
     }
 
     // Step 6: Iterative refinement
-    // We're fitting the regular shape to the RDP vertices (not original stroke)
-    const rdpVertices = workingVertices;
+    // We're fitting the regular shape to the RDP vertices (first numVertices only, excluding duplicate last)
+    const rdpVertices = vertices.slice(0, numVertices);
 
     // 3 loops of alternating optimizations
     for (let loop = 0; loop < 3; loop++) {
@@ -134,8 +140,8 @@ export function fitEquilateralPolygon(
                 smallerVertices = generateRegularPolygon(center, radius - delta, rotation, numSides);
             } else {
                 const isSelfCrossing = classification.type === 'self-crossing-star';
-                largerVertices = generateRegularStar(center, radius + delta, innerRadius!, rotation, numSides, isSelfCrossing);
-                smallerVertices = generateRegularStar(center, radius - delta, innerRadius!, rotation, numSides, isSelfCrossing);
+                largerVertices = generateRegularStar(center, radius + delta, innerRadius!, rotation, numSides, isSelfCrossing, stepPattern);
+                smallerVertices = generateRegularStar(center, radius - delta, innerRadius!, rotation, numSides, isSelfCrossing, stepPattern);
             }
 
             const largerError = calculatePolygonError(rdpVertices, largerVertices);
@@ -161,8 +167,8 @@ export function fitEquilateralPolygon(
                 // Try slightly larger and smaller inner radii
                 const delta = innerRadius * 0.02;
                 const isSelfCrossing = classification.type === 'self-crossing-star';
-                const largerVertices = generateRegularStar(center, radius, innerRadius + delta, rotation, numSides, isSelfCrossing);
-                const smallerVertices = generateRegularStar(center, radius, innerRadius - delta, rotation, numSides, isSelfCrossing);
+                const largerVertices = generateRegularStar(center, radius, innerRadius + delta, rotation, numSides, isSelfCrossing, stepPattern);
+                const smallerVertices = generateRegularStar(center, radius, innerRadius - delta, rotation, numSides, isSelfCrossing, stepPattern);
 
                 const largerError = calculatePolygonError(rdpVertices, largerVertices);
                 const smallerError = calculatePolygonError(rdpVertices, smallerVertices);
@@ -194,8 +200,8 @@ export function fitEquilateralPolygon(
                 ccwVertices = generateRegularPolygon(center, radius, rotation - angleDelta, numSides);
             } else {
                 const isSelfCrossing = classification.type === 'self-crossing-star';
-                cwVertices = generateRegularStar(center, radius, innerRadius!, rotation + angleDelta, numSides, isSelfCrossing);
-                ccwVertices = generateRegularStar(center, radius, innerRadius!, rotation - angleDelta, numSides, isSelfCrossing);
+                cwVertices = generateRegularStar(center, radius, innerRadius!, rotation + angleDelta, numSides, isSelfCrossing, stepPattern);
+                ccwVertices = generateRegularStar(center, radius, innerRadius!, rotation - angleDelta, numSides, isSelfCrossing, stepPattern);
             }
 
             const cwError = calculatePolygonError(rdpVertices, cwVertices);
@@ -228,6 +234,7 @@ export function fitEquilateralPolygon(
         rotation,
         sides: numSides,
         shapeType: classification.type,
+        stepPattern: classification.type === 'self-crossing-star' ? stepPattern : undefined,
         error: finalError
     };
 }
@@ -241,18 +248,20 @@ interface ShapeClassification {
     innerRadius?: number;
     outerIndices: number[];
     innerIndices?: number[];
+    stepPattern?: number;  // For self-crossing stars
 }
 
 /**
  * Classify shape based on vertex distance distribution
  *
- * @param distances - Distances from center to each vertex
- * @param vertices - Vertex positions
+ * @param distances - Distances from center to each vertex (excluding duplicate last)
+ * @param vertices - Vertex positions (including duplicate last point)
  * @param center - Shape center
+ * @param numVertices - Number of unique vertices (excluding duplicate last)
  * @returns Classification result
  */
-function classifyShape(distances: number[], vertices: Point[], center: Point): ShapeClassification {
-    const n = distances.length;
+function classifyShape(distances: number[], vertices: Point[], center: Point, numVertices: number): ShapeClassification {
+    const n = numVertices;
 
     // Sort distances to find clusters
     const sortedDistances = [...distances].sort((a, b) => a - b);
@@ -319,14 +328,92 @@ function classifyShape(distances: number[], vertices: Point[], center: Point): S
         };
     } else {
         // Self-crossing star (like a pentagram)
+        // Try different step patterns to find the best fit
+        const numPoints = upperGroup.length; // Number of outer points
+        const bestPattern = findBestStepPattern(vertices, center, outerRadius, innerRadius, numPoints, numVertices);
+
         return {
             type: 'self-crossing-star',
             outerRadius,
             innerRadius,
             outerIndices: upperIndices,
-            innerIndices: lowerIndices
+            innerIndices: lowerIndices,
+            stepPattern: bestPattern
         };
     }
+}
+
+/**
+ * Find the best step pattern for a self-crossing star by trying all valid patterns
+ *
+ * @param vertices - The RDP vertices (including duplicate last point)
+ * @param center - Center of the shape
+ * @param outerRadius - Outer radius
+ * @param innerRadius - Inner radius
+ * @param numPoints - Number of outer points
+ * @param numVertices - Number of unique vertices (excluding duplicate last)
+ * @returns The step pattern that gives the best fit
+ */
+function findBestStepPattern(
+    vertices: Point[],
+    center: Point,
+    outerRadius: number,
+    innerRadius: number,
+    numPoints: number,
+    numVertices: number
+): number {
+    let bestStep = 2; // Default to 2 (most common for pentagrams)
+    let bestError = Infinity;
+
+    // Use the first vertex to determine rotation
+    const firstDx = vertices[0].x - center.x;
+    const firstDy = vertices[0].y - center.y;
+    const rotation = Math.atan2(firstDy, firstDx);
+
+    // Extract only unique vertices for error calculation
+    const rdpVertices = vertices.slice(0, numVertices);
+
+    // Try different step patterns from 2 to numPoints-1
+    // Step pattern of 1 would be a regular polygon (non-crossing)
+    for (let step = 2; step < numPoints; step++) {
+        // Skip patterns that don't visit all points (non-coprime with numPoints)
+        if (gcd(step, numPoints) !== 1) {
+            continue;
+        }
+
+        // Generate a test star with this step pattern
+        const testVertices = generateRegularStar(
+            center,
+            outerRadius,
+            innerRadius,
+            rotation,
+            numPoints,
+            true, // self-crossing
+            step
+        );
+
+        // Calculate error between RDP vertices and test vertices
+        const error = calculatePolygonError(rdpVertices, testVertices);
+
+        if (error < bestError) {
+            bestError = error;
+            bestStep = step;
+        }
+    }
+
+    return bestStep;
+}
+
+/**
+ * Calculate greatest common divisor (for step pattern validation)
+ */
+function gcd(a: number, b: number): number {
+    while (b !== 0) {
+        const temp = b;
+        b = a % b;
+        a = temp;
+    }
+    return a;
 }
 
 /**
@@ -382,6 +469,7 @@ function generateRegularPolygon(
  * @param rotation - Rotation angle in radians
  * @param numPoints - Number of points (outer vertices) on the star
  * @param selfCrossing - If true, create self-crossing star (pentagram style)
+ * @param stepPattern - For self-crossing stars, the vertex step pattern (default: 2)
  * @returns Array of vertices alternating between outer and inner points
  */
 function generateRegularStar(
@@ -390,14 +478,14 @@ function generateRegularStar(
     innerRadius: number,
     rotation: number,
     numPoints: number,
-    selfCrossing: boolean
+    selfCrossing: boolean,
+    stepPattern: number = 2
 ): Point[] {
     const vertices: Point[] = [];
     const numVertices = numPoints * 2; // Total vertices (outer + inner)
 
     if (selfCrossing) {
         // Self-crossing star (pentagram style)
-        // Connect every other outer point, creating intersections
         // Generate outer points first
         const outerPoints: Point[] = [];
         const angleStep = (2 * Math.PI) / numPoints;
@@ -410,18 +498,35 @@ function generateRegularStar(
             });
         }
 
-        // For a self-crossing star, we connect points in a specific order
-        // For a 5-point star: connect point 0 -> 2 -> 4 -> 1 -> 3 -> 0
-        // The inner vertices are where the lines cross
-        const connectionStep = Math.floor(numPoints / 2); // Usually 2 for pentagon -> pentagram
-
+        // Visit outer points in step pattern order to create the star
+        const visitOrder: number[] = [];
+        let current = 0;
         for (let i = 0; i < numPoints; i++) {
-            // Add outer point
-            vertices.push(outerPoints[i]);
+            visitOrder.push(current);
+            current = (current + stepPattern) % numPoints;
+        }
 
-            // Calculate inner point (intersection point)
-            // For simplicity, place inner points at innerRadius at offset angle
-            const innerAngle = rotation + (i + 0.5) * angleStep;
+        // Generate vertices by visiting outer points in order and placing inner points between them
+        for (let i = 0; i < numPoints; i++) {
+            const idx = visitOrder[i];
+            const nextIdx = visitOrder[(i + 1) % numPoints];
+
+            // Add outer point
+            vertices.push(outerPoints[idx]);
+
+            // Calculate inner point between current and next outer point
+            const currentAngle = rotation + idx * angleStep;
+            const nextAngle = rotation + nextIdx * angleStep;
+
+            // Inner point angle is between current and next visited outer points
+            let innerAngle = (currentAngle + nextAngle) / 2;
+
+            // Handle wraparound case
+            const angleDiff = nextAngle - currentAngle;
+            if (Math.abs(angleDiff) > Math.PI) {
+                innerAngle += Math.PI;
+            }
+
             vertices.push({
                 x: center.x + innerRadius * Math.cos(innerAngle),
                 y: center.y + innerRadius * Math.sin(innerAngle)
