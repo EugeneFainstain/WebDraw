@@ -22,6 +22,7 @@ const delBtn = document.getElementById('delBtn') as HTMLButtonElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 const gridToggleBtn = document.getElementById('gridToggle') as HTMLButtonElement;
 const fitBtn = document.getElementById('fitBtn') as HTMLButtonElement;
+const btnDup = document.getElementById('btnDup') as HTMLButtonElement;
 const debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
 
 // Debug helper
@@ -1227,6 +1228,9 @@ function updateDelButton() {
         delBtn.disabled = false;
         delBtn.textContent = 'Undo';
     }
+
+    // Update duplicate button state - only enabled when a stroke is selected
+    btnDup.disabled = selectedStrokeIdx === null;
 }
 
 function processDelete() {
@@ -1336,6 +1340,110 @@ function processClear() {
     // Reset state machine and event handler
     stateMachine.reset();
     eventHandler.reset();
+}
+
+function duplicateSelectedStroke() {
+    if (selectedStrokeIdx === null || selectedStrokeIdx >= strokeHistory.length) {
+        showDebug('No stroke selected to duplicate!');
+        return;
+    }
+
+    const sourceStroke = strokeHistory[selectedStrokeIdx];
+
+    // Calculate bounding box of the source stroke
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const point of sourceStroke.points) {
+        minX = Math.min(minX, point.x);
+        minY = Math.min(minY, point.y);
+        maxX = Math.max(maxX, point.x);
+        maxY = Math.max(maxY, point.y);
+    }
+
+    const centerX = (minX + maxX) / 2;
+    const width = maxX - minX;
+    const height = maxY - minY;
+
+    // Mirror points around vertical line through center, then offset
+    const offsetX = width * 0.25;  // Right by 1/4 of bounding box width
+    const offsetY = -height * 0.5;  // Up by 1/2 of bounding box height
+
+    const duplicatedPoints = sourceStroke.points.map(point => {
+        // Mirror around vertical line (x = centerX)
+        const mirroredX = centerX - (point.x - centerX);
+
+        // Apply offset
+        return {
+            x: mirroredX + offsetX,
+            y: point.y + offsetY
+        };
+    });
+
+    // Create the duplicated stroke
+    const duplicatedStroke: Stroke = {
+        color: sourceStroke.color,
+        size: sourceStroke.size,
+        points: duplicatedPoints
+    };
+
+    // Copy fitted data if it exists
+    if (sourceStroke.originalPoints) {
+        const duplicatedOriginalPoints = sourceStroke.originalPoints.map(point => {
+            const mirroredX = centerX - (point.x - centerX);
+            return {
+                x: mirroredX + offsetX,
+                y: point.y + offsetY
+            };
+        });
+        duplicatedStroke.originalPoints = duplicatedOriginalPoints;
+    }
+
+    if (sourceStroke.fittedPoints) {
+        const duplicatedFittedPoints = sourceStroke.fittedPoints.map(point => {
+            const mirroredX = centerX - (point.x - centerX);
+            return {
+                x: mirroredX + offsetX,
+                y: point.y + offsetY
+            };
+        });
+        duplicatedStroke.fittedPoints = duplicatedFittedPoints;
+    }
+
+    if (sourceStroke.fitType) {
+        duplicatedStroke.fitType = sourceStroke.fitType;
+    }
+
+    if (sourceStroke.showingFitted !== undefined) {
+        duplicatedStroke.showingFitted = sourceStroke.showingFitted;
+    }
+
+    if (sourceStroke.fittedWithSize !== undefined) {
+        duplicatedStroke.fittedWithSize = sourceStroke.fittedWithSize;
+    }
+
+    // Add the duplicated stroke to history
+    strokeHistory.push(duplicatedStroke);
+
+    // Select the new stroke and move marker to its last point
+    selectedStrokeIdx = strokeHistory.length - 1;
+    if (duplicatedPoints.length > 0) {
+        selectedStrokePointIdx = duplicatedPoints.length - 1;
+        indicatorAnchor = { ...duplicatedPoints[duplicatedPoints.length - 1] };
+        selectedStrokeMarkerPos = { ...indicatorAnchor };
+        panToKeepIndicatorInView();
+    }
+
+    // Update pickers to match the duplicated stroke
+    updatePickersForSelectedStroke();
+
+    // Exit fresh stroke mode
+    isFreshStroke = false;
+
+    // Clear transformation undo state
+    transformSnapshot = null;
+    hasUndoableTransform = false;
+
+    updateDelButton();
+    redraw();
 }
 
 // ============================================================================
@@ -1494,6 +1602,10 @@ gridToggleBtn.addEventListener('click', () => {
         indicatorAnchor = snapToGrid(indicatorAnchor);
     }
     redraw();
+});
+
+btnDup.addEventListener('click', () => {
+    duplicateSelectedStroke();
 });
 
 fitBtn.addEventListener('click', () => {
