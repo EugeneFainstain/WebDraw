@@ -93,46 +93,112 @@ export function fitEllipse(points: Point[]): EllipseFit | null {
         rotation += Math.PI / 2;
     }
 
-    // Step 4: Refine radiusX using 1D gradient descent with max error
-    // This helps with highly eccentric ellipses where the initial guess underestimates
+    // Step 4: Refine all parameters using gradient descent
     const errorBeforeOptimization = calculateEllipseError(points, center, radiusX, radiusY, rotation);
 
-    const maxIterations = 20;
-    let learningRate1D = 0.1;
+    const numOuterIterations = 3;
+    const maxSteps = 5;
     const epsilon = 0.001;
 
-    for (let iter = 0; iter < maxIterations; iter++) {
-        const currentError = calculateEllipseError(points, center, radiusX, radiusY, rotation);
+    for (let outerIter = 0; outerIter < numOuterIterations; outerIter++) {
+        // Optimize center X
+        for (let iter = 0; iter < maxSteps; iter++) {
+            const currentError = calculateEllipseError(points, center, radiusX, radiusY, rotation);
+            const delta = Math.max(1, Math.abs(center.x)) * 0.01;
+            const errorPlus = calculateEllipseError(points, { x: center.x + delta, y: center.y }, radiusX, radiusY, rotation);
+            const errorMinus = calculateEllipseError(points, { x: center.x - delta, y: center.y }, radiusX, radiusY, rotation);
+            const gradient = (errorPlus - errorMinus) / (2 * delta);
 
-        // Calculate numerical gradient with respect to radiusX
-        const deltaRx = radiusX * 0.01;
-        const errorPlus = calculateEllipseError(points, center, radiusX + deltaRx, radiusY, rotation);
-        const errorMinus = calculateEllipseError(points, center, radiusX - deltaRx, radiusY, rotation);
-        const gradient = (errorPlus - errorMinus) / (2 * deltaRx);
+            const learningRate = 0.1;
+            const newCenterX = center.x - learningRate * gradient;
+            const newError = calculateEllipseError(points, { x: newCenterX, y: center.y }, radiusX, radiusY, rotation);
 
-        // Backtracking line search with constraint
-        let stepSize = learningRate1D;
-        let accepted = false;
+            if (newError < currentError) {
+                center.x = newCenterX;
+                if (Math.abs(newError - currentError) < epsilon) break;
+            } else {
+                break;
+            }
+        }
 
-        for (let backtrack = 0; backtrack < 5; backtrack++) {
-            const newRadiusX = Math.max(radiusX - stepSize * gradient, radiusY);
+        // Optimize center Y
+        for (let iter = 0; iter < maxSteps; iter++) {
+            const currentError = calculateEllipseError(points, center, radiusX, radiusY, rotation);
+            const delta = Math.max(1, Math.abs(center.y)) * 0.01;
+            const errorPlus = calculateEllipseError(points, { x: center.x, y: center.y + delta }, radiusX, radiusY, rotation);
+            const errorMinus = calculateEllipseError(points, { x: center.x, y: center.y - delta }, radiusX, radiusY, rotation);
+            const gradient = (errorPlus - errorMinus) / (2 * delta);
+
+            const learningRate = 0.1;
+            const newCenterY = center.y - learningRate * gradient;
+            const newError = calculateEllipseError(points, { x: center.x, y: newCenterY }, radiusX, radiusY, rotation);
+
+            if (newError < currentError) {
+                center.y = newCenterY;
+                if (Math.abs(newError - currentError) < epsilon) break;
+            } else {
+                break;
+            }
+        }
+
+        // Optimize radiusX
+        for (let iter = 0; iter < maxSteps; iter++) {
+            const currentError = calculateEllipseError(points, center, radiusX, radiusY, rotation);
+            const delta = radiusX * 0.01;
+            const errorPlus = calculateEllipseError(points, center, radiusX + delta, radiusY, rotation);
+            const errorMinus = calculateEllipseError(points, center, radiusX - delta, radiusY, rotation);
+            const gradient = (errorPlus - errorMinus) / (2 * delta);
+
+            const learningRate = 0.1;
+            const newRadiusX = Math.max(radiusX - learningRate * gradient, radiusY);
             const newError = calculateEllipseError(points, center, newRadiusX, radiusY, rotation);
 
             if (newError < currentError) {
                 radiusX = newRadiusX;
-                accepted = true;
-
-                if (Math.abs(newError - currentError) < epsilon) {
-                    break;
-                }
+                if (Math.abs(newError - currentError) < epsilon) break;
+            } else {
                 break;
             }
-
-            stepSize *= 0.5;
         }
 
-        if (!accepted) {
-            break;
+        // Optimize radiusY
+        for (let iter = 0; iter < maxSteps; iter++) {
+            const currentError = calculateEllipseError(points, center, radiusX, radiusY, rotation);
+            const delta = radiusY * 0.01;
+            const errorPlus = calculateEllipseError(points, center, radiusX, radiusY + delta, rotation);
+            const errorMinus = calculateEllipseError(points, center, radiusX, radiusY - delta, rotation);
+            const gradient = (errorPlus - errorMinus) / (2 * delta);
+
+            const learningRate = 0.1;
+            const newRadiusY = Math.min(radiusY - learningRate * gradient, radiusX);
+            const newError = calculateEllipseError(points, center, radiusX, newRadiusY, rotation);
+
+            if (newError < currentError) {
+                radiusY = newRadiusY;
+                if (Math.abs(newError - currentError) < epsilon) break;
+            } else {
+                break;
+            }
+        }
+
+        // Optimize rotation
+        for (let iter = 0; iter < maxSteps; iter++) {
+            const currentError = calculateEllipseError(points, center, radiusX, radiusY, rotation);
+            const delta = 0.01;
+            const errorPlus = calculateEllipseError(points, center, radiusX, radiusY, rotation + delta);
+            const errorMinus = calculateEllipseError(points, center, radiusX, radiusY, rotation - delta);
+            const gradient = (errorPlus - errorMinus) / (2 * delta);
+
+            const learningRate = 0.1;
+            const newRotation = rotation - learningRate * gradient;
+            const newError = calculateEllipseError(points, center, radiusX, radiusY, newRotation);
+
+            if (newError < currentError) {
+                rotation = newRotation;
+                if (Math.abs(newError - currentError) < epsilon) break;
+            } else {
+                break;
+            }
         }
     }
 
