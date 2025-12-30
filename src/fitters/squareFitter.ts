@@ -12,8 +12,116 @@ export interface RectangleFit {
     width: number;     // Width (along major axis)
     height: number;    // Height (along minor axis)
     rotation: number;  // in radians
-    error: number;     // Mean squared error
+    error: number;     // Rectangle error (optimized width/height)
+    squareError: number; // Square error (forced equal dimensions)
     squareness: number; // 1 - (min/max side length). 0 = perfect square, approaching 1 = very rectangular
+}
+
+/**
+ * Fit a square to a set of points
+ * Algorithm:
+ * 1. Calculate centroid (geometric center)
+ * 2. Try multiple rotation angles and find the one with minimum bounding box area
+ * 3. Refine size and angle iteratively (constrained to square)
+ *
+ * @param points - Resampled stroke points
+ * @returns Square fit parameters and error metric
+ */
+export function fitSquareConstrained(points: Point[]): { center: Point; size: number; rotation: number; error: number } | null {
+    if (points.length < 4) {
+        return null;
+    }
+
+    // Step 1: Calculate centroid
+    let sumX = 0, sumY = 0;
+    for (const p of points) {
+        sumX += p.x;
+        sumY += p.y;
+    }
+    const center: Point = { x: sumX / points.length, y: sumY / points.length };
+
+    // Step 2: Find initial rotation using minimum bounding box
+    const numAngles = 90;
+    let bestRotation = 0;
+    let bestSize = 0;
+    let bestArea = Infinity;
+
+    for (let i = 0; i < numAngles; i++) {
+        const rotation = (i / numAngles) * (Math.PI / 2);
+        const cos_theta = Math.cos(-rotation);
+        const sin_theta = Math.sin(-rotation);
+
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+
+        for (const p of points) {
+            const dx = p.x - center.x;
+            const dy = p.y - center.y;
+            const x_rot = dx * cos_theta - dy * sin_theta;
+            const y_rot = dx * sin_theta + dy * cos_theta;
+            minX = Math.min(minX, x_rot);
+            maxX = Math.max(maxX, x_rot);
+            minY = Math.min(minY, y_rot);
+            maxY = Math.max(maxY, y_rot);
+        }
+
+        const width = maxX - minX;
+        const height = maxY - minY;
+        const size = Math.max(width, height); // Use max to ensure all points are inside
+        const area = size * size;
+
+        if (area < bestArea) {
+            bestArea = area;
+            bestRotation = rotation;
+            bestSize = size;
+        }
+    }
+
+    let size = bestSize;
+    let rotation = bestRotation;
+
+    // Step 3: Iterative refinement - alternate between size and angle
+    const numOuterIterations = 3;
+    const maxSizeSteps = 5;
+    const maxAngleSteps = 5;
+
+    for (let outerIter = 0; outerIter < numOuterIterations; outerIter++) {
+        // Optimize size
+        for (let sizeIter = 0; sizeIter < maxSizeSteps; sizeIter++) {
+            const currentError = calculateRectangleError(points, center, size, size, rotation);
+            const deltaSize = size * 0.01;
+            const errorPlus = calculateRectangleError(points, center, size + deltaSize, size + deltaSize, rotation);
+            const errorMinus = calculateRectangleError(points, center, size - deltaSize, size - deltaSize, rotation);
+
+            if (errorPlus < currentError && errorPlus < errorMinus) {
+                size += deltaSize;
+            } else if (errorMinus < currentError) {
+                size -= deltaSize;
+            } else {
+                break;
+            }
+        }
+
+        // Optimize angle
+        for (let angleIter = 0; angleIter < maxAngleSteps; angleIter++) {
+            const currentError = calculateRectangleError(points, center, size, size, rotation);
+            const deltaAngle = 0.01;
+            const errorPlus = calculateRectangleError(points, center, size, size, rotation + deltaAngle);
+            const errorMinus = calculateRectangleError(points, center, size, size, rotation - deltaAngle);
+
+            if (errorPlus < currentError && errorPlus < errorMinus) {
+                rotation += deltaAngle;
+            } else if (errorMinus < currentError) {
+                rotation -= deltaAngle;
+            } else {
+                break;
+            }
+        }
+    }
+
+    const error = calculateRectangleError(points, center, size, size, rotation);
+
+    return { center, size, rotation, error };
 }
 
 /**
@@ -179,12 +287,17 @@ export function fitSquare(points: Point[]): RectangleFit | null {
     const maxSide = Math.max(width, height);
     const squareness = 1 - (minSide / maxSide);
 
+    // Calculate square error using independent square fit
+    const squareFit = fitSquareConstrained(points);
+    const squareError = squareFit ? squareFit.error : error;
+
     return {
         center,
         width,
         height,
         rotation,
         error,
+        squareError,
         squareness
     };
 }

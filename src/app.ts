@@ -814,6 +814,19 @@ function addPointToStroke() {
 
         if (deltaFromLastX >= threshold || deltaFromLastY >= threshold) {
             const gridPoint = snapToGrid(indicatorAnchor);
+
+            // Add 9 interpolated points between last grid position and new grid point
+            const numInterpolated = 9;
+            for (let i = 1; i <= numInterpolated; i++) {
+                const t = i / (numInterpolated + 1);
+                const interpPoint = {
+                    x: lastGridPosition.x + t * (gridPoint.x - lastGridPosition.x),
+                    y: lastGridPosition.y + t * (gridPoint.y - lastGridPosition.y)
+                };
+                currentStroke.points.push(interpPoint);
+            }
+
+            // Add the actual grid point
             currentStroke.points.push(gridPoint);
             lastGridPosition = gridPoint;
             // Snap the marker to the grid point while drawing
@@ -965,33 +978,39 @@ function fitStroke(stroke: Stroke): void {
         stroke.originalPoints = stroke.points.map(p => ({ ...p }));
     }
 
-    // Resample with the same number of points as the original stroke
-    const targetPoints = stroke.originalPoints.length;
-    const resampled = resampleStroke(stroke.originalPoints, targetPoints);
+    // TEMPORARY: Skip resampling to avoid cutting corners on grid-drawn shapes
+    const points = stroke.originalPoints;
 
     // Check if stroke is mostly closed
-    const closureInfo = isMostlyClosed(resampled);
+    const closureInfo = isMostlyClosed(points);
 
     if (closureInfo.closed) {
         // Fit all shapes: circle, ellipse, square/rectangle, and equilateral polygon
-        const circleFit = fitCircle(resampled);
-        const ellipseFit = fitEllipse(resampled);
-        const squareFit = fitSquare(resampled);
-        const polygonFit = fitEquilateralPolygon(resampled, stroke.size);
+        const circleFit = fitCircle(points);
+        const ellipseFit = fitEllipse(points);
+        const squareFit = fitSquare(points);
+        const polygonFit = fitEquilateralPolygon(points, stroke.size);
 
         if (!circleFit || !ellipseFit || !squareFit) {
             showDebug('One or more fits failed!');
             return;
         }
 
-        // Display debug info - always show fit errors for all fitters
-        let debugText = `Circle: ${circleFit.error.toFixed(2)}`;
-        debugText += `\nEllipse: ${ellipseFit.error.toFixed(2)}`;
-        debugText += `\nRect: ${squareFit.error.toFixed(2)}`;
+        // Display debug info - show fit errors to determine which fitter to use
+        let debugText = `Points: ${points.length}`;
 
-        if (polygonFit) {
-            debugText += `\nPolygon: ${polygonFit.error.toFixed(2)}`;
-        }
+        // Get polyline fit for comparison
+        const polylineFit = fitPolyline(points, stroke.size);
+        const polylineErr = polylineFit ? polylineFit.error : Infinity;
+
+        // Line 1: Circle vs Ellipse
+        debugText += `\nCircle/Ellipse: ${Math.sqrt(circleFit.error).toFixed(1)}px/${Math.sqrt(ellipseFit.error).toFixed(1)}px`;
+
+        // Line 2: Square vs Rectangle
+        debugText += `\nSquare/Rect: ${Math.sqrt(squareFit.squareError).toFixed(1)}px/${Math.sqrt(squareFit.error).toFixed(1)}px`;
+
+        // Line 3: Polyline RDP
+        debugText += `\nPolyline: ${polylineErr.toFixed(1)}px (${polylineFit?.segments || 0} segs)`;
 
         // Detailed debug info for circle/ellipse fitter
         if (DEBUG_CIRCLE_ELLIPSE) {
@@ -1048,18 +1067,14 @@ function fitStroke(stroke: Stroke): void {
 
         showDebug(debugText);
 
-        // For now, always use equilateral polygon fit for closed strokes
-        if (polygonFit) {
-            stroke.fittedPoints = polygonFit.vertices;
-            const shapePrefix = polygonFit.shapeType === 'polygon'
-                ? 'polygon'
-                : polygonFit.shapeType === 'star'
-                ? 'star'
-                : 'x-star';
-            stroke.fitType = `${shapePrefix}-${polygonFit.sides}`;
-            stroke.fittedWithSize = stroke.size;  // Track the size used for fitting
+        // TEMPORARY: Display RDP polyline result instead of regularized polygon
+        const rdpFit = fitPolyline(points, stroke.size);
+        if (rdpFit) {
+            stroke.fittedPoints = generatePolylinePoints(rdpFit.points);
+            stroke.fitType = `rdp-${rdpFit.segments}`;
+            stroke.fittedWithSize = stroke.size;
         } else {
-            // Fallback to rectangle/square fit if polygon fit fails
+            // Fallback to rectangle if RDP fails
             stroke.fittedPoints = generateRectanglePoints(
                 squareFit.center,
                 squareFit.width,
@@ -1072,7 +1087,7 @@ function fitStroke(stroke: Stroke): void {
         }
     } else {
         // For open strokes, use polyline fitting with RDP algorithm
-        const polylineFit = fitPolyline(resampled, stroke.size);
+        const polylineFit = fitPolyline(points, stroke.size);
 
         if (!polylineFit) {
             showDebug('Polyline fit failed!');
