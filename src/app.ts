@@ -6,7 +6,7 @@ import { EventHandler, Point } from './eventHandler';
 import { resampleStroke } from './resample';
 import { fitCircle, generateCirclePoints, isMostlyClosed } from './fitters/circleFitter';
 import { fitEllipse, generateEllipsePoints } from './fitters/ellipseFitter';
-import { fitSquare, generateRectanglePoints } from './fitters/squareFitter';
+import { fitSquare, fitSquareConstrained, generateRectanglePoints } from './fitters/squareFitter';
 import { fitPolyline, generatePolylinePoints } from './fitters/polylineFitter';
 import { fitEquilateralPolygon, generateEquilateralPolygonPoints } from './fitters/equilateralPolygonFitter';
 
@@ -1065,27 +1065,97 @@ function fitStroke(stroke: Stroke): void {
 
         showDebug(debugText);
 
-        // Use fitted polygon/star result
-        if (polygonFit) {
-            stroke.fittedPoints = polygonFit.vertices;
-            const shapePrefix = polygonFit.shapeType === 'polygon'
-                ? 'polygon'
-                : polygonFit.shapeType === 'star'
-                ? 'star'
-                : 'x-star';
-            stroke.fitType = `${shapePrefix}-${polygonFit.sides}`;
+        // Choose the best fitter based on minimum error
+        const ellipseError = ellipseFit.error;
+        const rectangleError = squareFit.error;
+        const polygonError = polygonFit ? polygonFit.error : Infinity;
+
+        const minError = Math.min(ellipseError, rectangleError, polygonError);
+
+        const elongationThreshold = 0.20; // 20% threshold for using elongated vs constrained fit
+
+        if (minError === ellipseError) {
+            // Winner: Circle/Ellipse fitter
+            // Use ellipticity to decide between circle and ellipse
+            if (ellipseFit.ellipticity > elongationThreshold) {
+                // Use ellipse fit
+                stroke.fittedPoints = generateEllipsePoints(
+                    ellipseFit.center,
+                    ellipseFit.radiusX,
+                    ellipseFit.radiusY,
+                    ellipseFit.rotation,
+                    64
+                );
+                stroke.fitType = 'ellipse';
+            } else {
+                // Use circle fit
+                stroke.fittedPoints = generateCirclePoints(circleFit.center, circleFit.radius, 64);
+                stroke.fitType = 'circle';
+            }
+            stroke.fittedWithSize = stroke.size;
+        } else if (minError === rectangleError) {
+            // Winner: Square/Rectangle fitter
+            // Calculate elongation from squareness
+            const elongation = squareFit.squareness;
+
+            if (elongation > elongationThreshold) {
+                // Use rectangle fit
+                stroke.fittedPoints = generateRectanglePoints(
+                    squareFit.center,
+                    squareFit.width,
+                    squareFit.height,
+                    squareFit.rotation,
+                    64
+                );
+                stroke.fitType = 'rectangle';
+            } else {
+                // Use square fit - need to get the constrained square fit
+                const squareOnlyFit = fitSquareConstrained(points);
+                if (squareOnlyFit) {
+                    stroke.fittedPoints = generateRectanglePoints(
+                        squareOnlyFit.center,
+                        squareOnlyFit.size,
+                        squareOnlyFit.size,
+                        squareOnlyFit.rotation,
+                        64
+                    );
+                    stroke.fitType = 'square';
+                } else {
+                    // Fallback to rectangle if square fit fails
+                    stroke.fittedPoints = generateRectanglePoints(
+                        squareFit.center,
+                        squareFit.width,
+                        squareFit.height,
+                        squareFit.rotation,
+                        64
+                    );
+                    stroke.fitType = 'rectangle';
+                }
+            }
             stroke.fittedWithSize = stroke.size;
         } else {
-            // Fallback to rectangle if polygon fit fails
-            stroke.fittedPoints = generateRectanglePoints(
-                squareFit.center,
-                squareFit.width,
-                squareFit.height,
-                squareFit.rotation,
-                64
-            );
-            const squarenessThreshold = 0.20;
-            stroke.fitType = squareFit.squareness < squarenessThreshold ? 'square' : 'rectangle';
+            // Winner: Polygon/Star fitter
+            if (polygonFit) {
+                stroke.fittedPoints = polygonFit.vertices;
+                const shapePrefix = polygonFit.shapeType === 'polygon'
+                    ? 'polygon'
+                    : polygonFit.shapeType === 'star'
+                    ? 'star'
+                    : 'x-star';
+                stroke.fitType = `${shapePrefix}-${polygonFit.sides}`;
+                stroke.fittedWithSize = stroke.size;
+            } else {
+                // Fallback to rectangle if polygon fit fails
+                stroke.fittedPoints = generateRectanglePoints(
+                    squareFit.center,
+                    squareFit.width,
+                    squareFit.height,
+                    squareFit.rotation,
+                    64
+                );
+                stroke.fitType = 'rectangle';
+                stroke.fittedWithSize = stroke.size;
+            }
         }
     } else {
         // For open strokes, use polyline fitting with RDP algorithm
