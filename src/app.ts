@@ -948,6 +948,12 @@ eventHandler.setEventCallback((event: Event) => {
 // SHAPE FITTING
 // ============================================================================
 
+// Debug flags for each fitter
+const DEBUG_CIRCLE_ELLIPSE = false;
+const DEBUG_SQUARE_RECTANGLE = false;
+const DEBUG_POLYGON_STAR = true;
+const DEBUG_POLYLINE = false;
+
 function fitStroke(stroke: Stroke): void {
     if (stroke.points.length < 3) {
         showDebug('Too few points!');
@@ -978,15 +984,32 @@ function fitStroke(stroke: Stroke): void {
             return;
         }
 
-        // Display debug info for all fits
-        let debugText = `Circle fit error: ${circleFit.error.toFixed(2)}`;
-        debugText += `\nEllipticity: ${ellipseFit.ellipticity.toFixed(3)}`;
-        debugText += `\nEllipse err before 1D: ${ellipseFit.debugInfo?.errorBefore1D.toFixed(2)}`;
-        debugText += `\nEllipse err after 1D: ${ellipseFit.debugInfo?.errorAfter1D.toFixed(2)}`;
-        debugText += `\nSquareness: ${squareFit.squareness.toFixed(3)}`;
-        debugText += `\nRectangle fit error: ${squareFit.error.toFixed(2)}`;
+        // Display debug info - always show fit errors for all fitters
+        let debugText = `Circle: ${circleFit.error.toFixed(2)}`;
+        debugText += `\nEllipse: ${ellipseFit.error.toFixed(2)}`;
+        debugText += `\nRect: ${squareFit.error.toFixed(2)}`;
 
         if (polygonFit) {
+            debugText += `\nPolygon: ${polygonFit.error.toFixed(2)}`;
+        }
+
+        // Detailed debug info for circle/ellipse fitter
+        if (DEBUG_CIRCLE_ELLIPSE) {
+            debugText += `\n---`;
+            debugText += `\nEllipticity: ${ellipseFit.ellipticity.toFixed(3)}`;
+            debugText += `\nEllipse err before 1D: ${ellipseFit.debugInfo?.errorBefore1D.toFixed(2)}`;
+            debugText += `\nEllipse err after 1D: ${ellipseFit.debugInfo?.errorAfter1D.toFixed(2)}`;
+        }
+
+        // Detailed debug info for square/rectangle fitter
+        if (DEBUG_SQUARE_RECTANGLE) {
+            debugText += `\n---`;
+            debugText += `\nSquareness: ${squareFit.squareness.toFixed(3)}`;
+        }
+
+        // Detailed debug info for polygon/star fitter
+        if (DEBUG_POLYGON_STAR && polygonFit) {
+            debugText += `\n---`;
             const shapeLabel = polygonFit.shapeType === 'polygon'
                 ? 'Polygon'
                 : polygonFit.shapeType === 'star'
@@ -996,7 +1019,6 @@ function fitStroke(stroke: Stroke): void {
             if (polygonFit.innerRadius !== undefined) {
                 debugText += `\nOuter R: ${polygonFit.radius.toFixed(1)}, Inner R: ${polygonFit.innerRadius.toFixed(1)}`;
             }
-            debugText += `\nShape error: ${polygonFit.error.toFixed(2)}`;
         }
 
         showDebug(debugText);
@@ -1033,9 +1055,15 @@ function fitStroke(stroke: Stroke): void {
         }
 
         // Display debug info for polyline fit
-        let debugText = `Polyline fit: ${polylineFit.segments} segments`;
-        debugText += `\nMax error: ${polylineFit.error.toFixed(2)}`;
-        debugText += `\nEpsilon used: ${(2 * stroke.size).toFixed(2)}`;
+        let debugText = `Polyline: ${polylineFit.error.toFixed(2)}`;
+
+        // Detailed debug info for polyline fitter
+        if (DEBUG_POLYLINE) {
+            debugText += `\n---`;
+            debugText += `\nSegments: ${polylineFit.segments}`;
+            debugText += `\nEpsilon: ${(2 * stroke.size).toFixed(2)}`;
+        }
+
         showDebug(debugText);
 
         // Use the simplified polyline points
@@ -1357,8 +1385,6 @@ fitBtn.addEventListener('click', () => {
     if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
         const stroke = strokeHistory[selectedStrokeIdx];
 
-        showDebug(`Selected: idx=${selectedStrokeIdx}\nPoints: ${stroke.points.length}\nHas fit: ${!!stroke.fittedPoints}`);
-
         // If fit mode is ON and stroke hasn't been fitted yet, or if it's a polyline/polygon
         // that was fitted with a different stroke size, fit it now
         const isSizeDependentFit = stroke.fitType === 'polyline' || stroke.fitType?.startsWith('polygon-');
@@ -1369,20 +1395,14 @@ fitBtn.addEventListener('click', () => {
             fitStroke(stroke);
         }
 
-        // Show fitting result
-        if (stroke.fittedPoints && stroke.fitType) {
-            showDebug(`Fitted ${stroke.fitType}!\nPoints: ${stroke.fittedPoints.length}`);
-        }
-
         // Toggle display between fitted and original
         if (stroke.fittedPoints && stroke.originalPoints) {
             stroke.showingFitted = isFitMode;
             stroke.points = isFitMode ? stroke.fittedPoints : stroke.originalPoints;
-            showDebug(`Showing: ${isFitMode ? 'fitted' : 'original'}`);
             redraw();
         }
     } else {
-        showDebug('No stroke selected!\nDouble-tap to select.');
+        showDebug('No stroke selected!');
     }
 });
 
