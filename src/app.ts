@@ -961,7 +961,10 @@ eventHandler.setEventCallback((event: Event) => {
 // SHAPE FITTING
 // ============================================================================
 
-// Debug flags for each fitter
+// Master debug flag - set to false to disable all shape fitting debug overlay
+const DEBUG_SHAPE_FITTING = false;
+
+// Debug flags for each fitter (only used if DEBUG_SHAPE_FITTING is true)
 const DEBUG_CIRCLE_ELLIPSE = false;
 const DEBUG_SQUARE_RECTANGLE = false;
 const DEBUG_POLYGON_STAR = true;
@@ -997,73 +1000,75 @@ function fitStroke(stroke: Stroke): void {
         }
 
         // Display debug info - show fit errors to determine which fitter to use
-        let debugText = `Points: ${points.length}`;
+        if (DEBUG_SHAPE_FITTING) {
+            let debugText = `Points: ${points.length}`;
 
-        // Line 1: Circle vs Ellipse
-        debugText += `\nCircle/Ellipse: ${Math.sqrt(circleFit.error).toFixed(1)}px/${Math.sqrt(ellipseFit.error).toFixed(1)}px`;
+            // Line 1: Circle vs Ellipse
+            debugText += `\nCircle/Ellipse: ${Math.sqrt(circleFit.error).toFixed(1)}px/${Math.sqrt(ellipseFit.error).toFixed(1)}px`;
 
-        // Line 2: Square vs Rectangle
-        debugText += `\nSquare/Rect: ${Math.sqrt(squareFit.squareError).toFixed(1)}px/${Math.sqrt(squareFit.error).toFixed(1)}px`;
+            // Line 2: Square vs Rectangle
+            debugText += `\nSquare/Rect: ${Math.sqrt(squareFit.squareError).toFixed(1)}px/${Math.sqrt(squareFit.error).toFixed(1)}px`;
 
-        // Line 3: Polygon (regularized)
-        const polygonErr = polygonFit ? Math.sqrt(polygonFit.error).toFixed(1) : 'N/A';
-        const polygonSides = polygonFit ? polygonFit.sides : 0;
-        debugText += `\nPolygon: ${polygonErr}px (${polygonSides} sides)`;
+            // Line 3: Polygon (regularized)
+            const polygonErr = polygonFit ? Math.sqrt(polygonFit.error).toFixed(1) : 'N/A';
+            const polygonSides = polygonFit ? polygonFit.sides : 0;
+            debugText += `\nPolygon: ${polygonErr}px (${polygonSides} sides)`;
 
-        // Detailed debug info for circle/ellipse fitter
-        if (DEBUG_CIRCLE_ELLIPSE) {
-            debugText += `\n---`;
-            debugText += `\nEllipticity: ${ellipseFit.ellipticity.toFixed(3)}`;
-            debugText += `\nEllipse err before 1D: ${ellipseFit.debugInfo?.errorBefore1D.toFixed(2)}`;
-            debugText += `\nEllipse err after 1D: ${ellipseFit.debugInfo?.errorAfter1D.toFixed(2)}`;
-        }
-
-        // Detailed debug info for square/rectangle fitter
-        if (DEBUG_SQUARE_RECTANGLE) {
-            debugText += `\n---`;
-            debugText += `\nSquareness: ${squareFit.squareness.toFixed(3)}`;
-        }
-
-        // Detailed debug info for polygon/star fitter
-        if (DEBUG_POLYGON_STAR && polygonFit) {
-            debugText += `\n---`;
-            const shapeLabel = polygonFit.shapeType === 'polygon'
-                ? 'Polygon'
-                : polygonFit.shapeType === 'star'
-                ? 'Star'
-                : 'X-Star';
-            debugText += `\n${shapeLabel}: ${polygonFit.sides} ${polygonFit.shapeType === 'polygon' ? 'sides' : 'points'}`;
-            debugText += `\nRadius: ${polygonFit.radius.toFixed(1)}`;
-            if (polygonFit.innerRadius !== undefined) {
-                debugText += `\nInner R: ${polygonFit.innerRadius.toFixed(1)}`;
-            }
-            if (polygonFit.stepPattern !== undefined) {
-                debugText += `\nStep: ${polygonFit.stepPattern}/${polygonFit.sides}`;
-            }
-            debugText += `\nRotation: ${(polygonFit.rotation * 180 / Math.PI).toFixed(1)}°`;
-
-            // Show radius debug info if available
-            if ((polygonFit as any).debugRadiusInfo) {
-                debugText += `\n${(polygonFit as any).debugRadiusInfo}`;
+            // Detailed debug info for circle/ellipse fitter
+            if (DEBUG_CIRCLE_ELLIPSE) {
+                debugText += `\n---`;
+                debugText += `\nEllipticity: ${ellipseFit.ellipticity.toFixed(3)}`;
+                debugText += `\nEllipse err before 1D: ${ellipseFit.debugInfo?.errorBefore1D.toFixed(2)}`;
+                debugText += `\nEllipse err after 1D: ${ellipseFit.debugInfo?.errorAfter1D.toFixed(2)}`;
             }
 
-            // Show starfish test debug info if available
-            if ((polygonFit as any).debugStarfishTest) {
-                debugText += `\n${(polygonFit as any).debugStarfishTest}`;
+            // Detailed debug info for square/rectangle fitter
+            if (DEBUG_SQUARE_RECTANGLE) {
+                debugText += `\n---`;
+                debugText += `\nSquareness: ${squareFit.squareness.toFixed(3)}`;
             }
 
-            // Show step pattern debug info if available
-            if ((polygonFit as any).debugStepPatterns) {
-                debugText += `\nStep errors:`;
-                const patterns = (polygonFit as any).debugStepPatterns;
-                for (const p of patterns) {
-                    const mark = p.step === polygonFit.stepPattern ? '*' : ' ';
-                    debugText += `\n${mark}${p.step}:${p.error.toFixed(0)}`;
+            // Detailed debug info for polygon/star fitter
+            if (DEBUG_POLYGON_STAR && polygonFit) {
+                debugText += `\n---`;
+                const shapeLabel = polygonFit.shapeType === 'polygon'
+                    ? 'Polygon'
+                    : polygonFit.shapeType === 'star'
+                    ? 'Star'
+                    : 'X-Star';
+                debugText += `\n${shapeLabel}: ${polygonFit.sides} ${polygonFit.shapeType === 'polygon' ? 'sides' : 'points'}`;
+                debugText += `\nRadius: ${polygonFit.radius.toFixed(1)}`;
+                if (polygonFit.innerRadius !== undefined) {
+                    debugText += `\nInner R: ${polygonFit.innerRadius.toFixed(1)}`;
+                }
+                if (polygonFit.stepPattern !== undefined) {
+                    debugText += `\nStep: ${polygonFit.stepPattern}/${polygonFit.sides}`;
+                }
+                debugText += `\nRotation: ${(polygonFit.rotation * 180 / Math.PI).toFixed(1)}°`;
+
+                // Show radius debug info if available
+                if ((polygonFit as any).debugRadiusInfo) {
+                    debugText += `\n${(polygonFit as any).debugRadiusInfo}`;
+                }
+
+                // Show starfish test debug info if available
+                if ((polygonFit as any).debugStarfishTest) {
+                    debugText += `\n${(polygonFit as any).debugStarfishTest}`;
+                }
+
+                // Show step pattern debug info if available
+                if ((polygonFit as any).debugStepPatterns) {
+                    debugText += `\nStep errors:`;
+                    const patterns = (polygonFit as any).debugStepPatterns;
+                    for (const p of patterns) {
+                        const mark = p.step === polygonFit.stepPattern ? '*' : ' ';
+                        debugText += `\n${mark}${p.step}:${p.error.toFixed(0)}`;
+                    }
                 }
             }
-        }
 
-        showDebug(debugText);
+            showDebug(debugText);
+        }
 
         // Choose the best fitter based on minimum error
         const ellipseError = ellipseFit.error;
@@ -1167,16 +1172,18 @@ function fitStroke(stroke: Stroke): void {
         }
 
         // Display debug info for polyline fit
-        let debugText = `Polyline: ${polylineFit.error.toFixed(2)}`;
+        if (DEBUG_SHAPE_FITTING) {
+            let debugText = `Polyline: ${polylineFit.error.toFixed(2)}`;
 
-        // Detailed debug info for polyline fitter
-        if (DEBUG_POLYLINE) {
-            debugText += `\n---`;
-            debugText += `\nSegments: ${polylineFit.segments}`;
-            debugText += `\nEpsilon: ${(2 * stroke.size).toFixed(2)}`;
+            // Detailed debug info for polyline fitter
+            if (DEBUG_POLYLINE) {
+                debugText += `\n---`;
+                debugText += `\nSegments: ${polylineFit.segments}`;
+                debugText += `\nEpsilon: ${(2 * stroke.size).toFixed(2)}`;
+            }
+
+            showDebug(debugText);
         }
-
-        showDebug(debugText);
 
         // Use the simplified polyline points
         stroke.fittedPoints = generatePolylinePoints(polylineFit.points);
