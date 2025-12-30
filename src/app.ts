@@ -987,8 +987,16 @@ function fitStroke(stroke: Stroke): void {
         debugText += `\nRectangle fit error: ${squareFit.error.toFixed(2)}`;
 
         if (polygonFit) {
-            debugText += `\nPolygon: ${polygonFit.sides} sides`;
-            debugText += `\nPolygon error: ${polygonFit.error.toFixed(2)}`;
+            const shapeLabel = polygonFit.shapeType === 'polygon'
+                ? 'Polygon'
+                : polygonFit.shapeType === 'star'
+                ? 'Star'
+                : 'Self-crossing star';
+            debugText += `\n${shapeLabel}: ${polygonFit.sides} ${polygonFit.shapeType === 'polygon' ? 'sides' : 'points'}`;
+            if (polygonFit.innerRadius !== undefined) {
+                debugText += `\nOuter R: ${polygonFit.radius.toFixed(1)}, Inner R: ${polygonFit.innerRadius.toFixed(1)}`;
+            }
+            debugText += `\nShape error: ${polygonFit.error.toFixed(2)}`;
         }
 
         showDebug(debugText);
@@ -996,7 +1004,12 @@ function fitStroke(stroke: Stroke): void {
         // For now, always use equilateral polygon fit for closed strokes
         if (polygonFit) {
             stroke.fittedPoints = polygonFit.vertices;
-            stroke.fitType = `polygon-${polygonFit.sides}`;
+            const shapePrefix = polygonFit.shapeType === 'polygon'
+                ? 'polygon'
+                : polygonFit.shapeType === 'star'
+                ? 'star'
+                : 'x-star';
+            stroke.fitType = `${shapePrefix}-${polygonFit.sides}`;
             stroke.fittedWithSize = stroke.size;  // Track the size used for fitting
         } else {
             // Fallback to rectangle/square fit if polygon fit fails
