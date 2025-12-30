@@ -27,6 +27,13 @@ html, body {
     gap: 10px;
     z-index: 100;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    justify-content: space-between;
+}
+
+.toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .tool-group {
@@ -101,13 +108,24 @@ button {
     display: block;
 }
 
-#clearBtn {
+.clear-btn {
+    width: 36px;
+    height: 36px;
+    padding: 8px;
     background: #d94a4a;
     color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
 }
 
-#clearBtn:hover {
+.clear-btn:hover {
     background: #bd3737;
+}
+
+.clear-btn svg {
+    display: block;
 }
 
 .grid-toggle {
