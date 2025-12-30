@@ -19,6 +19,8 @@ const ctx = canvas.getContext('2d')!;
 const colorPickerEl = document.getElementById('colorPicker') as HTMLElement;
 const sizePickerEl = document.getElementById('sizePicker') as HTMLElement;
 const delBtn = document.getElementById('delBtn') as HTMLButtonElement;
+const undoIcon = document.getElementById('undoIcon') as unknown as SVGElement;
+const deleteIcon = document.getElementById('deleteIcon') as unknown as SVGElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 const gridToggleBtn = document.getElementById('gridToggle') as HTMLButtonElement;
 const fitBtn = document.getElementById('fitBtn') as HTMLButtonElement;
@@ -1207,26 +1209,39 @@ function updateDelButton() {
     // d) Transformed stroke → enabled "Undo"
     // e) Manually selected stroke → enabled "Del"
 
+    let showDeleteIcon = false;
+
     if (!hasStrokes) {
         // a) No strokes - disabled "Undo"
         delBtn.disabled = true;
-        delBtn.textContent = 'Undo';
+        showDeleteIcon = false;
     } else if (isFreshStroke) {
         // c) Fresh stroke mode - enabled "Undo"
         delBtn.disabled = false;
-        delBtn.textContent = 'Undo';
+        showDeleteIcon = false;
     } else if (hasUndoableTransform && selectedStrokeIdx !== null) {
         // d) Transformed stroke - enabled "Undo"
         delBtn.disabled = false;
-        delBtn.textContent = 'Undo';
+        showDeleteIcon = false;
     } else if (selectedStrokeIdx !== null) {
         // e) Manually selected stroke - enabled "Del"
         delBtn.disabled = false;
-        delBtn.textContent = 'Del';
+        showDeleteIcon = true;
     } else {
         // b) Has strokes but no selection - enabled "Undo" (undo last stroke)
         delBtn.disabled = false;
-        delBtn.textContent = 'Undo';
+        showDeleteIcon = false;
+    }
+
+    // Toggle icon visibility
+    if (showDeleteIcon) {
+        undoIcon.style.display = 'none';
+        deleteIcon.style.display = 'block';
+        delBtn.setAttribute('aria-label', 'Delete');
+    } else {
+        undoIcon.style.display = 'block';
+        deleteIcon.style.display = 'none';
+        delBtn.setAttribute('aria-label', 'Undo');
     }
 
     // Update duplicate button state - only enabled when a stroke is selected
