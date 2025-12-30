@@ -841,7 +841,45 @@ function calculateFinalError(originalPoints: Point[], polygonVertices: Point[]):
         return minDist;
     };
 
-    return calculateShapeError(originalPoints, distanceToPolygonFn, polygonVertices);
+    // Generate densely sampled points along polygon edges (like rectangle fitter uses 64)
+    const samplePoints = generateDenseSampledPolygon(polygonVertices, 64);
+
+    return calculateShapeError(originalPoints, distanceToPolygonFn, samplePoints);
+}
+
+/**
+ * Generate densely sampled points along polygon perimeter
+ */
+function generateDenseSampledPolygon(vertices: Point[], numSamples: number): Point[] {
+    const samples: Point[] = [];
+
+    // Calculate total perimeter
+    let perimeter = 0;
+    for (let i = 0; i < vertices.length - 1; i++) {
+        const dx = vertices[i + 1].x - vertices[i].x;
+        const dy = vertices[i + 1].y - vertices[i].y;
+        perimeter += Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // Distribute samples proportionally along edges
+    const samplesPerUnit = numSamples / perimeter;
+
+    for (let i = 0; i < vertices.length - 1; i++) {
+        const dx = vertices[i + 1].x - vertices[i].x;
+        const dy = vertices[i + 1].y - vertices[i].y;
+        const edgeLength = Math.sqrt(dx * dx + dy * dy);
+        const edgeSamples = Math.max(1, Math.round(edgeLength * samplesPerUnit));
+
+        for (let j = 0; j < edgeSamples; j++) {
+            const t = j / edgeSamples;
+            samples.push({
+                x: vertices[i].x + t * dx,
+                y: vertices[i].y + t * dy
+            });
+        }
+    }
+
+    return samples;
 }
 
 /**

@@ -999,18 +999,16 @@ function fitStroke(stroke: Stroke): void {
         // Display debug info - show fit errors to determine which fitter to use
         let debugText = `Points: ${points.length}`;
 
-        // Get polyline fit for comparison
-        const polylineFit = fitPolyline(points, stroke.size);
-        const polylineErr = polylineFit ? polylineFit.error : Infinity;
-
         // Line 1: Circle vs Ellipse
         debugText += `\nCircle/Ellipse: ${Math.sqrt(circleFit.error).toFixed(1)}px/${Math.sqrt(ellipseFit.error).toFixed(1)}px`;
 
         // Line 2: Square vs Rectangle
         debugText += `\nSquare/Rect: ${Math.sqrt(squareFit.squareError).toFixed(1)}px/${Math.sqrt(squareFit.error).toFixed(1)}px`;
 
-        // Line 3: Polyline RDP
-        debugText += `\nPolyline: ${polylineErr.toFixed(1)}px (${polylineFit?.segments || 0} segs)`;
+        // Line 3: Polygon (regularized)
+        const polygonErr = polygonFit ? Math.sqrt(polygonFit.error).toFixed(1) : 'N/A';
+        const polygonSides = polygonFit ? polygonFit.sides : 0;
+        debugText += `\nPolygon: ${polygonErr}px (${polygonSides} sides)`;
 
         // Detailed debug info for circle/ellipse fitter
         if (DEBUG_CIRCLE_ELLIPSE) {
@@ -1067,14 +1065,18 @@ function fitStroke(stroke: Stroke): void {
 
         showDebug(debugText);
 
-        // TEMPORARY: Display RDP polyline result instead of regularized polygon
-        const rdpFit = fitPolyline(points, stroke.size);
-        if (rdpFit) {
-            stroke.fittedPoints = generatePolylinePoints(rdpFit.points);
-            stroke.fitType = `rdp-${rdpFit.segments}`;
+        // Use fitted polygon/star result
+        if (polygonFit) {
+            stroke.fittedPoints = polygonFit.vertices;
+            const shapePrefix = polygonFit.shapeType === 'polygon'
+                ? 'polygon'
+                : polygonFit.shapeType === 'star'
+                ? 'star'
+                : 'x-star';
+            stroke.fitType = `${shapePrefix}-${polygonFit.sides}`;
             stroke.fittedWithSize = stroke.size;
         } else {
-            // Fallback to rectangle if RDP fails
+            // Fallback to rectangle if polygon fit fails
             stroke.fittedPoints = generateRectanglePoints(
                 squareFit.center,
                 squareFit.width,
