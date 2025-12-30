@@ -1024,6 +1024,26 @@ function fitStroke(stroke: Stroke): void {
                 debugText += `\nStep: ${polygonFit.stepPattern}/${polygonFit.sides}`;
             }
             debugText += `\nRotation: ${(polygonFit.rotation * 180 / Math.PI).toFixed(1)}°`;
+
+            // Show radius debug info if available
+            if ((polygonFit as any).debugRadiusInfo) {
+                debugText += `\n${(polygonFit as any).debugRadiusInfo}`;
+            }
+
+            // Show starfish test debug info if available
+            if ((polygonFit as any).debugStarfishTest) {
+                debugText += `\n${(polygonFit as any).debugStarfishTest}`;
+            }
+
+            // Show step pattern debug info if available
+            if ((polygonFit as any).debugStepPatterns) {
+                debugText += `\nStep errors:`;
+                const patterns = (polygonFit as any).debugStepPatterns;
+                for (const p of patterns) {
+                    const mark = p.step === polygonFit.stepPattern ? '*' : ' ';
+                    debugText += `\n${mark}${p.step}:${p.error.toFixed(0)}`;
+                }
+            }
         }
 
         showDebug(debugText);

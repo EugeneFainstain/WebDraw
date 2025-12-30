@@ -23,6 +23,9 @@ export interface EquilateralPolygonFit {
     shapeType: ShapeType;    // Type of shape detected
     stepPattern?: number;    // Step pattern for self-crossing stars (undefined for polygons/regular stars)
     error: number;           // Fitting error
+    debugStepPatterns?: Array<{ step: number; error: number }>; // Debug info for step pattern selection
+    debugRadiusInfo?: string; // Debug info about radius variation
+    debugStarfishTest?: string; // Debug info about starfish test results
 }
 
 /**
@@ -90,7 +93,7 @@ export function fitEquilateralPolygon(
     let stepPattern = 2; // Default step pattern for self-crossing stars
 
     if (classification.type === 'polygon') {
-        // All vertices at same distance
+        // Regular polygon - all vertices at same distance, step pattern = 1
         radius = classification.outerRadius;
         innerRadius = undefined;
         numSides = numVertices;
@@ -101,8 +104,21 @@ export function fitEquilateralPolygon(
         rotation = Math.atan2(firstDy, firstDx);
 
         regularVertices = generateRegularPolygon(center, radius, rotation, numSides);
+    } else if (classification.type === 'self-crossing-star' && classification.innerRadius === classification.outerRadius) {
+        // Self-crossing star with all vertices at same radius (pentagram)
+        radius = classification.outerRadius;
+        innerRadius = undefined;
+        numSides = numVertices;
+
+        // Use the first vertex as reference for rotation
+        const firstDx = vertices[0].x - center.x;
+        const firstDy = vertices[0].y - center.y;
+        rotation = Math.atan2(firstDy, firstDx);
+
+        stepPattern = classification.stepPattern!;
+        regularVertices = generateRegularPolygonWithStep(center, radius, rotation, numSides, stepPattern);
     } else {
-        // Star shape (self-crossing or non-self-crossing)
+        // Star shape with two distinct radii (self-crossing or non-self-crossing)
         radius = classification.outerRadius;
         innerRadius = classification.innerRadius!; // Must be defined for stars
         numSides = numVertices / 2; // Number of points on the star
@@ -138,10 +154,15 @@ export function fitEquilateralPolygon(
             if (classification.type === 'polygon') {
                 largerVertices = generateRegularPolygon(center, radius + delta, rotation, numSides);
                 smallerVertices = generateRegularPolygon(center, radius - delta, rotation, numSides);
+            } else if (innerRadius === undefined) {
+                // Self-crossing star with single radius (pentagram)
+                largerVertices = generateRegularPolygonWithStep(center, radius + delta, rotation, numSides, stepPattern);
+                smallerVertices = generateRegularPolygonWithStep(center, radius - delta, rotation, numSides, stepPattern);
             } else {
+                // Star with two radii
                 const isSelfCrossing = classification.type === 'self-crossing-star';
-                largerVertices = generateRegularStar(center, radius + delta, innerRadius!, rotation, numSides, isSelfCrossing, stepPattern);
-                smallerVertices = generateRegularStar(center, radius - delta, innerRadius!, rotation, numSides, isSelfCrossing, stepPattern);
+                largerVertices = generateRegularStar(center, radius + delta, innerRadius, rotation, numSides, isSelfCrossing, stepPattern);
+                smallerVertices = generateRegularStar(center, radius - delta, innerRadius, rotation, numSides, isSelfCrossing, stepPattern);
             }
 
             const largerError = calculatePolygonError(rdpVertices, largerVertices);
@@ -198,10 +219,15 @@ export function fitEquilateralPolygon(
             if (classification.type === 'polygon') {
                 cwVertices = generateRegularPolygon(center, radius, rotation + angleDelta, numSides);
                 ccwVertices = generateRegularPolygon(center, radius, rotation - angleDelta, numSides);
+            } else if (innerRadius === undefined) {
+                // Self-crossing star with single radius (pentagram)
+                cwVertices = generateRegularPolygonWithStep(center, radius, rotation + angleDelta, numSides, stepPattern);
+                ccwVertices = generateRegularPolygonWithStep(center, radius, rotation - angleDelta, numSides, stepPattern);
             } else {
+                // Star with two radii
                 const isSelfCrossing = classification.type === 'self-crossing-star';
-                cwVertices = generateRegularStar(center, radius, innerRadius!, rotation + angleDelta, numSides, isSelfCrossing, stepPattern);
-                ccwVertices = generateRegularStar(center, radius, innerRadius!, rotation - angleDelta, numSides, isSelfCrossing, stepPattern);
+                cwVertices = generateRegularStar(center, radius, innerRadius, rotation + angleDelta, numSides, isSelfCrossing, stepPattern);
+                ccwVertices = generateRegularStar(center, radius, innerRadius, rotation - angleDelta, numSides, isSelfCrossing, stepPattern);
             }
 
             const cwError = calculatePolygonError(rdpVertices, cwVertices);
@@ -235,7 +261,10 @@ export function fitEquilateralPolygon(
         sides: numSides,
         shapeType: classification.type,
         stepPattern: classification.type === 'self-crossing-star' ? stepPattern : undefined,
-        error: finalError
+        error: finalError,
+        debugStepPatterns: classification.debugStepPatterns,
+        debugRadiusInfo: classification.debugRadiusInfo,
+        debugStarfishTest: classification.debugStarfishTest
     };
 }
 
@@ -249,6 +278,9 @@ interface ShapeClassification {
     outerIndices: number[];
     innerIndices?: number[];
     stepPattern?: number;  // For self-crossing stars
+    debugStepPatterns?: Array<{ step: number; error: number }>; // Debug info
+    debugRadiusInfo?: string; // Debug info about radius variation
+    debugStarfishTest?: string; // Debug info about starfish test results
 }
 
 /**
@@ -267,80 +299,221 @@ function classifyShape(distances: number[], vertices: Point[], center: Point, nu
     const sortedDistances = [...distances].sort((a, b) => a - b);
     const minDist = sortedDistances[0];
     const maxDist = sortedDistances[n - 1];
-
-    // Check if all vertices are at roughly the same distance (polygon)
-    const range = maxDist - minDist;
     const avgDist = sortedDistances.reduce((a, b) => a + b, 0) / n;
-    const tolerance = 0.25; // 25% tolerance
+    const range = maxDist - minDist;
+    const radiusVariation = range / avgDist;
 
-    if (range / avgDist < tolerance) {
-        // All vertices at same distance - it's a polygon
+    const radiusDebugInfo = `R:${minDist.toFixed(0)}-${maxDist.toFixed(0)} var=${(radiusVariation*100).toFixed(0)}%`;
+    console.log(`Radius analysis: min=${minDist.toFixed(1)}, max=${maxDist.toFixed(1)}, avg=${avgDist.toFixed(1)}, variation=${(radiusVariation*100).toFixed(1)}%`);
+
+    // ========================================================================
+    // Test for STARFISH pattern (alternating inner/outer radii)
+    // ========================================================================
+
+    let starfishDebugInfo = '';
+
+    // Condition 1: Must have even number of vertices (can't be starfish with odd number)
+    const isStarfishCandidate = (n % 2 === 0);
+    starfishDebugInfo = `SF1:n=${n}`;
+
+    if (isStarfishCandidate) {
+        // Condition 2: Group vertices by even/odd indices
+        const evenRadii: number[] = [];
+        const oddRadii: number[] = [];
+
+        for (let i = 0; i < n; i++) {
+            if (i % 2 === 0) {
+                evenRadii.push(distances[i]);
+            } else {
+                oddRadii.push(distances[i]);
+            }
+        }
+
+        const avgEvenRadius = evenRadii.reduce((a, b) => a + b, 0) / evenRadii.length;
+        const avgOddRadius = oddRadii.reduce((a, b) => a + b, 0) / oddRadii.length;
+
+        // Determine which is inner and which is outer
+        const innerRadius = Math.min(avgEvenRadius, avgOddRadius);
+        const outerRadius = Math.max(avgEvenRadius, avgOddRadius);
+        const avgRadius = (innerRadius + outerRadius) / 2;
+
+        // Condition 3: Difference between inner and outer should be > 25% of their average
+        const radiusDifference = outerRadius - innerRadius;
+        const radiusDiffPercent = radiusDifference / avgRadius;
+
+        starfishDebugInfo += ` SF3:${(radiusDiffPercent*100).toFixed(0)}%`;
+
+        if (radiusDiffPercent > 0.25) {
+            // Condition 2b: Verify segmentation by midpoint gives equal groups
+            const midpoint = (innerRadius + outerRadius) / 2;
+            let lowerCount = 0;
+            let upperCount = 0;
+            const lowerIndices: number[] = [];
+            const upperIndices: number[] = [];
+
+            for (let i = 0; i < n; i++) {
+                if (distances[i] < midpoint) {
+                    lowerCount++;
+                    lowerIndices.push(i);
+                } else {
+                    upperCount++;
+                    upperIndices.push(i);
+                }
+            }
+
+            starfishDebugInfo += ` SF2:${lowerCount}=${upperCount}`;
+
+            if (lowerCount === upperCount) {
+                // Condition 4: Calculate winding number - should be ~2π for simple shapes, ~4π for self-crossing
+                // Sum the signed angles between consecutive edge vectors
+                let totalWinding = 0;
+
+                for (let i = 0; i < n; i++) {
+                    const v1 = vertices[i];
+                    const v2 = vertices[(i + 1) % n];
+                    const angle1 = Math.atan2(v1.y - center.y, v1.x - center.x);
+                    const angle2 = Math.atan2(v2.y - center.y, v2.x - center.x);
+                    let angleDiff = angle2 - angle1;
+
+                    // Normalize to [-π, π]
+                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+                    totalWinding += angleDiff;
+                }
+
+                // For a simple (non-self-intersecting) shape, winding should be ~2π
+                // For self-crossing (like pentagram), it would be ~4π
+                const windingNumber = Math.abs(totalWinding) / (2 * Math.PI);
+                const windingError = Math.abs(windingNumber - 1.0); // Should be close to 1.0 for simple shapes
+
+                starfishDebugInfo += ` SF4:wind=${windingNumber.toFixed(1)}`;
+
+                // If winding number is close to 1 (simple shape), it's a starfish
+                if (windingError < 0.5) {  // Allow winding between 0.5 and 1.5
+                    starfishDebugInfo += ' ✓PASS';
+                    console.log('→ ALL TESTS PASSED: Classified as starfish');
+                    return {
+                        type: 'star',
+                        outerRadius,
+                        innerRadius,
+                        outerIndices: upperIndices,
+                        innerIndices: lowerIndices,
+                        debugRadiusInfo: radiusDebugInfo + ' starfish',
+                        debugStarfishTest: starfishDebugInfo
+                    };
+                } else {
+                    starfishDebugInfo += ' ✗fail4';
+                    console.log(`→ FAILED test 4 (winding number ${windingNumber.toFixed(2)}, expected ~1.0)`);
+                }
+            } else {
+                starfishDebugInfo += ' ✗fail2';
+                console.log('→ FAILED test 2 (groups not equal)');
+            }
+        } else {
+            starfishDebugInfo += ' ✗fail3';
+            console.log('→ FAILED test 3 (radius difference too small)');
+        }
+    } else {
+        starfishDebugInfo += ' ✗fail1';
+        console.log('→ FAILED test 1 (odd number of vertices)');
+    }
+
+    // ========================================================================
+    // Default path: POLYGON or SELF-CROSSING STAR (single radius, test step patterns)
+    // ========================================================================
+
+    console.log('→ Going to polygon/X-star path (testing step patterns)');
+    const { bestStep, debugPatterns } = findBestPolygonStepPattern(vertices, center, avgDist, numVertices);
+    console.log('Best pattern selected:', bestStep);
+
+    if (bestStep === 1) {
+        // Step pattern of 1 = regular polygon
+        console.log('→ Classified as regular polygon');
         return {
             type: 'polygon',
             outerRadius: avgDist,
-            outerIndices: Array.from({ length: n }, (_, i) => i)
+            outerIndices: Array.from({ length: n }, (_, i) => i),
+            debugStepPatterns: debugPatterns,
+            debugRadiusInfo: radiusDebugInfo + ' step=1',
+            debugStarfishTest: starfishDebugInfo
+        };
+    } else {
+        // Step pattern > 1 = self-crossing star with single radius (pentagram-like)
+        console.log('→ Classified as self-crossing star with pattern', bestStep);
+        return {
+            type: 'self-crossing-star',
+            outerRadius: avgDist,
+            innerRadius: avgDist, // Same radius for all vertices
+            outerIndices: Array.from({ length: n }, (_, i) => i),
+            innerIndices: [], // No separate inner vertices
+            stepPattern: bestStep,
+            debugStepPatterns: debugPatterns,
+            debugRadiusInfo: radiusDebugInfo + ` step=${bestStep}`,
+            debugStarfishTest: starfishDebugInfo
         };
     }
+}
 
-    // Check for two distinct radii (star pattern)
-    // Use k-means like approach to find two clusters
-    const midpoint = (minDist + maxDist) / 2;
-    const lowerGroup: number[] = [];
-    const upperGroup: number[] = [];
-    const lowerIndices: number[] = [];
-    const upperIndices: number[] = [];
+/**
+ * Find the best step pattern for a polygon with all vertices at same radius
+ * This distinguishes between regular polygons (step=1) and self-crossing stars like pentagrams (step>1)
+ *
+ * @param vertices - The RDP vertices (including duplicate last point)
+ * @param center - Center of the shape
+ * @param radius - Radius to all vertices
+ * @param numVertices - Number of unique vertices (excluding duplicate last)
+ * @returns The step pattern that gives the best fit (1 for regular polygon, >1 for self-crossing)
+ */
+function findBestPolygonStepPattern(
+    vertices: Point[],
+    center: Point,
+    radius: number,
+    numVertices: number
+): { bestStep: number; debugPatterns: Array<{ step: number; error: number }> } {
+    let bestStep = 1; // Default to regular polygon
+    let bestError = Infinity;
 
-    for (let i = 0; i < n; i++) {
-        if (distances[i] < midpoint) {
-            lowerGroup.push(distances[i]);
-            lowerIndices.push(i);
-        } else {
-            upperGroup.push(distances[i]);
-            upperIndices.push(i);
+    // Use the first vertex to determine rotation
+    const firstDx = vertices[0].x - center.x;
+    const firstDy = vertices[0].y - center.y;
+    const rotation = Math.atan2(firstDy, firstDx);
+
+    // Extract only unique vertices for error calculation
+    const rdpVertices = vertices.slice(0, numVertices);
+
+    // Try different step patterns from 1 to numVertices-1
+    const results: { step: number; error: number }[] = [];
+
+    for (let step = 1; step < numVertices; step++) {
+        // Skip patterns that don't visit all points (non-coprime with numVertices)
+        if (gcd(step, numVertices) !== 1) {
+            console.log(`  Step ${step}: skipped (gcd(${step}, ${numVertices}) != 1)`);
+            continue;
+        }
+
+        // Generate test polygon with this step pattern
+        const testVertices = generateRegularPolygonWithStep(center, radius, rotation, numVertices, step);
+
+        // Calculate 1:1 vertex-to-vertex error (not nearest-neighbor)
+        const error = calculate1to1VertexError(rdpVertices, testVertices);
+
+        results.push({ step, error });
+
+        if (error < bestError) {
+            bestError = error;
+            bestStep = step;
         }
     }
 
-    // Check if we have equal numbers in both groups (star requirement)
-    if (lowerGroup.length !== upperGroup.length || lowerGroup.length < 2) {
-        // Not a valid star, default to polygon
-        return {
-            type: 'polygon',
-            outerRadius: avgDist,
-            outerIndices: Array.from({ length: n }, (_, i) => i)
-        };
+    // Print all results
+    console.log('  All step pattern errors:');
+    for (const { step, error } of results) {
+        const marker = step === bestStep ? ' ← BEST' : '';
+        console.log(`    Step ${step}: ${error.toFixed(2)}${marker}`);
     }
 
-    // Calculate average radii for the two groups
-    const innerRadius = lowerGroup.reduce((a, b) => a + b, 0) / lowerGroup.length;
-    const outerRadius = upperGroup.reduce((a, b) => a + b, 0) / upperGroup.length;
-
-    // Check if vertices alternate between inner and outer (determines star type)
-    const isAlternating = checkAlternatingPattern(distances, innerRadius, outerRadius);
-
-    if (isAlternating) {
-        // Non-self-crossing star (like a starfish)
-        return {
-            type: 'star',
-            outerRadius,
-            innerRadius,
-            outerIndices: upperIndices,
-            innerIndices: lowerIndices
-        };
-    } else {
-        // Self-crossing star (like a pentagram)
-        // Try different step patterns to find the best fit
-        const numPoints = upperGroup.length; // Number of outer points
-        const bestPattern = findBestStepPattern(vertices, center, outerRadius, innerRadius, numPoints, numVertices);
-
-        return {
-            type: 'self-crossing-star',
-            outerRadius,
-            innerRadius,
-            outerIndices: upperIndices,
-            innerIndices: lowerIndices,
-            stepPattern: bestPattern
-        };
-    }
+    return { bestStep, debugPatterns: results };
 }
 
 /**
@@ -414,6 +587,64 @@ function gcd(a: number, b: number): number {
         a = temp;
     }
     return a;
+}
+
+/**
+ * Generate a regular polygon with a specific step pattern
+ * Step pattern determines the angular increment between consecutive vertices
+ *
+ * @param center - Center point
+ * @param radius - Radius to vertices
+ * @param rotation - Starting rotation angle
+ * @param numVertices - Number of vertices
+ * @param step - Step pattern (1 = consecutive, 2 = every other, etc.)
+ * @returns Array of vertices in visit order
+ */
+function generateRegularPolygonWithStep(
+    center: Point,
+    radius: number,
+    rotation: number,
+    numVertices: number,
+    step: number
+): Point[] {
+    const vertices: Point[] = [];
+    const angleStep = (2 * Math.PI) / numVertices;
+
+    // Generate vertices in step pattern order
+    let currentIndex = 0;
+    for (let i = 0; i < numVertices; i++) {
+        const angle = rotation + currentIndex * angleStep;
+        vertices.push({
+            x: center.x + radius * Math.cos(angle),
+            y: center.y + radius * Math.sin(angle)
+        });
+        currentIndex = (currentIndex + step) % numVertices;
+    }
+
+    return vertices;
+}
+
+/**
+ * Calculate 1:1 vertex-to-vertex error (not nearest-neighbor)
+ * Assumes vertices are in corresponding order
+ *
+ * @param vertices1 - First set of vertices
+ * @param vertices2 - Second set of vertices
+ * @returns Sum of squared distances between corresponding vertices
+ */
+function calculate1to1VertexError(vertices1: Point[], vertices2: Point[]): number {
+    if (vertices1.length !== vertices2.length) {
+        return Infinity;
+    }
+
+    let sumSquaredDist = 0;
+    for (let i = 0; i < vertices1.length; i++) {
+        const dx = vertices1[i].x - vertices2[i].x;
+        const dy = vertices1[i].y - vertices2[i].y;
+        sumSquaredDist += dx * dx + dy * dy;
+    }
+
+    return sumSquaredDist;
 }
 
 /**

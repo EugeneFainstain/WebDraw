@@ -8,6 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 WebDraw is a browser-based multi-touch drawing application built with TypeScript and Vite. It uses the HTML5 Canvas API with Pointer Events for drawing functionality.
 
+## Development Guidelines
+
+**CRITICAL**: This application is primarily tested on mobile devices (phones/tablets). All debug output must be displayed in the on-screen overlay, NOT in console.log. The overlay is the only way to see debug information during mobile testing.
+
 ## Commands
 
 - `npm run dev` - Start development server (localhost:127.0.0.1:5173)
