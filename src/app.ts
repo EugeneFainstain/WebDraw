@@ -193,8 +193,14 @@ function normalizeAngleDelta(delta: number): number {
     return delta;
 }
 
-function findClosestStrokeAndPoint(): { strokeIdx: number; pointIdx: number; point: Point } | null {
-    if (strokeHistory.length === 0 || !indicatorAnchor) {
+function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; pointIdx: number; point: Point } | null {
+    if (strokeHistory.length === 0) {
+        return null;
+    }
+
+    // Use provided search position, or fall back to indicator anchor
+    const referencePos = searchPos || indicatorAnchor;
+    if (!referencePos) {
         return null;
     }
 
@@ -210,8 +216,8 @@ function findClosestStrokeAndPoint(): { strokeIdx: number; pointIdx: number; poi
         // Find closest point in this stroke
         for (let j = 0; j < stroke.points.length; j++) {
             const point = stroke.points[j];
-            const dx = point.x - indicatorAnchor.x;
-            const dy = point.y - indicatorAnchor.y;
+            const dx = point.x - referencePos.x;
+            const dy = point.y - referencePos.y;
             const distanceSquared = dx * dx + dy * dy;
 
             if (distanceSquared < minDistanceSquared) {
@@ -1489,8 +1495,9 @@ function handlePointerDown(e: PointerEvent) {
                         getDistance(pos, lastTapPos) < DOUBLE_TAP_DISTANCE;
 
     if (isDoubleTap && eventHandler.getFingerCount() === 0) {
-        // Find closest stroke and point to the current marker position
-        const result = findClosestStrokeAndPoint();
+        // Find closest stroke and point to the double-tap location (not the marker)
+        const canvasPos = screenToCanvas(pos);
+        const result = findClosestStrokeAndPoint(canvasPos);
         if (result) {
             // Move marker to the closest point
             indicatorAnchor = result.point;
