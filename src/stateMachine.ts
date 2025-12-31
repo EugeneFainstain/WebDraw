@@ -87,7 +87,8 @@ export enum Action {
     ABANDON_STROKE = 'ABANDON_STROKE',
 
     // Selected stroke actions
-    SELECT_STROKE = 'SELECT_STROKE',
+    SELECT_STROKE = 'SELECT_STROKE',                     // Select last drawn stroke (after drawing)
+    SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to marker (single tap)
     DESELECT_STROKE = 'DESELECT_STROKE',
 
     // Transform actions
@@ -319,15 +320,15 @@ export class StateMachine {
                 };
 
             case Event.FINGER_UP:
-                // Single tap detection: deselect stroke if no timeout and no movement
+                // Single tap detection: select closest stroke if no timeout and no movement
                 const isSingleTap = !flags.TIMEOUT_HAPPENED && !flags.FINGER_MOVED_FAR_HAPPENED;
 
-                if (isStrokeSelected && isSingleTap) {
-                    // Quick tap with stroke selected → deselect
+                if (isSingleTap) {
+                    // Quick tap → select closest stroke to marker
                     return {
                         newState: State.Idle,
-                        newModifier: { isStrokeSelected: false },  // → Normal
-                        actions: [Action.DESELECT_STROKE]
+                        newModifier: { isStrokeSelected: true },  // → Stroke Selected
+                        actions: [Action.SELECT_CLOSEST_STROKE]
                     };
                 } else {
                     // Keep modifier unchanged (normal finger up or not a quick tap)

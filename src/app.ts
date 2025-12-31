@@ -887,6 +887,11 @@ function handleActions(actions: Action[]): void {
                 break;
 
             case Action.SELECT_STROKE:
+                // SELECT_STROKE: Automatically select the stroke that was just drawn
+                // Triggered after: Finishing a drawing (lifting second finger)
+                // Behavior: Selects the last stroke in history (the one just completed)
+                //           Marker stays at its current position
+                //           Marks as "fresh stroke" (Undo button will delete it)
                 selectedStrokeMarkerPos = indicatorAnchor ? { ...indicatorAnchor } : null;
                 // Set selected stroke to the last stroke in history
                 if (strokeHistory.length > 0) {
@@ -902,6 +907,33 @@ function handleActions(actions: Action[]): void {
                 hasUndoableTransform = false;
                 // Mark as fresh stroke (just drew)
                 isFreshStroke = true;
+                updateDelButton();
+                break;
+
+            case Action.SELECT_CLOSEST_STROKE:
+                // SELECT_CLOSEST_STROKE: Manually select stroke closest to marker
+                // Triggered by: Single tap (quick tap with no timeout or movement)
+                // Behavior: Finds closest stroke to current marker position
+                //           Marker jumps to the closest point on that stroke
+                //           Marks as manual selection (Del button will delete it)
+                //           Updates color/size pickers to match the selected stroke
+                // Note: This is different from double-tap, which searches from tap location
+                const closestResult = findClosestStrokeAndPoint();
+                if (closestResult) {
+                    // Move marker to the closest point
+                    indicatorAnchor = closestResult.point;
+                    // Select the stroke and store the point index
+                    selectedStrokeIdx = closestResult.strokeIdx;
+                    selectedStrokePointIdx = closestResult.pointIdx;
+                    selectedStrokeMarkerPos = { ...closestResult.point };
+                    // Manual selection exits fresh stroke mode
+                    isFreshStroke = false;
+                    // Clear transformation undo state when manually selecting a stroke
+                    transformSnapshot = null;
+                    hasUndoableTransform = false;
+                    // Update color and size pickers to match selected stroke
+                    updatePickersForSelectedStroke();
+                }
                 updateDelButton();
                 break;
 
@@ -1495,7 +1527,10 @@ function handlePointerDown(e: PointerEvent) {
                         getDistance(pos, lastTapPos) < DOUBLE_TAP_DISTANCE;
 
     if (isDoubleTap && eventHandler.getFingerCount() === 0) {
-        // Find closest stroke and point to the double-tap location (not the marker)
+        // DOUBLE-TAP SELECTION: Select stroke closest to the tap location
+        // This is different from single-tap (SELECT_CLOSEST_STROKE action),
+        // which searches from the marker position.
+        // Double-tap allows selecting strokes anywhere on screen, regardless of marker position.
         const canvasPos = screenToCanvas(pos);
         const result = findClosestStrokeAndPoint(canvasPos);
         if (result) {
