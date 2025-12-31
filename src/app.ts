@@ -97,9 +97,6 @@ let lastGridPosition: Point | null = null;
 // Grid mode state
 let isGridMode: boolean = false;
 
-// Fit mode state
-let isFitMode: boolean = false;
-
 // View transform (for 3-finger canvas transformation)
 let viewTransform = {
     scale: 1,
@@ -1284,6 +1281,17 @@ function updateDelButton() {
 
     // Update duplicate button state - only enabled when a stroke is selected
     btnDup.disabled = selectedStrokeIdx === null;
+
+    // Update fit button state - only enabled when a stroke is selected
+    fitBtn.disabled = selectedStrokeIdx === null;
+
+    // Update fit button active state based on whether the selected stroke is showing fitted
+    if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+        const stroke = strokeHistory[selectedStrokeIdx];
+        fitBtn.classList.toggle('active', stroke.showingFitted === true);
+    } else {
+        fitBtn.classList.remove('active');
+    }
 }
 
 function processDelete() {
@@ -1666,31 +1674,32 @@ btnDup.addEventListener('click', () => {
 });
 
 fitBtn.addEventListener('click', () => {
-    isFitMode = !isFitMode;
-    fitBtn.classList.toggle('active', isFitMode);
+    // Only work if a stroke is selected
+    if (selectedStrokeIdx === null || selectedStrokeIdx >= strokeHistory.length) {
+        return;
+    }
 
-    // If a stroke is selected, toggle between fitted and original
-    if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
-        const stroke = strokeHistory[selectedStrokeIdx];
+    const stroke = strokeHistory[selectedStrokeIdx];
 
-        // If fit mode is ON and stroke hasn't been fitted yet, or if it's a polyline/polygon
-        // that was fitted with a different stroke size, fit it now
-        const isSizeDependentFit = stroke.fitType === 'polyline' || stroke.fitType?.startsWith('polygon-');
-        const needsRefit = !stroke.fittedPoints ||
-                          (isSizeDependentFit && stroke.fittedWithSize !== stroke.size);
+    // Determine if we're toggling ON or OFF
+    const turningOn = !stroke.showingFitted;
 
-        if (isFitMode && needsRefit) {
-            fitStroke(stroke);
-        }
+    // If turning ON and stroke hasn't been fitted yet, or if it's a polyline/polygon
+    // that was fitted with a different stroke size, fit it now
+    const isSizeDependentFit = stroke.fitType === 'polyline' || stroke.fitType?.startsWith('polygon-');
+    const needsRefit = !stroke.fittedPoints ||
+                      (isSizeDependentFit && stroke.fittedWithSize !== stroke.size);
 
-        // Toggle display between fitted and original
-        if (stroke.fittedPoints && stroke.originalPoints) {
-            stroke.showingFitted = isFitMode;
-            stroke.points = isFitMode ? stroke.fittedPoints : stroke.originalPoints;
-            redraw();
-        }
-    } else {
-        showDebug('No stroke selected!');
+    if (turningOn && needsRefit) {
+        fitStroke(stroke);
+    }
+
+    // Toggle display between fitted and original
+    if (stroke.fittedPoints && stroke.originalPoints) {
+        stroke.showingFitted = turningOn;
+        stroke.points = turningOn ? stroke.fittedPoints : stroke.originalPoints;
+        updateDelButton();  // Update button state to reflect the change
+        redraw();
     }
 });
 
