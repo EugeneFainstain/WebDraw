@@ -10,7 +10,6 @@ const COLORS = [
     '#FF00FF', // Magenta
     // Grayscale
     '#FFFFFF', // White
-    '#BFBFBF', // 75% gray
     '#808080', // 50% gray
     '#404040', // 25% gray
     '#000000', // Black
@@ -26,10 +25,24 @@ export function createColorPicker(
 
     // Style the trigger element to show current color
     function updateTrigger() {
-        triggerElement.style.backgroundColor = currentColor;
+        triggerElement.style.backgroundColor = '#333';
         triggerElement.style.border = '2px solid #666';
         triggerElement.style.borderRadius = '4px';
         triggerElement.style.cursor = 'pointer';
+        triggerElement.style.display = 'flex';
+        triggerElement.style.alignItems = 'center';
+        triggerElement.style.justifyContent = 'center';
+
+        // Clear and redraw the color indicator
+        triggerElement.innerHTML = '';
+        const colorSquare = document.createElement('div');
+        colorSquare.style.cssText = `
+            width: 26px;
+            height: 26px;
+            background: ${currentColor};
+            border-radius: 2px;
+        `;
+        triggerElement.appendChild(colorSquare);
     }
 
     function createPopup() {
@@ -50,8 +63,8 @@ export function createColorPicker(
         COLORS.forEach(color => {
             const swatch = document.createElement('div');
             swatch.style.cssText = `
-                width: 32px;
-                height: 32px;
+                width: 40px;
+                height: 40px;
                 background: ${color};
                 border: 2px solid ${color === currentColor ? '#fff' : '#444'};
                 border-radius: 4px;
