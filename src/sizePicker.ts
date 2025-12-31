@@ -1,5 +1,5 @@
-// 16 sizes in a 4x4 grid (1 to 50, exponentially distributed for better UX)
-const SIZES = [1, 2, 3, 4, 6, 8, 10, 13, 16, 20, 25, 30, 36, 42, 48, 50];
+// 12 sizes in a 4x3 grid (1 to 40, exponentially distributed for better UX)
+const SIZES = [1, 2, 3, 4, 6, 8, 10, 13, 16, 20, 25, 40];
 
 export function createSizePicker(
     triggerElement: HTMLElement,
