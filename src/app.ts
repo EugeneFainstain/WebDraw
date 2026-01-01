@@ -1,6 +1,5 @@
 import '../styles.css';
-import { createColorPicker } from './colorPicker';
-import { createSizePicker } from './sizePicker';
+import { createCombinedPicker } from './combinedPicker';
 import { StateMachine, State, Event, Action, TransitionResult } from './stateMachine';
 import { EventHandler, Point } from './eventHandler';
 import { resampleStroke } from './resample';
@@ -16,8 +15,7 @@ import { fitEquilateralPolygon, generateEquilateralPolygonPoints } from './fitte
 
 const canvas = document.getElementById('drawingCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
-const colorPickerEl = document.getElementById('colorPicker') as HTMLElement;
-const sizePickerEl = document.getElementById('sizePicker') as HTMLElement;
+const combinedPickerEl = document.getElementById('combinedPicker') as HTMLElement;
 const delBtn = document.getElementById('delBtn') as HTMLButtonElement;
 const undoIcon = document.getElementById('undoIcon') as unknown as SVGElement;
 const deleteIcon = document.getElementById('deleteIcon') as unknown as SVGElement;
@@ -131,8 +129,8 @@ const DOUBLE_TAP_DISTANCE = 50; // pixels
 // CUSTOM UI COMPONENTS
 // ============================================================================
 
-const colorPicker = createColorPicker(
-    colorPickerEl,
+const combinedPicker = createCombinedPicker(
+    combinedPickerEl,
     (color: string) => {
         // If a stroke is selected, update its color
         if (selectedStrokeIdx !== null) {
@@ -140,18 +138,13 @@ const colorPicker = createColorPicker(
         }
         redraw();
     },
-    () => sizePicker.close() // Close size picker when color picker opens
-);
-const sizePicker = createSizePicker(
-    sizePickerEl,
     (size: number) => {
         // If a stroke is selected, update its size
         if (selectedStrokeIdx !== null) {
             strokeHistory[selectedStrokeIdx].size = size;
         }
         redraw();
-    },
-    () => colorPicker.close() // Close color picker when size picker opens
+    }
 );
 
 // ============================================================================
@@ -168,8 +161,8 @@ function getDistance(p1: Point, p2: Point): number {
 function updatePickersForSelectedStroke() {
     if (selectedStrokeIdx !== null) {
         const stroke = strokeHistory[selectedStrokeIdx];
-        colorPicker.setColor(stroke.color);
-        sizePicker.setSize(stroke.size);
+        combinedPicker.setColor(stroke.color);
+        combinedPicker.setSize(stroke.size);
     }
 }
 
@@ -488,9 +481,9 @@ function redraw() {
     // Draw marker indicator (in screen space)
     if (indicatorAnchor) {
         const indicatorPos = getIndicatorScreenPos();
-        const strokeSize = sizePicker.getSize();
+        const strokeSize = combinedPicker.getSize();
         const renderedSize = Math.max(strokeSize * viewTransform.scale, 1);
-        const drawColor = colorPicker.getColor();
+        const drawColor = combinedPicker.getColor();
         const isWhite = drawColor.toUpperCase() === '#FFFFFF';
         const outerColor = isWhite ? 'black' : drawColor;
 
@@ -855,8 +848,8 @@ function handleActions(actions: Action[]): void {
                 if (indicatorAnchor) {
                     const startPoint = isGridMode ? snapToGrid(indicatorAnchor) : indicatorAnchor;
                     currentStroke = {
-                        color: colorPicker.getColor(),
-                        size: sizePicker.getSize(),
+                        color: combinedPicker.getColor(),
+                        size: combinedPicker.getSize(),
                         points: [{ ...startPoint }]
                     };
                     // In grid mode, initialize lastGridPosition to the start point
@@ -1523,8 +1516,7 @@ function handlePointerDown(e: PointerEvent) {
     e.preventDefault();
 
     // Close any open pickers on canvas tap
-    colorPicker.close();
-    sizePicker.close();
+    combinedPicker.close();
 
     const pos = getPointerPos(e);
 

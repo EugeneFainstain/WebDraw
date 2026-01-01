@@ -47,16 +47,7 @@ html, body {
     font-size: 14px;
 }
 
-#colorPicker {
-    width: 36px;
-    height: 36px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    background: none;
-}
-
-#sizePicker {
+#combinedPicker {
     width: 36px;
     height: 36px;
 }
