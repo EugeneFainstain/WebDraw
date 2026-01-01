@@ -320,15 +320,15 @@ export class StateMachine {
                 };
 
             case Event.FINGER_UP:
-                // Single tap detection: select closest stroke if no timeout and no movement
+                // Single tap detection: deselect stroke if no timeout and no movement
                 const isSingleTap = !flags.TIMEOUT_HAPPENED && !flags.FINGER_MOVED_FAR_HAPPENED;
 
-                if (isSingleTap) {
-                    // Quick tap → select closest stroke to marker
+                if (isSingleTap && isStrokeSelected) {
+                    // Quick tap while stroke selected → deselect
                     return {
                         newState: State.Idle,
-                        newModifier: { isStrokeSelected: true },  // → Stroke Selected
-                        actions: [Action.SELECT_CLOSEST_STROKE]
+                        newModifier: { isStrokeSelected: false },  // → Normal
+                        actions: [Action.DESELECT_STROKE]
                     };
                 } else {
                     // Keep modifier unchanged (normal finger up or not a quick tap)

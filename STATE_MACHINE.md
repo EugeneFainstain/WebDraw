@@ -93,7 +93,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F1_DOWN | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
 | F2_DOWN | Drawing (keep Normal) - [CREATE_STROKE] | Drawing (keep Fresh) - [CREATE_STROKE] |
 | F3_DOWN | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
-| FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
+| FINGER_UP (if single tap) | Idle (keep Normal) | Idle (→ Normal) - [DESELECT_STROKE] |
+| FINGER_UP (otherwise) | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | MovingMarker (keep Normal) - [SET_TIMEOUT_FLAG] | MovingMarker (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
 | DELETE | MovingMarker (keep) - [PROCESS_DELETE] | MovingMarker (keep) - [PROCESS_DELETE] |
@@ -145,7 +146,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
   - Manual selection calls `stateMachine.setStrokeSelected(true)` to update the state machine
 
 **Exit Conditions:**
-- Single tap (quick tap without timeout or movement) - works for both automatic and manual selections
+- Single tap (quick tap without timeout or movement) when a stroke is selected - deselects the stroke
 - DELETE button pressed (removes selected stroke, selects another)
 - CLEAR button pressed
 - Marker movement >30px from selected stroke position (FINGER_MOVED_FAR in MovingMarker)
