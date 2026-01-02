@@ -20,8 +20,6 @@ const delBtn = document.getElementById('delBtn') as HTMLButtonElement;
 const undoIcon = document.getElementById('undoIcon') as unknown as SVGElement;
 const deleteIcon = document.getElementById('deleteIcon') as unknown as SVGElement;
 const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
-const gridToggleBtn = document.getElementById('gridToggle') as HTMLButtonElement;
-const fitBtn = document.getElementById('fitBtn') as HTMLButtonElement;
 const btnDup = document.getElementById('btnDup') as HTMLButtonElement;
 const btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
 const btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
@@ -123,19 +121,46 @@ function getAllPointsForTransform(stroke: Stroke): Point[] {
 }
 
 // Helper to apply transformation to all points in a stroke (including groups)
+// Store initial state of all point arrays for a stroke
+interface StrokeSnapshot {
+    points: Point[];
+    fittedPoints?: Point[];
+    originalPoints?: Point[];
+}
+
+function createStrokeSnapshot(stroke: Stroke): StrokeSnapshot[] {
+    const snapshots: StrokeSnapshot[] = [];
+    transformStroke(stroke, (leafStroke: Stroke) => {
+        const snapshot: StrokeSnapshot = {
+            points: leafStroke.points!.map(p => ({ ...p }))
+        };
+        if (leafStroke.fittedPoints) {
+            snapshot.fittedPoints = leafStroke.fittedPoints.map(p => ({ ...p }));
+        }
+        if (leafStroke.originalPoints) {
+            snapshot.originalPoints = leafStroke.originalPoints.map(p => ({ ...p }));
+        }
+        snapshots.push(snapshot);
+    });
+    return snapshots;
+}
+
 function applyTransformToStroke(
     stroke: Stroke,
-    initialPoints: Point[],
+    initialSnapshots: StrokeSnapshot[],
     center: Point,
     scaleFactor: number,
     rotationDelta: number,
     newCenter: Point
 ): void {
-    let pointIndex = 0;
+    let snapshotIndex = 0;
     transformStroke(stroke, (leafStroke: Stroke) => {
+        const snapshot = initialSnapshots[snapshotIndex++];
+
+        // Transform points
         const transformedPoints: Point[] = [];
-        for (let i = 0; i < leafStroke.points!.length; i++) {
-            const originalPoint = initialPoints[pointIndex++];
+        for (let i = 0; i < snapshot.points.length; i++) {
+            const originalPoint = snapshot.points[i];
             const dx = originalPoint.x - center.x;
             const dy = originalPoint.y - center.y;
 
@@ -153,6 +178,54 @@ function applyTransformToStroke(
             });
         }
         leafStroke.points = transformedPoints;
+
+        // Transform fittedPoints if they exist in snapshot
+        if (snapshot.fittedPoints) {
+            const transformedFittedPoints: Point[] = [];
+            for (let i = 0; i < snapshot.fittedPoints.length; i++) {
+                const fittedPoint = snapshot.fittedPoints[i];
+                const dx = fittedPoint.x - center.x;
+                const dy = fittedPoint.y - center.y;
+
+                const cos = Math.cos(rotationDelta);
+                const sin = Math.sin(rotationDelta);
+                const rotatedX = dx * cos - dy * sin;
+                const rotatedY = dx * sin + dy * cos;
+
+                const scaledX = rotatedX * scaleFactor;
+                const scaledY = rotatedY * scaleFactor;
+
+                transformedFittedPoints.push({
+                    x: scaledX + newCenter.x,
+                    y: scaledY + newCenter.y
+                });
+            }
+            leafStroke.fittedPoints = transformedFittedPoints;
+        }
+
+        // Transform originalPoints if they exist in snapshot
+        if (snapshot.originalPoints) {
+            const transformedOriginalPoints: Point[] = [];
+            for (let i = 0; i < snapshot.originalPoints.length; i++) {
+                const origPoint = snapshot.originalPoints[i];
+                const dx = origPoint.x - center.x;
+                const dy = origPoint.y - center.y;
+
+                const cos = Math.cos(rotationDelta);
+                const sin = Math.sin(rotationDelta);
+                const rotatedX = dx * cos - dy * sin;
+                const rotatedY = dx * sin + dy * cos;
+
+                const scaledX = rotatedX * scaleFactor;
+                const scaledY = rotatedY * scaleFactor;
+
+                transformedOriginalPoints.push({
+                    x: scaledX + newCenter.x,
+                    y: scaledY + newCenter.y
+                });
+            }
+            leafStroke.originalPoints = transformedOriginalPoints;
+        }
     });
 }
 
@@ -220,7 +293,7 @@ let transformStart: {
     fingerAngles: number[];
     unwrappedRotation: number;
     initialTransform: typeof viewTransform;
-    initialStrokePoints?: Point[];  // For selected stroke transformation
+    initialStrokeSnapshots?: StrokeSnapshot[];  // For selected stroke transformation
 } | null = null;
 
 // Movement tracking for continuous updates
@@ -278,6 +351,44 @@ const combinedPicker = createCombinedPicker(
                 stroke.size = size;
             });
         }
+        redraw();
+    },
+    () => {
+        // Grid toggle
+        isGridMode = !isGridMode;
+
+        if (isGridMode && indicatorAnchor) {
+            indicatorAnchor = snapToGrid(indicatorAnchor);
+        }
+        redraw();
+    },
+    () => {
+        // Fit button
+        // Only work if a stroke is selected
+        if (selectedStrokeIdx === null || selectedStrokeIdx >= strokeHistory.length) {
+            return;
+        }
+
+        const stroke = strokeHistory[selectedStrokeIdx];
+
+        // Determine if we're toggling ON or OFF
+        const turningOn = !stroke.showingFitted;
+
+        // If turning ON and stroke hasn't been fitted yet, or if it's a polyline/polygon
+        // that was fitted with a different stroke size, fit it now
+        const isSizeDependentFit = stroke.fitType === 'polyline' || stroke.fitType?.startsWith('polygon-');
+        const needsRefit = !stroke.fittedPoints ||
+                          (isSizeDependentFit && stroke.fittedWithSize !== stroke.size!);
+
+        if (turningOn && needsRefit) {
+            fitStroke(stroke);
+        }
+
+        // Toggle display between fitted and original
+        if (stroke.fittedPoints && stroke.originalPoints) {
+            stroke.showingFitted = turningOn;
+        }
+
         redraw();
     }
 );
@@ -584,22 +695,25 @@ function drawStroke(stroke: Stroke, isHighlighted: boolean = false) {
         return;
     }
 
+    // Determine which points to use - fitted or original
+    const pointsToUse = (stroke.showingFitted && stroke.fittedPoints) ? stroke.fittedPoints : stroke.points!;
+
     const minSize = screenLengthToCanvasLength(1);
     const renderSize = Math.max(stroke.size!, minSize);
 
-    if (stroke.points!.length < 2) {
-        if (stroke.points!.length === 1) {
+    if (pointsToUse.length < 2) {
+        if (pointsToUse.length === 1) {
             // Draw highlighted version first (grey outline) for single point
             if (isHighlighted) {
                 ctx.fillStyle = 'lightgrey';
                 ctx.beginPath();
-                ctx.arc(stroke.points![0].x, stroke.points![0].y, renderSize * 2 / 2, 0, Math.PI * 2);
+                ctx.arc(pointsToUse[0].x, pointsToUse[0].y, renderSize * 2 / 2, 0, Math.PI * 2);
                 ctx.fill();
             }
             // Draw normal version on top
             ctx.fillStyle = stroke.color!;
             ctx.beginPath();
-            ctx.arc(stroke.points![0].x, stroke.points![0].y, renderSize / 2, 0, Math.PI * 2);
+            ctx.arc(pointsToUse[0].x, pointsToUse[0].y, renderSize / 2, 0, Math.PI * 2);
             ctx.fill();
         }
         return;
@@ -610,9 +724,9 @@ function drawStroke(stroke: Stroke, isHighlighted: boolean = false) {
         ctx.strokeStyle = 'lightgrey';
         ctx.lineWidth = renderSize * 2;
         ctx.beginPath();
-        ctx.moveTo(stroke.points![0].x, stroke.points![0].y);
-        for (let i = 1; i < stroke.points!.length; i++) {
-            ctx.lineTo(stroke.points![i].x, stroke.points![i].y);
+        ctx.moveTo(pointsToUse[0].x, pointsToUse[0].y);
+        for (let i = 1; i < pointsToUse.length; i++) {
+            ctx.lineTo(pointsToUse[i].x, pointsToUse[i].y);
         }
         ctx.stroke();
     }
@@ -621,10 +735,10 @@ function drawStroke(stroke: Stroke, isHighlighted: boolean = false) {
     ctx.strokeStyle = stroke.color!;
     ctx.lineWidth = renderSize;
     ctx.beginPath();
-    ctx.moveTo(stroke.points![0].x, stroke.points![0].y);
+    ctx.moveTo(pointsToUse[0].x, pointsToUse[0].y);
 
-    for (let i = 1; i < stroke.points!.length; i++) {
-        ctx.lineTo(stroke.points![i].x, stroke.points![i].y);
+    for (let i = 1; i < pointsToUse.length; i++) {
+        ctx.lineTo(pointsToUse[i].x, pointsToUse[i].y);
     }
     ctx.stroke();
 }
@@ -704,6 +818,23 @@ function redraw() {
         ctx.lineWidth = 2;
         ctx.stroke();
     }
+
+    // Update combined picker button states
+    updateCombinedPickerButtonStates();
+}
+
+function updateCombinedPickerButtonStates() {
+    // Update grid button state
+    combinedPicker.setGridActive(isGridMode);
+
+    // Update fit button state
+    if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+        const stroke = strokeHistory[selectedStrokeIdx];
+        const isFitActive = stroke.showingFitted === true;
+        combinedPicker.setFitState(true, isFitActive);
+    } else {
+        combinedPicker.setFitState(false, false);
+    }
 }
 
 // ============================================================================
@@ -739,15 +870,16 @@ function initThreeFingerTransform() {
     // If a stroke is selected, store initial stroke points for transformation
     if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
         const selectedStroke = strokeHistory[selectedStrokeIdx];
-        // Get all points (works for both single strokes and groups)
-        const allPoints = getAllPointsForTransform(selectedStroke);
+        // Create snapshot of all point arrays for the stroke
+        const strokeSnapshots = createStrokeSnapshot(selectedStroke);
         transformStart = {
             ...baseTransformStart,
-            initialStrokePoints: allPoints.map(p => ({ ...p }))
+            initialStrokeSnapshots: strokeSnapshots
         };
 
         // Save snapshot for undo functionality (only if not already saved)
         if (!hasUndoableTransform) {
+            const allPoints = getAllPointsForTransform(selectedStroke);
             transformSnapshot = allPoints.map(p => ({ ...p }));
         }
     } else {
@@ -788,16 +920,19 @@ function applyThreeFingerTransform() {
     const rotationDelta = transformStart.unwrappedRotation;
 
     // Check if we're transforming a selected stroke or the entire canvas
-    if (transformStart.initialStrokePoints && selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+    if (transformStart.initialStrokeSnapshots && selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
         // Transform only the selected stroke (works for both single strokes and groups)
         const selectedStroke = strokeHistory[selectedStrokeIdx];
 
+        // Calculate bounding box from all points in the snapshots
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const point of transformStart.initialStrokePoints) {
-            minX = Math.min(minX, point.x);
-            minY = Math.min(minY, point.y);
-            maxX = Math.max(maxX, point.x);
-            maxY = Math.max(maxY, point.y);
+        for (const snapshot of transformStart.initialStrokeSnapshots) {
+            for (const point of snapshot.points) {
+                minX = Math.min(minX, point.x);
+                minY = Math.min(minY, point.y);
+                maxX = Math.max(maxX, point.x);
+                maxY = Math.max(maxY, point.y);
+            }
         }
         const initialStrokeCenter = {
             x: (minX + maxX) / 2,
@@ -818,7 +953,7 @@ function applyThreeFingerTransform() {
         // Apply transformation to all points in the stroke (handles groups recursively)
         applyTransformToStroke(
             selectedStroke,
-            transformStart.initialStrokePoints,
+            transformStart.initialStrokeSnapshots,
             initialStrokeCenter,
             scaleFactor,
             rotationDelta,
@@ -1572,17 +1707,6 @@ function updateDelButton() {
     // Update duplicate button state - only enabled when a stroke is selected
     btnDup.disabled = selectedStrokeIdx === null;
 
-    // Update fit button state - only enabled when a stroke is selected
-    fitBtn.disabled = selectedStrokeIdx === null;
-
-    // Update fit button active state based on whether the selected stroke is showing fitted
-    if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
-        const stroke = strokeHistory[selectedStrokeIdx];
-        fitBtn.classList.toggle('active', stroke.showingFitted === true);
-    } else {
-        fitBtn.classList.remove('active');
-    }
-
     // Update group/ungroup buttons
     updateGroupButtons();
 }
@@ -2078,7 +2202,7 @@ function handlePointerUp(e: PointerEvent) {
         batchedDelta = null;
 
         // Mark transformation as complete if a stroke was transformed
-        if (transformStart && transformStart.initialStrokePoints && transformSnapshot) {
+        if (transformStart && transformStart.initialStrokeSnapshots && transformSnapshot) {
             hasUndoableTransform = true;
             updateDelButton();
         }
@@ -2126,16 +2250,6 @@ canvas.addEventListener('touchcancel', e => e.preventDefault(), { passive: false
 delBtn.addEventListener('click', () => eventHandler.handleDelete());
 clearBtn.addEventListener('click', () => eventHandler.handleClear());
 
-gridToggleBtn.addEventListener('click', () => {
-    isGridMode = !isGridMode;
-    gridToggleBtn.classList.toggle('active', isGridMode);
-
-    if (isGridMode && indicatorAnchor) {
-        indicatorAnchor = snapToGrid(indicatorAnchor);
-    }
-    redraw();
-});
-
 btnDup.addEventListener('click', () => {
     duplicateSelectedStroke();
 });
@@ -2146,36 +2260,6 @@ btnGroup.addEventListener('click', () => {
 
 btnUngroup.addEventListener('click', () => {
     ungroupSelectedStroke();
-});
-
-fitBtn.addEventListener('click', () => {
-    // Only work if a stroke is selected
-    if (selectedStrokeIdx === null || selectedStrokeIdx >= strokeHistory.length) {
-        return;
-    }
-
-    const stroke = strokeHistory[selectedStrokeIdx];
-
-    // Determine if we're toggling ON or OFF
-    const turningOn = !stroke.showingFitted;
-
-    // If turning ON and stroke hasn't been fitted yet, or if it's a polyline/polygon
-    // that was fitted with a different stroke size, fit it now
-    const isSizeDependentFit = stroke.fitType === 'polyline' || stroke.fitType?.startsWith('polygon-');
-    const needsRefit = !stroke.fittedPoints ||
-                      (isSizeDependentFit && stroke.fittedWithSize !== stroke.size!);
-
-    if (turningOn && needsRefit) {
-        fitStroke(stroke);
-    }
-
-    // Toggle display between fitted and original
-    if (stroke.fittedPoints && stroke.originalPoints) {
-        stroke.showingFitted = turningOn;
-        stroke.points = turningOn ? stroke.fittedPoints : stroke.originalPoints;
-        updateDelButton();  // Update button state to reflect the change
-        redraw();
-    }
 });
 
 window.addEventListener('resize', resizeCanvas);
