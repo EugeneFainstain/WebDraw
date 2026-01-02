@@ -97,6 +97,7 @@ export enum Action {
     UPDATE_SELECTION_RECTANGLE = 'UPDATE_SELECTION_RECTANGLE',
     APPLY_SELECTION_RECTANGLE = 'APPLY_SELECTION_RECTANGLE',
     CANCEL_SELECTION_RECTANGLE = 'CANCEL_SELECTION_RECTANGLE',
+    CLEAR_HIGHLIGHTING = 'CLEAR_HIGHLIGHTING',
 
     // Transform actions
     INIT_TRANSFORM = 'INIT_TRANSFORM',
@@ -339,13 +340,21 @@ export class StateMachine {
                 // Single tap detection: deselect stroke if no timeout and no movement
                 const isSingleTap = !flags.TIMEOUT_HAPPENED && !flags.FINGER_MOVED_FAR_HAPPENED;
 
-                if (isSingleTap && isStrokeSelected) {
-                    // Quick tap while stroke selected → deselect
-                    return {
-                        newState: State.Idle,
-                        newModifier: { isStrokeSelected: false },  // → Normal
-                        actions: [Action.DESELECT_STROKE]
-                    };
+                if (isSingleTap) {
+                    // Quick tap: clear highlighting and deselect stroke
+                    if (isStrokeSelected) {
+                        return {
+                            newState: State.Idle,
+                            newModifier: { isStrokeSelected: false },  // → Normal
+                            actions: [Action.CLEAR_HIGHLIGHTING, Action.DESELECT_STROKE]
+                        };
+                    } else {
+                        return {
+                            newState: State.Idle,
+                            newModifier: { isStrokeSelected },  // keep
+                            actions: [Action.CLEAR_HIGHLIGHTING]
+                        };
+                    }
                 } else {
                     // Keep modifier unchanged (normal finger up or not a quick tap)
                     return {

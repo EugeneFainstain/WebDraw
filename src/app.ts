@@ -144,15 +144,27 @@ const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps
 const combinedPicker = createCombinedPicker(
     combinedPickerEl,
     (color: string) => {
-        // If a stroke is selected, update its color
-        if (selectedStrokeIdx !== null) {
+        // Apply to all highlighted strokes, or to selected stroke if no highlights
+        if (highlightedStrokes.size > 0) {
+            for (const index of highlightedStrokes) {
+                if (index < strokeHistory.length) {
+                    strokeHistory[index].color = color;
+                }
+            }
+        } else if (selectedStrokeIdx !== null) {
             strokeHistory[selectedStrokeIdx].color = color;
         }
         redraw();
     },
     (size: number) => {
-        // If a stroke is selected, update its size
-        if (selectedStrokeIdx !== null) {
+        // Apply to all highlighted strokes, or to selected stroke if no highlights
+        if (highlightedStrokes.size > 0) {
+            for (const index of highlightedStrokes) {
+                if (index < strokeHistory.length) {
+                    strokeHistory[index].size = size;
+                }
+            }
+        } else if (selectedStrokeIdx !== null) {
             strokeHistory[selectedStrokeIdx].size = size;
         }
         redraw();
@@ -754,26 +766,18 @@ function updateHighlightedStrokes(): void {
     }
 }
 
-function applySelectionRectangle(): void {
-    if (!selectionRectStart || !selectionRectEnd) return;
+function applyColorAndSizeToHighlightedStrokes(): void {
+    if (highlightedStrokes.size === 0) return;
 
     const currentColor = combinedPicker.getColor();
     const currentSize = combinedPicker.getSize();
 
-    // Apply color and size to all strokes that intersect the rectangle
-    let touchedCount = 0;
-    for (const stroke of strokeHistory) {
-        if (strokeIntersectsRectangle(stroke, selectionRectStart, selectionRectEnd)) {
-            stroke.color = currentColor;
-            stroke.size = currentSize;
-            touchedCount++;
+    // Apply color and size to all highlighted strokes
+    for (const index of highlightedStrokes) {
+        if (index < strokeHistory.length) {
+            strokeHistory[index].color = currentColor;
+            strokeHistory[index].size = currentSize;
         }
-    }
-
-    // Optional: show debug message
-    if (touchedCount > 0) {
-        showDebug(`Applied to ${touchedCount} stroke${touchedCount !== 1 ? 's' : ''}`);
-        setTimeout(() => clearDebug(), 1000);
     }
 }
 
@@ -1058,7 +1062,7 @@ function handleActions(actions: Action[]): void {
                     const positions = eventHandler.getFingerPositions();
                     lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
                     lastSecondaryPos = positions.secondary ? { ...positions.secondary } : null;
-                    // Update highlighted strokes (initially empty)
+                    // Update highlighted strokes (initially empty since single tap cleared them)
                     updateHighlightedStrokes();
                 }
                 break;
@@ -1073,14 +1077,10 @@ function handleActions(actions: Action[]): void {
                 break;
 
             case Action.APPLY_SELECTION_RECTANGLE:
-                // Apply current color and stroke width to all strokes that intersect the rectangle
-                if (selectionRectStart && selectionRectEnd) {
-                    applySelectionRectangle();
-                }
+                // Complete selection rectangle - keep strokes highlighted, don't apply colors yet
                 selectionRectStart = null;
                 selectionRectEnd = null;
-                // Clear highlighted strokes
-                highlightedStrokes.clear();
+                // Keep highlighted strokes (don't clear them)
                 break;
 
             case Action.CANCEL_SELECTION_RECTANGLE:
@@ -1088,6 +1088,11 @@ function handleActions(actions: Action[]): void {
                 selectionRectStart = null;
                 selectionRectEnd = null;
                 // Clear highlighted strokes
+                highlightedStrokes.clear();
+                break;
+
+            case Action.CLEAR_HIGHLIGHTING:
+                // Clear all highlighted strokes
                 highlightedStrokes.clear();
                 break;
 

@@ -62,8 +62,9 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `DESELECT_STROKE` | Deselect stroke (exit selected stroke mode) |
 | `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
 | `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag (also updates real-time highlighting) |
-| `APPLY_SELECTION_RECTANGLE` | Apply color/size to highlighted strokes and clear highlighting |
+| `APPLY_SELECTION_RECTANGLE` | Complete selection rectangle and keep strokes highlighted |
 | `CANCEL_SELECTION_RECTANGLE` | Cancel selection rectangle and clear highlighting |
+| `CLEAR_HIGHLIGHTING` | Clear all highlighted strokes |
 | `INIT_TRANSFORM` | Initialize 3-finger transform |
 | `APPLY_TRANSFORM` | Apply transform (continuous) |
 | `PROCESS_DELETE` | Execute delete operation |
@@ -100,7 +101,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F1_DOWN (otherwise) | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
 | F2_DOWN | Drawing (keep Normal) - [CREATE_STROKE] | Drawing (keep Fresh) - [CREATE_STROKE] |
 | F3_DOWN | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
-| FINGER_UP (if single tap) | Idle (keep Normal) | Idle (→ Normal) - [DESELECT_STROKE] |
+| FINGER_UP (if single tap) | Idle (keep Normal) - [CLEAR_HIGHLIGHTING] | Idle (→ Normal) - [CLEAR_HIGHLIGHTING, DESELECT_STROKE] |
 | FINGER_UP (otherwise) | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | MovingMarker (keep Normal) - [SET_TIMEOUT_FLAG] | MovingMarker (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
@@ -199,13 +200,20 @@ When in Drawing state and F3_DOWN event occurs:
 - **Real-time highlighting**: As the rectangle is dragged, strokes that intersect the rectangle are highlighted in real-time
   - Highlighted strokes are drawn with a light grey outline at 2x thickness, then the normal stroke is drawn on top
   - The highlighting updates continuously as the rectangle changes
-- On FINGER_UP, applies current color and stroke width to all strokes that were highlighted (intersecting the rectangle)
-- Any stroke with at least one point inside the rectangle is affected
+- On FINGER_UP, the selection rectangle disappears but strokes **remain highlighted**
+  - Highlighted strokes stay highlighted until explicitly cleared
+  - Changing color or stroke width applies to **all highlighted strokes**
+  - Any stroke with at least one point inside the rectangle is affected
+
+**Clearing Highlighting:**
+- Single tap (quick tap without timeout or movement) clears all highlighted strokes
+  - Since double-tap and tap-and-a-half both start with a single tap, they automatically clear highlighting
+- CLEAR button clears highlighting
 
 **Exit Conditions:**
-- FINGER_UP (applies selection)
-- F2_DOWN or F3_DOWN (cancels selection)
-- DELETE or CLEAR buttons (cancels selection)
+- FINGER_UP (completes selection, keeps strokes highlighted)
+- F2_DOWN or F3_DOWN (cancels selection rectangle and clears highlighting)
+- DELETE or CLEAR buttons (cancels selection rectangle and clears highlighting)
 
 ## Code Structure
 
