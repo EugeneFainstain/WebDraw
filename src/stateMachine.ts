@@ -18,7 +18,8 @@ export enum State {
     Idle = 'Idle',
     MovingMarker = 'MovingMarker',
     Drawing = 'Drawing',
-    Transform = 'Transform'
+    Transform = 'Transform',
+    SelectionRectangle = 'SelectionRectangle'
 }
 
 // ============================================================================
@@ -91,6 +92,12 @@ export enum Action {
     SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to marker (single tap)
     DESELECT_STROKE = 'DESELECT_STROKE',
 
+    // Selection rectangle actions
+    START_SELECTION_RECTANGLE = 'START_SELECTION_RECTANGLE',
+    UPDATE_SELECTION_RECTANGLE = 'UPDATE_SELECTION_RECTANGLE',
+    APPLY_SELECTION_RECTANGLE = 'APPLY_SELECTION_RECTANGLE',
+    CANCEL_SELECTION_RECTANGLE = 'CANCEL_SELECTION_RECTANGLE',
+
     // Transform actions
     INIT_TRANSFORM = 'INIT_TRANSFORM',
     APPLY_TRANSFORM = 'APPLY_TRANSFORM',
@@ -158,6 +165,12 @@ export class StateMachine {
         this.modifier.isStrokeSelected = selected;
     }
 
+    // Manually enter selection rectangle mode (for tap-and-a-half gesture)
+    public enterSelectionRectangle(): void {
+        this.currentState = State.SelectionRectangle;
+        this.modifier.isStrokeSelected = false;
+    }
+
     // Process an event and return the transition result
     public processEvent(event: Event): TransitionResult {
         const result = this.transition(this.currentState, this.modifier, event, this.flags);
@@ -206,7 +219,7 @@ export class StateMachine {
     ): TransitionResult {
         switch (state) {
             case State.Idle:
-                return this.transitionFromIdle(modifier, event);
+                return this.transitionFromIdle(modifier, event, flags);
 
             case State.MovingMarker:
                 return this.transitionFromMovingMarker(modifier, event, flags);
@@ -216,6 +229,9 @@ export class StateMachine {
 
             case State.Transform:
                 return this.transitionFromTransform(modifier, event);
+
+            case State.SelectionRectangle:
+                return this.transitionFromSelectionRectangle(modifier, event);
 
             default:
                 // Should never happen
@@ -231,12 +247,12 @@ export class StateMachine {
     // TRANSITIONS FROM IDLE STATE
     // ========================================================================
 
-    private transitionFromIdle(modifier: StateModifier, event: Event): TransitionResult {
+    private transitionFromIdle(modifier: StateModifier, event: Event, flags: EventFlags): TransitionResult {
         const { isStrokeSelected } = modifier;
 
         switch (event) {
             case Event.F1_DOWN:
-                // Keep modifier unchanged
+                // Enter MovingMarker (tap-and-a-half will be handled by app.ts)
                 return {
                     newState: State.MovingMarker,
                     newModifier: { isStrokeSelected },  // keep
@@ -296,7 +312,7 @@ export class StateMachine {
 
         switch (event) {
             case Event.F1_DOWN:
-                // Keep modifier unchanged
+                // Keep in MovingMarker (tap-and-a-half will be handled by app.ts)
                 return {
                     newState: State.MovingMarker,
                     newModifier: { isStrokeSelected },  // keep
@@ -529,6 +545,69 @@ export class StateMachine {
             default:
                 return {
                     newState: State.Transform,
+                    newModifier: modifier,
+                    actions: [Action.DO_NOTHING]
+                };
+        }
+    }
+
+    // ========================================================================
+    // TRANSITIONS FROM SELECTION RECTANGLE STATE
+    // ========================================================================
+
+    private transitionFromSelectionRectangle(modifier: StateModifier, event: Event): TransitionResult {
+        switch (event) {
+            case Event.F1_DOWN:
+                // Keep in selection rectangle mode
+                return {
+                    newState: State.SelectionRectangle,
+                    newModifier: modifier,  // keep
+                    actions: [Action.DO_NOTHING]
+                };
+
+            case Event.F2_DOWN:
+            case Event.F3_DOWN:
+                // Too many fingers - cancel selection rectangle
+                return {
+                    newState: State.Idle,
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.CANCEL_SELECTION_RECTANGLE, Action.DESELECT_STROKE]
+                };
+
+            case Event.FINGER_UP:
+                // Apply selection and return to idle
+                return {
+                    newState: State.Idle,
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions: [Action.APPLY_SELECTION_RECTANGLE, Action.DESELECT_STROKE]
+                };
+
+            case Event.TIMEOUT:
+            case Event.FINGER_MOVED_FAR:
+                // Keep in selection rectangle mode, update selection
+                return {
+                    newState: State.SelectionRectangle,
+                    newModifier: modifier,  // keep
+                    actions: event === Event.TIMEOUT ?
+                        [Action.SET_TIMEOUT_FLAG, Action.UPDATE_SELECTION_RECTANGLE] :
+                        [Action.SET_FINGER_MOVED_FAR_FLAG, Action.UPDATE_SELECTION_RECTANGLE]
+                };
+
+            case Event.DELETE:
+            case Event.CLEAR:
+                // Cancel selection and process delete/clear
+                const actions = event === Event.DELETE ?
+                    [Action.CANCEL_SELECTION_RECTANGLE, Action.PROCESS_DELETE] :
+                    [Action.CANCEL_SELECTION_RECTANGLE, Action.PROCESS_CLEAR, Action.DESELECT_STROKE];
+                return {
+                    newState: State.Idle,
+                    newModifier: { isStrokeSelected: false },  // → Normal
+                    actions
+                };
+
+            default:
+                return {
+                    newState: State.SelectionRectangle,
                     newModifier: modifier,
                     actions: [Action.DO_NOTHING]
                 };

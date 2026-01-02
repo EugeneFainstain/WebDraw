@@ -8,12 +8,13 @@ The state machine is implemented in [src/stateMachine.ts](src/stateMachine.ts) a
 
 ## States
 
-The application has **4 distinct states**:
+The application has **5 distinct states**:
 
 1. **Idle** - No fingers touching the screen
 2. **MovingMarker** - One finger on screen, moving the drawing marker
 3. **Drawing** - Two fingers on screen, actively drawing a stroke
-4. **Transform** - Three fingers on screen, transforming canvas or fresh stroke
+4. **Transform** - Three fingers on screen, transforming canvas or selected stroke
+5. **SelectionRectangle** - Tap-and-a-half gesture active, dragging selection rectangle
 
 ## State Modifier
 
@@ -57,7 +58,12 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `SAVE_STROKE` | Save current stroke to history |
 | `ABANDON_STROKE` | Discard current stroke |
 | `SELECT_STROKE` | Select a stroke (enter selected stroke mode) |
+| `SELECT_CLOSEST_STROKE` | Select closest stroke to marker |
 | `DESELECT_STROKE` | Deselect stroke (exit selected stroke mode) |
+| `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
+| `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag |
+| `APPLY_SELECTION_RECTANGLE` | Apply color/size to strokes in rectangle |
+| `CANCEL_SELECTION_RECTANGLE` | Cancel selection rectangle |
 | `INIT_TRANSFORM` | Initialize 3-finger transform |
 | `APPLY_TRANSFORM` | Apply transform (continuous) |
 | `PROCESS_DELETE` | Execute delete operation |
@@ -90,7 +96,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 | Event | IF Normal Mode → | IF Stroke Selected → |
 |-------|------------------|------------------------|
-| F1_DOWN | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
+| F1_DOWN (tap-and-a-half) | SelectionRectangle (→ Normal) - [START_SELECTION_RECTANGLE, DESELECT_STROKE] | SelectionRectangle (→ Normal) - [START_SELECTION_RECTANGLE, DESELECT_STROKE] |
+| F1_DOWN (otherwise) | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
 | F2_DOWN | Drawing (keep Normal) - [CREATE_STROKE] | Drawing (keep Fresh) - [CREATE_STROKE] |
 | F3_DOWN | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
 | FINGER_UP (if single tap) | Idle (keep Normal) | Idle (→ Normal) - [DESELECT_STROKE] |
@@ -99,6 +106,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_MOVED_FAR | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
 | DELETE | MovingMarker (keep) - [PROCESS_DELETE] | MovingMarker (keep) - [PROCESS_DELETE] |
 | CLEAR | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
+
+**Note on F1_DOWN:** Tap-and-a-half is detected when F1_DOWN occurs without timeout and without movement (quick tap then another tap).
 
 ### FROM Drawing State
 
@@ -129,6 +138,21 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_MOVED_FAR | Transform (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG] | Transform (keep Fresh) - [SET_FINGER_MOVED_FAR_FLAG] |
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
+
+### FROM SelectionRectangle State
+
+| Event | Transition → |
+|-------|--------------|
+| F1_DOWN | SelectionRectangle (keep Normal) |
+| F2_DOWN | Idle (→ Normal) - [CANCEL_SELECTION_RECTANGLE, DESELECT_STROKE] |
+| F3_DOWN | Idle (→ Normal) - [CANCEL_SELECTION_RECTANGLE, DESELECT_STROKE] |
+| FINGER_UP | Idle (→ Normal) - [APPLY_SELECTION_RECTANGLE, DESELECT_STROKE] |
+| TIMEOUT | SelectionRectangle (keep Normal) - [SET_TIMEOUT_FLAG, UPDATE_SELECTION_RECTANGLE] |
+| FINGER_MOVED_FAR | SelectionRectangle (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG, UPDATE_SELECTION_RECTANGLE] |
+| DELETE | Idle (→ Normal) - [CANCEL_SELECTION_RECTANGLE, PROCESS_DELETE] |
+| CLEAR | Idle (→ Normal) - [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DESELECT_STROKE] |
+
+**Note:** Selection rectangle is always in Normal mode (no stroke selection active).
 
 ## Implementation Notes
 
@@ -164,6 +188,22 @@ When a state transition occurs, the state machine returns a list of **actions** 
 When in Drawing state and F3_DOWN event occurs:
 - If `FINGER_MOVED_FAR_HAPPENED` flag is true: stroke is saved before entering Transform
 - If `FINGER_MOVED_FAR_HAPPENED` flag is false: stroke is abandoned (assumed accidental)
+
+### Selection Rectangle Mode
+
+**Entry Condition:**
+- Tap-and-a-half gesture: Quick tap (F1_DOWN -> FINGER_UP without timeout/movement), then another F1_DOWN before timeout
+
+**Behavior:**
+- Dragging creates a semi-transparent blue selection rectangle
+- On FINGER_UP, applies current color and stroke width to all strokes that intersect the rectangle
+- Any stroke with at least one point inside the rectangle is affected
+- Temporary feature until multi-stroke selection is implemented
+
+**Exit Conditions:**
+- FINGER_UP (applies selection)
+- F2_DOWN or F3_DOWN (cancels selection)
+- DELETE or CLEAR buttons (cancels selection)
 
 ## Code Structure
 

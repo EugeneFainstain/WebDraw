@@ -95,6 +95,10 @@ let lastGridPosition: Point | null = null;
 // Grid mode state
 let isGridMode: boolean = false;
 
+// Selection rectangle state
+let selectionRectStart: Point | null = null;
+let selectionRectEnd: Point | null = null;
+
 // View transform (for 3-finger canvas transformation)
 let viewTransform = {
     scale: 1,
@@ -119,11 +123,16 @@ let lastSecondaryPos: Point | null = null;
 let lastDelta: { x: number, y: number, pointerId: number } | null = null;
 let batchedDelta: { x: number, y: number } | null = null;
 
-// Double-tap detection for indicator reset
-let lastTapTime = 0;
-let lastTapPos: Point | null = null;
-const DOUBLE_TAP_DELAY = 300; // ms
-const DOUBLE_TAP_DISTANCE = 50; // pixels
+// Double-tap detection for stroke selection
+let firstTapDownTime = 0;
+let firstTapDownPos: Point | null = null;
+let firstTapUpTime = 0;
+let secondTapDownTime = 0;
+let secondTapDownPos: Point | null = null;
+let isTrackingDoubleTap = false; // True when we're waiting to see if second tap completes
+const DOUBLE_TAP_DELAY = 300; // ms - max time between first lift and second down
+const DOUBLE_TAP_MAX_DURATION = 200; // ms - max time the second tap can be held before it's not a tap
+const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps
 
 // ============================================================================
 // CUSTOM UI COMPONENTS
@@ -476,6 +485,23 @@ function redraw() {
         drawStroke(currentStroke);
     }
 
+    // Draw selection rectangle (in canvas coordinates, inside transform)
+    if (selectionRectStart && selectionRectEnd) {
+        const minX = Math.min(selectionRectStart.x, selectionRectEnd.x);
+        const maxX = Math.max(selectionRectStart.x, selectionRectEnd.x);
+        const minY = Math.min(selectionRectStart.y, selectionRectEnd.y);
+        const maxY = Math.max(selectionRectStart.y, selectionRectEnd.y);
+
+        // Draw semi-transparent rectangle
+        ctx.fillStyle = 'rgba(135, 206, 250, 0.3)'; // Light blue with 30% opacity
+        ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+
+        // Draw rectangle border
+        ctx.strokeStyle = 'rgba(30, 144, 255, 0.8)'; // Dodger blue with 80% opacity
+        ctx.lineWidth = screenLengthToCanvasLength(2);
+        ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+    }
+
     ctx.restore();
 
     // Draw marker indicator (in screen space)
@@ -664,6 +690,50 @@ function applyThreeFingerTransform() {
         viewTransform.rotation = newRotation;
         viewTransform.panX = currentPivot.x - tx2;
         viewTransform.panY = currentPivot.y - ty2;
+    }
+}
+
+// ============================================================================
+// SELECTION RECTANGLE
+// ============================================================================
+
+function strokeIntersectsRectangle(stroke: Stroke, rectStart: Point, rectEnd: Point): boolean {
+    // Get rectangle bounds
+    const minX = Math.min(rectStart.x, rectEnd.x);
+    const maxX = Math.max(rectStart.x, rectEnd.x);
+    const minY = Math.min(rectStart.y, rectEnd.y);
+    const maxY = Math.max(rectStart.y, rectEnd.y);
+
+    // Check if any point in the stroke is inside or touches the rectangle
+    for (const point of stroke.points) {
+        if (point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function applySelectionRectangle(): void {
+    if (!selectionRectStart || !selectionRectEnd) return;
+
+    const currentColor = combinedPicker.getColor();
+    const currentSize = combinedPicker.getSize();
+
+    // Apply color and size to all strokes that intersect the rectangle
+    let touchedCount = 0;
+    for (const stroke of strokeHistory) {
+        if (strokeIntersectsRectangle(stroke, selectionRectStart, selectionRectEnd)) {
+            stroke.color = currentColor;
+            stroke.size = currentSize;
+            touchedCount++;
+        }
+    }
+
+    // Optional: show debug message
+    if (touchedCount > 0) {
+        showDebug(`Applied to ${touchedCount} stroke${touchedCount !== 1 ? 's' : ''}`);
+        setTimeout(() => clearDebug(), 1000);
     }
 }
 
@@ -935,8 +1005,42 @@ function handleActions(actions: Action[]): void {
                 transformSnapshot = null;
                 hasUndoableTransform = false;
                 // Don't change isFreshStroke - it persists through deselection
-                clearDebug();
+                // NOTE: Don't clearDebug() here - debug messages should persist
                 updateDelButton();
+                break;
+
+            case Action.START_SELECTION_RECTANGLE:
+                // Start selection rectangle at current marker position
+                if (indicatorAnchor) {
+                    selectionRectStart = { ...indicatorAnchor };
+                    selectionRectEnd = { ...indicatorAnchor };
+                    // Initialize position tracking for marker movement
+                    const positions = eventHandler.getFingerPositions();
+                    lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
+                    lastSecondaryPos = positions.secondary ? { ...positions.secondary } : null;
+                }
+                break;
+
+            case Action.UPDATE_SELECTION_RECTANGLE:
+                // Update selection rectangle end point to current marker position
+                if (indicatorAnchor && selectionRectStart) {
+                    selectionRectEnd = { ...indicatorAnchor };
+                }
+                break;
+
+            case Action.APPLY_SELECTION_RECTANGLE:
+                // Apply current color and stroke width to all strokes that intersect the rectangle
+                if (selectionRectStart && selectionRectEnd) {
+                    applySelectionRectangle();
+                }
+                selectionRectStart = null;
+                selectionRectEnd = null;
+                break;
+
+            case Action.CANCEL_SELECTION_RECTANGLE:
+                // Cancel selection rectangle
+                selectionRectStart = null;
+                selectionRectEnd = null;
                 break;
 
             case Action.INIT_TRANSFORM:
@@ -1366,14 +1470,12 @@ function processDelete() {
             selectedStrokeIdx = null;
             selectedStrokePointIdx = null;
             selectedStrokeMarkerPos = null;
-            clearDebug();
         }
     } else {
         // No more strokes - deselect
         selectedStrokeIdx = null;
         selectedStrokePointIdx = null;
         selectedStrokeMarkerPos = null;
-        clearDebug();
     }
 
     updateDelButton();
@@ -1519,45 +1621,32 @@ function handlePointerDown(e: PointerEvent) {
     combinedPicker.close();
 
     const pos = getPointerPos(e);
-
-    // Check for double-tap to select closest stroke
     const now = Date.now();
-    const isDoubleTap = now - lastTapTime < DOUBLE_TAP_DELAY &&
-                        lastTapPos !== null &&
-                        getDistance(pos, lastTapPos) < DOUBLE_TAP_DISTANCE;
 
-    if (isDoubleTap && eventHandler.getFingerCount() === 0) {
-        // DOUBLE-TAP SELECTION: Select stroke closest to the tap location
-        // This is different from single-tap (SELECT_CLOSEST_STROKE action),
-        // which searches from the marker position.
-        // Double-tap allows selecting strokes anywhere on screen, regardless of marker position.
-        const canvasPos = screenToCanvas(pos);
-        const result = findClosestStrokeAndPoint(canvasPos);
-        if (result) {
-            // Move marker to the closest point
-            indicatorAnchor = result.point;
-            // Select the stroke and store the point index
-            selectedStrokeIdx = result.strokeIdx;
-            selectedStrokePointIdx = result.pointIdx;
-            selectedStrokeMarkerPos = { ...result.point };
-            // Manual selection exits fresh stroke mode
-            isFreshStroke = false;
-            // Clear transformation undo state when manually selecting a stroke
-            transformSnapshot = null;
-            hasUndoableTransform = false;
-            // Update state machine to reflect selection
-            stateMachine.setStrokeSelected(true);
-            updateDelButton();
-            // Update color and size pickers to match selected stroke
-            updatePickersForSelectedStroke();
+    // Only track taps when no fingers are down (single finger gestures)
+    if (eventHandler.getFingerCount() === 0) {
+        // Check if this is the second tap down (could be double-tap or tap-and-a-half)
+        if (firstTapUpTime > 0 &&
+            now - firstTapUpTime < DOUBLE_TAP_DELAY &&
+            firstTapDownPos !== null &&
+            getDistance(pos, firstTapDownPos) < DOUBLE_TAP_DISTANCE) {
+            // This is the second tap down - record it and mark as tracking double-tap
+            secondTapDownTime = now;
+            secondTapDownPos = pos;
+            isTrackingDoubleTap = true;
+
+            // Check if we should enter tap-and-a-half mode (selection rectangle)
+            // Tap-and-a-half: User intends to drag, so second tap should be held longer
+            // We'll check on pointer move or pointer up if it's double-tap vs tap-and-a-half
+        } else {
+            // This is the first tap down - record it
+            firstTapDownTime = now;
+            firstTapDownPos = pos;
+            firstTapUpTime = 0;  // Reset up time
+            secondTapDownTime = 0;
+            secondTapDownPos = null;
+            isTrackingDoubleTap = false;
         }
-        lastTapTime = 0;
-        lastTapPos = null;
-        redraw();
-        return;
-    } else {
-        lastTapTime = now;
-        lastTapPos = pos;
     }
 
     // Capture pointer
@@ -1575,6 +1664,19 @@ function handlePointerMove(e: PointerEvent) {
 
     const state = stateMachine.getState();
 
+    // Tap-and-a-half detection: if user is holding second tap and moves, enter selection rectangle
+    if (isTrackingDoubleTap && state === State.MovingMarker) {
+        const now = Date.now();
+        // If second tap is held longer than double-tap max duration, it's tap-and-a-half
+        if (now - secondTapDownTime > DOUBLE_TAP_MAX_DURATION) {
+            // Enter selection rectangle mode
+            stateMachine.enterSelectionRectangle();
+            isTrackingDoubleTap = false;
+            // Trigger the START_SELECTION_RECTANGLE action manually
+            handleActions([Action.START_SELECTION_RECTANGLE, Action.DESELECT_STROKE]);
+        }
+    }
+
     // Handle state-specific continuous updates
     if (state === State.MovingMarker || state === State.Drawing) {
         updateMarkerPosition();
@@ -1587,16 +1689,80 @@ function handlePointerMove(e: PointerEvent) {
     } else if (state === State.Transform) {
         applyThreeFingerTransform();
         redraw();
+    } else if (state === State.SelectionRectangle) {
+        // Clear double-tap tracking since we're now dragging a selection rectangle
+        secondTapDownTime = 0;
+        secondTapDownPos = null;
+        isTrackingDoubleTap = false;
+
+        // Update marker position and selection rectangle
+        updateMarkerPosition();
+        if (indicatorAnchor && selectionRectStart) {
+            selectionRectEnd = { ...indicatorAnchor };
+        }
+        redraw();
     }
 }
 
 function handlePointerUp(e: PointerEvent) {
     e.preventDefault();
 
+    const pos = getPointerPos(e);
+    const now = Date.now();
+
     eventHandler.handlePointerUp(e.pointerId);
 
     // Clean up movement tracking if all fingers are up
     if (eventHandler.getFingerCount() === 0) {
+        // Check for double-tap completion (second finger lift)
+        if (secondTapDownTime > 0 &&
+            secondTapDownPos !== null &&
+            getDistance(pos, secondTapDownPos) < DOUBLE_TAP_DISTANCE &&
+            now - secondTapDownTime < DOUBLE_TAP_MAX_DURATION) {  // Second tap must be quick
+            // Valid double-tap completed!
+            // DOUBLE-TAP SELECTION: Select stroke closest to the tap location
+            const canvasPos = screenToCanvas(pos);
+            const result = findClosestStrokeAndPoint(canvasPos);
+            if (result) {
+                // Move marker to the closest point
+                indicatorAnchor = result.point;
+                // Select the stroke and store the point index
+                selectedStrokeIdx = result.strokeIdx;
+                selectedStrokePointIdx = result.pointIdx;
+                selectedStrokeMarkerPos = { ...result.point };
+                // Manual selection exits fresh stroke mode
+                isFreshStroke = false;
+                // Clear transformation undo state when manually selecting a stroke
+                transformSnapshot = null;
+                hasUndoableTransform = false;
+                // Update state machine to reflect selection
+                stateMachine.setStrokeSelected(true);
+                updateDelButton();
+                // Update color and size pickers to match selected stroke
+                updatePickersForSelectedStroke();
+            }
+            // Reset double-tap tracking
+            firstTapDownTime = 0;
+            firstTapDownPos = null;
+            firstTapUpTime = 0;
+            secondTapDownTime = 0;
+            secondTapDownPos = null;
+            isTrackingDoubleTap = false;
+        } else if (firstTapDownTime > 0 && firstTapDownPos !== null &&
+                   getDistance(pos, firstTapDownPos) < DOUBLE_TAP_DISTANCE) {
+            // First tap completed successfully - record the up time
+            firstTapUpTime = now;
+            isTrackingDoubleTap = false;
+        } else {
+            // Movement was too far or some other condition - reset tracking
+            firstTapDownTime = 0;
+            firstTapDownPos = null;
+            firstTapUpTime = 0;
+            secondTapDownTime = 0;
+            secondTapDownPos = null;
+            isTrackingDoubleTap = false;
+        }
+
         lastPrimaryPos = null;
         lastSecondaryPos = null;
         lastDelta = null;
