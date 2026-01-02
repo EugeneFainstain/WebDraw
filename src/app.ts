@@ -23,6 +23,8 @@ const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 const gridToggleBtn = document.getElementById('gridToggle') as HTMLButtonElement;
 const fitBtn = document.getElementById('fitBtn') as HTMLButtonElement;
 const btnDup = document.getElementById('btnDup') as HTMLButtonElement;
+const btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
+const btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
 const debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
 
 // Debug helper
@@ -43,14 +45,115 @@ function clearDebug() {
 // ============================================================================
 
 interface Stroke {
-    color: string;
-    size: number;
-    points: Point[];              // Currently displayed points
+    color?: string;               // Color (undefined for groups)
+    size?: number;                // Size (undefined for groups)
+    points?: Point[];             // Currently displayed points (undefined for groups)
     originalPoints?: Point[];     // Original hand-drawn points
     fittedPoints?: Point[];       // Fitted analytical curve points
     fitType?: string;             // Type of fit: 'circle', 'ellipse', 'line', etc.
     showingFitted?: boolean;      // True if currently showing fitted version
     fittedWithSize?: number;      // Stroke size used when fitting (for polylines)
+    strokes?: Stroke[];           // Child strokes (if this is a group)
+}
+
+// Helper to check if a stroke is a group
+function isGroup(stroke: Stroke): boolean {
+    return stroke.strokes !== undefined && stroke.strokes.length > 0;
+}
+
+// Helper functions for working with hierarchical strokes
+
+function forEachLeafStroke(stroke: Stroke, callback: (s: Stroke) => void): void {
+    if (isGroup(stroke)) {
+        for (const child of stroke.strokes!) {
+            forEachLeafStroke(child, callback);
+        }
+    } else {
+        callback(stroke);
+    }
+}
+
+function transformStroke(stroke: Stroke, transformFunc: (s: Stroke) => void): void {
+    if (isGroup(stroke)) {
+        for (const child of stroke.strokes!) {
+            transformStroke(child, transformFunc);
+        }
+    } else {
+        transformFunc(stroke);
+    }
+}
+
+function cloneStroke(stroke: Stroke): Stroke {
+    if (isGroup(stroke)) {
+        return {
+            strokes: stroke.strokes!.map(child => cloneStroke(child))
+        };
+    } else {
+        const cloned: Stroke = {
+            color: stroke.color!,
+            size: stroke.size!,
+            points: stroke.points!.map(p => ({ ...p }))
+        };
+        if (stroke.originalPoints) {
+            cloned.originalPoints = stroke.originalPoints.map(p => ({ ...p }));
+        }
+        if (stroke.fittedPoints) {
+            cloned.fittedPoints = stroke.fittedPoints.map(p => ({ ...p }));
+        }
+        if (stroke.fitType) {
+            cloned.fitType = stroke.fitType;
+        }
+        if (stroke.showingFitted !== undefined) {
+            cloned.showingFitted = stroke.showingFitted;
+        }
+        if (stroke.fittedWithSize !== undefined) {
+            cloned.fittedWithSize = stroke.fittedWithSize;
+        }
+        return cloned;
+    }
+}
+
+// Helper to get all points from a stroke (including groups) for transformation
+function getAllPointsForTransform(stroke: Stroke): Point[] {
+    const allPoints: Point[] = [];
+    forEachLeafStroke(stroke, (leafStroke: Stroke) => {
+        allPoints.push(...leafStroke.points!);
+    });
+    return allPoints;
+}
+
+// Helper to apply transformation to all points in a stroke (including groups)
+function applyTransformToStroke(
+    stroke: Stroke,
+    initialPoints: Point[],
+    center: Point,
+    scaleFactor: number,
+    rotationDelta: number,
+    newCenter: Point
+): void {
+    let pointIndex = 0;
+    transformStroke(stroke, (leafStroke: Stroke) => {
+        const transformedPoints: Point[] = [];
+        for (let i = 0; i < leafStroke.points!.length; i++) {
+            const originalPoint = initialPoints[pointIndex++];
+            const dx = originalPoint.x - center.x;
+            const dy = originalPoint.y - center.y;
+
+            const cos = Math.cos(rotationDelta);
+            const sin = Math.sin(rotationDelta);
+            const rotatedX = dx * cos - dy * sin;
+            const rotatedY = dx * sin + dy * cos;
+
+            const scaledX = rotatedX * scaleFactor;
+            const scaledY = rotatedY * scaleFactor;
+
+            transformedPoints.push({
+                x: scaledX + newCenter.x,
+                y: scaledY + newCenter.y
+            });
+        }
+        leafStroke.points = transformedPoints;
+    });
 }
 
 // ============================================================================
@@ -64,7 +167,7 @@ const eventHandler = new EventHandler();
 // APPLICATION STATE
 // ============================================================================
 
-// History for undo functionality
+// History for undo functionality (strokes can be hierarchical/grouped)
 let strokeHistory: Stroke[] = [];
 
 // Current stroke being drawn
@@ -144,28 +247,36 @@ const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps
 const combinedPicker = createCombinedPicker(
     combinedPickerEl,
     (color: string) => {
-        // Apply to all highlighted strokes, or to selected stroke if no highlights
+        // Apply to all highlighted strokes (including groups), or to selected stroke if no highlights
         if (highlightedStrokes.size > 0) {
             for (const index of highlightedStrokes) {
                 if (index < strokeHistory.length) {
-                    strokeHistory[index].color = color;
+                    transformStroke(strokeHistory[index], (stroke: Stroke) => {
+                        stroke.color = color;
+                    });
                 }
             }
         } else if (selectedStrokeIdx !== null) {
-            strokeHistory[selectedStrokeIdx].color = color;
+            transformStroke(strokeHistory[selectedStrokeIdx], (stroke: Stroke) => {
+                stroke.color = color;
+            });
         }
         redraw();
     },
     (size: number) => {
-        // Apply to all highlighted strokes, or to selected stroke if no highlights
+        // Apply to all highlighted strokes (including groups), or to selected stroke if no highlights
         if (highlightedStrokes.size > 0) {
             for (const index of highlightedStrokes) {
                 if (index < strokeHistory.length) {
-                    strokeHistory[index].size = size;
+                    transformStroke(strokeHistory[index], (stroke: Stroke) => {
+                        stroke.size = size;
+                    });
                 }
             }
         } else if (selectedStrokeIdx !== null) {
-            strokeHistory[selectedStrokeIdx].size = size;
+            transformStroke(strokeHistory[selectedStrokeIdx], (stroke: Stroke) => {
+                stroke.size = size;
+            });
         }
         redraw();
     }
@@ -185,8 +296,24 @@ function getDistance(p1: Point, p2: Point): number {
 function updatePickersForSelectedStroke() {
     if (selectedStrokeIdx !== null) {
         const stroke = strokeHistory[selectedStrokeIdx];
-        combinedPicker.setColor(stroke.color);
-        combinedPicker.setSize(stroke.size);
+        // For groups, get the first leaf stroke's color and size
+        if (isGroup(stroke)) {
+            let firstColor: string | undefined;
+            let firstSize: number | undefined;
+            forEachLeafStroke(stroke, (s: Stroke) => {
+                if (firstColor === undefined) {
+                    firstColor = s.color;
+                    firstSize = s.size;
+                }
+            });
+            if (firstColor !== undefined && firstSize !== undefined) {
+                combinedPicker.setColor(firstColor);
+                combinedPicker.setSize(firstSize);
+            }
+        } else {
+            combinedPicker.setColor(stroke.color!);
+            combinedPicker.setSize(stroke.size!);
+        }
     }
 }
 
@@ -220,37 +347,41 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
 
     let closestStrokeIdx = -1;
     let closestPointIdx = -1;
-    let closestPoint: Point | null = null;
+    let closestPointX = 0;
+    let closestPointY = 0;
     let minDistanceSquared = Infinity;
 
-    // Iterate through all strokes
+    // Iterate through all strokes in history
     for (let i = 0; i < strokeHistory.length; i++) {
         const stroke = strokeHistory[i];
 
-        // Find closest point in this stroke
-        for (let j = 0; j < stroke.points.length; j++) {
-            const point = stroke.points[j];
-            const dx = point.x - referencePos.x;
-            const dy = point.y - referencePos.y;
-            const distanceSquared = dx * dx + dy * dy;
+        // Find closest point in this stroke (or recursively in its children if it's a group)
+        forEachLeafStroke(stroke, (leafStroke: Stroke) => {
+            for (let j = 0; j < leafStroke.points!.length; j++) {
+                const point = leafStroke.points![j];
+                const dx = point.x - referencePos.x;
+                const dy = point.y - referencePos.y;
+                const distanceSquared = dx * dx + dy * dy;
 
-            if (distanceSquared < minDistanceSquared) {
-                minDistanceSquared = distanceSquared;
-                closestStrokeIdx = i;
-                closestPointIdx = j;
-                closestPoint = point;
+                if (distanceSquared < minDistanceSquared) {
+                    minDistanceSquared = distanceSquared;
+                    closestStrokeIdx = i;
+                    closestPointIdx = j;
+                    closestPointX = point.x;
+                    closestPointY = point.y;
+                }
             }
-        }
+        });
     }
 
-    if (closestPoint === null) {
+    if (closestStrokeIdx === -1) {
         return null;
     }
 
     return {
         strokeIdx: closestStrokeIdx,
         pointIdx: closestPointIdx,
-        point: { ...closestPoint }
+        point: { x: closestPointX, y: closestPointY }
     };
 }
 
@@ -445,22 +576,30 @@ function getIndicatorScreenPos(): Point {
 // ============================================================================
 
 function drawStroke(stroke: Stroke, isHighlighted: boolean = false) {
-    const minSize = screenLengthToCanvasLength(1);
-    const renderSize = Math.max(stroke.size, minSize);
+    // If this is a group, draw all children recursively
+    if (isGroup(stroke)) {
+        for (const child of stroke.strokes!) {
+            drawStroke(child, isHighlighted);
+        }
+        return;
+    }
 
-    if (stroke.points.length < 2) {
-        if (stroke.points.length === 1) {
+    const minSize = screenLengthToCanvasLength(1);
+    const renderSize = Math.max(stroke.size!, minSize);
+
+    if (stroke.points!.length < 2) {
+        if (stroke.points!.length === 1) {
             // Draw highlighted version first (grey outline) for single point
             if (isHighlighted) {
                 ctx.fillStyle = 'lightgrey';
                 ctx.beginPath();
-                ctx.arc(stroke.points[0].x, stroke.points[0].y, renderSize * 2 / 2, 0, Math.PI * 2);
+                ctx.arc(stroke.points![0].x, stroke.points![0].y, renderSize * 2 / 2, 0, Math.PI * 2);
                 ctx.fill();
             }
             // Draw normal version on top
-            ctx.fillStyle = stroke.color;
+            ctx.fillStyle = stroke.color!;
             ctx.beginPath();
-            ctx.arc(stroke.points[0].x, stroke.points[0].y, renderSize / 2, 0, Math.PI * 2);
+            ctx.arc(stroke.points![0].x, stroke.points![0].y, renderSize / 2, 0, Math.PI * 2);
             ctx.fill();
         }
         return;
@@ -471,21 +610,21 @@ function drawStroke(stroke: Stroke, isHighlighted: boolean = false) {
         ctx.strokeStyle = 'lightgrey';
         ctx.lineWidth = renderSize * 2;
         ctx.beginPath();
-        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-        for (let i = 1; i < stroke.points.length; i++) {
-            ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+        ctx.moveTo(stroke.points![0].x, stroke.points![0].y);
+        for (let i = 1; i < stroke.points!.length; i++) {
+            ctx.lineTo(stroke.points![i].x, stroke.points![i].y);
         }
         ctx.stroke();
     }
 
     // Draw normal stroke on top
-    ctx.strokeStyle = stroke.color;
+    ctx.strokeStyle = stroke.color!;
     ctx.lineWidth = renderSize;
     ctx.beginPath();
-    ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+    ctx.moveTo(stroke.points![0].x, stroke.points![0].y);
 
-    for (let i = 1; i < stroke.points.length; i++) {
-        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+    for (let i = 1; i < stroke.points!.length; i++) {
+        ctx.lineTo(stroke.points![i].x, stroke.points![i].y);
     }
     ctx.stroke();
 }
@@ -511,7 +650,7 @@ function redraw() {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Draw completed strokes
+    // Draw completed strokes (including groups)
     strokeHistory.forEach((stroke, index) => {
         const isHighlighted = highlightedStrokes.has(index);
         drawStroke(stroke, isHighlighted);
@@ -600,14 +739,16 @@ function initThreeFingerTransform() {
     // If a stroke is selected, store initial stroke points for transformation
     if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
         const selectedStroke = strokeHistory[selectedStrokeIdx];
+        // Get all points (works for both single strokes and groups)
+        const allPoints = getAllPointsForTransform(selectedStroke);
         transformStart = {
             ...baseTransformStart,
-            initialStrokePoints: selectedStroke.points.map(p => ({ ...p }))
+            initialStrokePoints: allPoints.map(p => ({ ...p }))
         };
 
         // Save snapshot for undo functionality (only if not already saved)
         if (!hasUndoableTransform) {
-            transformSnapshot = selectedStroke.points.map(p => ({ ...p }));
+            transformSnapshot = allPoints.map(p => ({ ...p }));
         }
     } else {
         transformStart = baseTransformStart;
@@ -648,7 +789,7 @@ function applyThreeFingerTransform() {
 
     // Check if we're transforming a selected stroke or the entire canvas
     if (transformStart.initialStrokePoints && selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
-        // Transform only the selected stroke
+        // Transform only the selected stroke (works for both single strokes and groups)
         const selectedStroke = strokeHistory[selectedStrokeIdx];
 
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -674,28 +815,22 @@ function applyThreeFingerTransform() {
             y: initialStrokeCenter.y + panDeltaY
         };
 
-        // Transform all stroke points
-        selectedStroke.points = transformStart.initialStrokePoints.map(point => {
-            const dx = point.x - initialStrokeCenter.x;
-            const dy = point.y - initialStrokeCenter.y;
-
-            const cos = Math.cos(rotationDelta);
-            const sin = Math.sin(rotationDelta);
-            const rotatedX = dx * cos - dy * sin;
-            const rotatedY = dx * sin + dy * cos;
-
-            const scaledX = rotatedX * scaleFactor;
-            const scaledY = rotatedY * scaleFactor;
-
-            return {
-                x: scaledX + newStrokeCenter.x,
-                y: scaledY + newStrokeCenter.y
-            };
-        });
+        // Apply transformation to all points in the stroke (handles groups recursively)
+        applyTransformToStroke(
+            selectedStroke,
+            transformStart.initialStrokePoints,
+            initialStrokeCenter,
+            scaleFactor,
+            rotationDelta,
+            newStrokeCenter
+        );
 
         // Update marker to the transformed position of the same point
-        if (selectedStrokePointIdx !== null && selectedStrokePointIdx < selectedStroke.points.length) {
-            indicatorAnchor = { ...selectedStroke.points[selectedStrokePointIdx] };
+        if (selectedStrokePointIdx !== null) {
+            const transformedPoints = getAllPointsForTransform(selectedStroke);
+            if (selectedStrokePointIdx < transformedPoints.length) {
+                indicatorAnchor = { ...transformedPoints[selectedStrokePointIdx] };
+            }
         }
     } else {
         // Transform the entire canvas view
@@ -735,6 +870,11 @@ function applyThreeFingerTransform() {
 // ============================================================================
 
 function strokeIntersectsRectangle(stroke: Stroke, rectStart: Point, rectEnd: Point): boolean {
+    // If this is a group, check if any child intersects
+    if (isGroup(stroke)) {
+        return stroke.strokes!.some(child => strokeIntersectsRectangle(child, rectStart, rectEnd));
+    }
+
     // Get rectangle bounds
     const minX = Math.min(rectStart.x, rectEnd.x);
     const maxX = Math.max(rectStart.x, rectEnd.x);
@@ -742,7 +882,7 @@ function strokeIntersectsRectangle(stroke: Stroke, rectStart: Point, rectEnd: Po
     const maxY = Math.max(rectStart.y, rectEnd.y);
 
     // Check if any point in the stroke is inside or touches the rectangle
-    for (const point of stroke.points) {
+    for (const point of stroke.points!) {
         if (point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY) {
             return true;
         }
@@ -835,7 +975,7 @@ function updateMarkerPosition() {
             panToKeepIndicatorInView();
 
             if (currentStroke && !isGridMode) {
-                currentStroke.points.push({ ...indicatorAnchor });
+                currentStroke.points!.push({ ...indicatorAnchor });
             }
 
             batchedDelta = null;
@@ -854,7 +994,7 @@ function updateMarkerPosition() {
                     panToKeepIndicatorInView();
 
                     if (currentStroke && !isGridMode) {
-                        currentStroke.points.push({ ...indicatorAnchor });
+                        currentStroke.points!.push({ ...indicatorAnchor });
                     }
 
                     // Store current delta for next iteration
@@ -872,7 +1012,7 @@ function updateMarkerPosition() {
                     panToKeepIndicatorInView();
 
                     if (currentStroke && !isGridMode) {
-                        currentStroke.points.push({ ...indicatorAnchor });
+                        currentStroke.points!.push({ ...indicatorAnchor });
                     }
 
                     // Clear the buffer
@@ -936,18 +1076,18 @@ function addPointToStroke() {
                     x: lastGridPosition.x + t * (gridPoint.x - lastGridPosition.x),
                     y: lastGridPosition.y + t * (gridPoint.y - lastGridPosition.y)
                 };
-                currentStroke.points.push(interpPoint);
+                currentStroke.points!.push(interpPoint);
             }
 
             // Add the actual grid point
-            currentStroke.points.push(gridPoint);
+            currentStroke.points!.push(gridPoint);
             lastGridPosition = gridPoint;
             // Snap the marker to the grid point while drawing
             indicatorAnchor = { ...gridPoint };
         }
     } else {
         // Normal mode: add every point
-        currentStroke.points.push({ ...indicatorAnchor });
+        currentStroke.points!.push({ ...indicatorAnchor });
     }
 }
 
@@ -977,7 +1117,7 @@ function handleActions(actions: Action[]): void {
                 break;
 
             case Action.SAVE_STROKE:
-                if (currentStroke && currentStroke.points.length > 0) {
+                if (currentStroke && currentStroke.points!.length > 0) {
                     strokeHistory.push(currentStroke);
                     updateDelButton();
                 }
@@ -1002,8 +1142,8 @@ function handleActions(actions: Action[]): void {
                     selectedStrokeIdx = strokeHistory.length - 1;
                     const selectedStroke = strokeHistory[selectedStrokeIdx];
                     // Set marker to the last point of the stroke
-                    if (selectedStroke.points.length > 0) {
-                        selectedStrokePointIdx = selectedStroke.points.length - 1;
+                    if (selectedStroke.points!.length > 0) {
+                        selectedStrokePointIdx = selectedStroke.points!.length - 1;
                     }
                 }
                 // Clear transformation undo state when selecting new stroke
@@ -1159,14 +1299,14 @@ const DEBUG_POLYGON_STAR = true;
 const DEBUG_POLYLINE = false;
 
 function fitStroke(stroke: Stroke): void {
-    if (stroke.points.length < 3) {
+    if (stroke.points!.length < 3) {
         showDebug('Too few points!');
         return; // Not enough points to fit
     }
 
     // Store original points if not already stored
     if (!stroke.originalPoints) {
-        stroke.originalPoints = stroke.points.map(p => ({ ...p }));
+        stroke.originalPoints = stroke.points!.map(p => ({ ...p }));
     }
 
     // TEMPORARY: Skip resampling to avoid cutting corners on grid-drawn shapes
@@ -1180,7 +1320,7 @@ function fitStroke(stroke: Stroke): void {
         const circleFit = fitCircle(points);
         const ellipseFit = fitEllipse(points);
         const squareFit = fitSquare(points);
-        const polygonFit = fitEquilateralPolygon(points, stroke.size);
+        const polygonFit = fitEquilateralPolygon(points, stroke.size!);
 
         if (!circleFit || !ellipseFit || !squareFit) {
             showDebug('One or more fits failed!');
@@ -1285,7 +1425,7 @@ function fitStroke(stroke: Stroke): void {
                 stroke.fittedPoints = generateCirclePoints(circleFit.center, circleFit.radius, 64);
                 stroke.fitType = 'circle';
             }
-            stroke.fittedWithSize = stroke.size;
+            stroke.fittedWithSize = stroke.size!;
         } else if (minError === rectangleError) {
             // Winner: Square/Rectangle fitter
             // Calculate elongation from squareness
@@ -1325,7 +1465,7 @@ function fitStroke(stroke: Stroke): void {
                     stroke.fitType = 'rectangle';
                 }
             }
-            stroke.fittedWithSize = stroke.size;
+            stroke.fittedWithSize = stroke.size!;
         } else {
             // Winner: Polygon/Star fitter
             if (polygonFit) {
@@ -1336,7 +1476,7 @@ function fitStroke(stroke: Stroke): void {
                     ? 'star'
                     : 'x-star';
                 stroke.fitType = `${shapePrefix}-${polygonFit.sides}`;
-                stroke.fittedWithSize = stroke.size;
+                stroke.fittedWithSize = stroke.size!;
             } else {
                 // Fallback to rectangle if polygon fit fails
                 stroke.fittedPoints = generateRectanglePoints(
@@ -1347,12 +1487,12 @@ function fitStroke(stroke: Stroke): void {
                     64
                 );
                 stroke.fitType = 'rectangle';
-                stroke.fittedWithSize = stroke.size;
+                stroke.fittedWithSize = stroke.size!;
             }
         }
     } else {
         // For open strokes, use polyline fitting with RDP algorithm
-        const polylineFit = fitPolyline(points, stroke.size);
+        const polylineFit = fitPolyline(points, stroke.size!);
 
         if (!polylineFit) {
             showDebug('Polyline fit failed!');
@@ -1367,7 +1507,7 @@ function fitStroke(stroke: Stroke): void {
             if (DEBUG_POLYLINE) {
                 debugText += `\n---`;
                 debugText += `\nSegments: ${polylineFit.segments}`;
-                debugText += `\nEpsilon: ${(2 * stroke.size).toFixed(2)}`;
+                debugText += `\nEpsilon: ${(2 * stroke.size!).toFixed(2)}`;
             }
 
             showDebug(debugText);
@@ -1376,7 +1516,7 @@ function fitStroke(stroke: Stroke): void {
         // Use the simplified polyline points
         stroke.fittedPoints = generatePolylinePoints(polylineFit.points);
         stroke.fitType = 'polyline';
-        stroke.fittedWithSize = stroke.size;  // Track the size used for fitting
+        stroke.fittedWithSize = stroke.size!;  // Track the size used for fitting
     }
 }
 
@@ -1442,6 +1582,9 @@ function updateDelButton() {
     } else {
         fitBtn.classList.remove('active');
     }
+
+    // Update group/ungroup buttons
+    updateGroupButtons();
 }
 
 function processDelete() {
@@ -1449,8 +1592,19 @@ function processDelete() {
 
     // Check if we should undo transformation instead of deleting
     if (hasUndoableTransform && transformSnapshot && selectedStrokeIdx !== null) {
-        // Restore the stroke to its pre-transformation state
-        strokeHistory[selectedStrokeIdx].points = transformSnapshot.map(p => ({ ...p }));
+        // Restore the stroke to its pre-transformation state (works for groups too)
+        const selectedStroke = strokeHistory[selectedStrokeIdx];
+        const snapshot = transformSnapshot; // Local variable to avoid null checks
+
+        // Restore all points using the snapshot
+        let pointIndex = 0;
+        transformStroke(selectedStroke, (leafStroke: Stroke) => {
+            const restoredPoints: Point[] = [];
+            for (let i = 0; i < leafStroke.points!.length; i++) {
+                restoredPoints.push({ ...snapshot[pointIndex++] });
+            }
+            leafStroke.points = restoredPoints;
+        });
 
         // Update marker position to follow the stroke back to its original position
         if (selectedStrokePointIdx !== null && selectedStrokePointIdx < transformSnapshot.length) {
@@ -1486,9 +1640,19 @@ function processDelete() {
     // Save marker position before deletion (for finding closest stroke after)
     const markerPosBeforeDeletion = indicatorAnchor ? { ...indicatorAnchor } : null;
 
-    // Move marker to the beginning of the stroke being removed
-    if (deletedStroke.points.length > 0) {
-        indicatorAnchor = { ...deletedStroke.points[0] };
+    // Move marker to the beginning of the first stroke being removed
+    let firstPointX = 0;
+    let firstPointY = 0;
+    let foundPoint = false;
+    forEachLeafStroke(deletedStroke, (leafStroke: Stroke) => {
+        if (!foundPoint && leafStroke.points!.length > 0) {
+            firstPointX = leafStroke.points![0].x;
+            firstPointY = leafStroke.points![0].y;
+            foundPoint = true;
+        }
+    });
+    if (foundPoint) {
+        indicatorAnchor = { x: firstPointX, y: firstPointY };
         panToKeepIndicatorInView();
     }
 
@@ -1559,14 +1723,16 @@ function duplicateSelectedStroke() {
 
     const sourceStroke = strokeHistory[selectedStrokeIdx];
 
-    // Calculate bounding box of the source stroke
+    // Calculate bounding box of the source stroke (works for groups too)
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const point of sourceStroke.points) {
-        minX = Math.min(minX, point.x);
-        minY = Math.min(minY, point.y);
-        maxX = Math.max(maxX, point.x);
-        maxY = Math.max(maxY, point.y);
-    }
+    forEachLeafStroke(sourceStroke, (leafStroke: Stroke) => {
+        for (const point of leafStroke.points!) {
+            minX = Math.min(minX, point.x);
+            minY = Math.min(minY, point.y);
+            maxX = Math.max(maxX, point.x);
+            maxY = Math.max(maxY, point.y);
+        }
+    });
 
     const centerX = (minX + maxX) / 2;
     const width = maxX - minX;
@@ -1576,67 +1742,61 @@ function duplicateSelectedStroke() {
     const offsetX = width * 0.25;  // Right by 1/4 of bounding box width
     const offsetY = -height * 0.5;  // Up by 1/2 of bounding box height
 
-    const duplicatedPoints = sourceStroke.points.map(point => {
-        // Mirror around vertical line (x = centerX)
-        const mirroredX = centerX - (point.x - centerX);
+    // Clone the stroke (handles groups recursively)
+    const duplicatedStroke = cloneStroke(sourceStroke);
 
-        // Apply offset
-        return {
-            x: mirroredX + offsetX,
-            y: point.y + offsetY
-        };
+    // Transform all points in the duplicated stroke
+    transformStroke(duplicatedStroke, (leafStroke: Stroke) => {
+        // Transform main points
+        leafStroke.points = leafStroke.points!.map(point => {
+            const mirroredX = centerX - (point.x - centerX);
+            return {
+                x: mirroredX + offsetX,
+                y: point.y + offsetY
+            };
+        });
+
+        // Transform original points if they exist
+        if (leafStroke.originalPoints) {
+            leafStroke.originalPoints = leafStroke.originalPoints.map(point => {
+                const mirroredX = centerX - (point.x - centerX);
+                return {
+                    x: mirroredX + offsetX,
+                    y: point.y + offsetY
+                };
+            });
+        }
+
+        // Transform fitted points if they exist
+        if (leafStroke.fittedPoints) {
+            leafStroke.fittedPoints = leafStroke.fittedPoints.map(point => {
+                const mirroredX = centerX - (point.x - centerX);
+                return {
+                    x: mirroredX + offsetX,
+                    y: point.y + offsetY
+                };
+            });
+        }
     });
-
-    // Create the duplicated stroke
-    const duplicatedStroke: Stroke = {
-        color: sourceStroke.color,
-        size: sourceStroke.size,
-        points: duplicatedPoints
-    };
-
-    // Copy fitted data if it exists
-    if (sourceStroke.originalPoints) {
-        const duplicatedOriginalPoints = sourceStroke.originalPoints.map(point => {
-            const mirroredX = centerX - (point.x - centerX);
-            return {
-                x: mirroredX + offsetX,
-                y: point.y + offsetY
-            };
-        });
-        duplicatedStroke.originalPoints = duplicatedOriginalPoints;
-    }
-
-    if (sourceStroke.fittedPoints) {
-        const duplicatedFittedPoints = sourceStroke.fittedPoints.map(point => {
-            const mirroredX = centerX - (point.x - centerX);
-            return {
-                x: mirroredX + offsetX,
-                y: point.y + offsetY
-            };
-        });
-        duplicatedStroke.fittedPoints = duplicatedFittedPoints;
-    }
-
-    if (sourceStroke.fitType) {
-        duplicatedStroke.fitType = sourceStroke.fitType;
-    }
-
-    if (sourceStroke.showingFitted !== undefined) {
-        duplicatedStroke.showingFitted = sourceStroke.showingFitted;
-    }
-
-    if (sourceStroke.fittedWithSize !== undefined) {
-        duplicatedStroke.fittedWithSize = sourceStroke.fittedWithSize;
-    }
 
     // Add the duplicated stroke to history
     strokeHistory.push(duplicatedStroke);
 
-    // Select the new stroke and move marker to its last point
+    // Select the new stroke and move marker to its first point
     selectedStrokeIdx = strokeHistory.length - 1;
-    if (duplicatedPoints.length > 0) {
-        selectedStrokePointIdx = duplicatedPoints.length - 1;
-        indicatorAnchor = { ...duplicatedPoints[duplicatedPoints.length - 1] };
+    let firstPointX = 0;
+    let firstPointY = 0;
+    let foundPoint = false;
+    forEachLeafStroke(duplicatedStroke, (leafStroke: Stroke) => {
+        if (!foundPoint && leafStroke.points!.length > 0) {
+            firstPointX = leafStroke.points![0].x;
+            firstPointY = leafStroke.points![0].y;
+            foundPoint = true;
+        }
+    });
+    if (foundPoint) {
+        selectedStrokePointIdx = 0;
+        indicatorAnchor = { x: firstPointX, y: firstPointY };
         selectedStrokeMarkerPos = { ...indicatorAnchor };
         panToKeepIndicatorInView();
     }
@@ -1653,6 +1813,99 @@ function duplicateSelectedStroke() {
 
     updateDelButton();
     redraw();
+}
+
+function groupHighlightedStrokes() {
+    if (highlightedStrokes.size < 2) {
+        showDebug('Need at least 2 strokes to group!');
+        return;
+    }
+
+    // Collect the strokes to group (in order of their indices)
+    const indices = Array.from(highlightedStrokes).sort((a, b) => a - b);
+    const strokesToGroup: Stroke[] = [];
+
+    for (const index of indices) {
+        strokesToGroup.push(cloneStroke(strokeHistory[index]));
+    }
+
+    // Remove the original strokes from history (in reverse order to maintain indices)
+    for (let i = indices.length - 1; i >= 0; i--) {
+        strokeHistory.splice(indices[i], 1);
+    }
+
+    // Create a new group stroke
+    const groupStroke: Stroke = {
+        strokes: strokesToGroup
+    };
+
+    // Add the group at the position of the first stroke
+    strokeHistory.splice(indices[0], 0, groupStroke);
+
+    // Clear highlighted strokes and select the new group
+    highlightedStrokes.clear();
+    selectedStrokeIdx = indices[0];
+    isFreshStroke = false;
+
+    // Move marker to the first point of the first stroke in the group
+    forEachLeafStroke(groupStroke, (leafStroke: Stroke) => {
+        if (leafStroke.points!.length > 0) {
+            indicatorAnchor = { ...leafStroke.points![0] };
+            selectedStrokePointIdx = 0;
+            selectedStrokeMarkerPos = { ...indicatorAnchor };
+            panToKeepIndicatorInView();
+        }
+        return; // Only process first leaf stroke
+    });
+
+    updateDelButton();
+    updatePickersForSelectedStroke();
+    redraw();
+}
+
+function ungroupSelectedStroke() {
+    if (selectedStrokeIdx === null || selectedStrokeIdx >= strokeHistory.length) {
+        showDebug('No stroke selected to ungroup!');
+        return;
+    }
+
+    const stroke = strokeHistory[selectedStrokeIdx];
+
+    if (!isGroup(stroke)) {
+        showDebug('Selected stroke is not a group!');
+        return;
+    }
+
+    // Get the immediate children (one level only)
+    const children = stroke.strokes!.map(child => cloneStroke(child));
+
+    // Remove the group from history
+    strokeHistory.splice(selectedStrokeIdx, 1);
+
+    // Insert all children at the same position
+    strokeHistory.splice(selectedStrokeIdx, 0, ...children);
+
+    // Deselect
+    selectedStrokeIdx = null;
+    selectedStrokePointIdx = null;
+    selectedStrokeMarkerPos = null;
+    isFreshStroke = false;
+
+    updateDelButton();
+    redraw();
+}
+
+function updateGroupButtons() {
+    // Group button: enabled when 2+ strokes are highlighted
+    btnGroup.disabled = highlightedStrokes.size < 2;
+
+    // Ungroup button: enabled when a single group is selected
+    if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+        const stroke = strokeHistory[selectedStrokeIdx];
+        btnUngroup.disabled = !isGroup(stroke);
+    } else {
+        btnUngroup.disabled = true;
+    }
 }
 
 // ============================================================================
@@ -1886,6 +2139,14 @@ btnDup.addEventListener('click', () => {
     duplicateSelectedStroke();
 });
 
+btnGroup.addEventListener('click', () => {
+    groupHighlightedStrokes();
+});
+
+btnUngroup.addEventListener('click', () => {
+    ungroupSelectedStroke();
+});
+
 fitBtn.addEventListener('click', () => {
     // Only work if a stroke is selected
     if (selectedStrokeIdx === null || selectedStrokeIdx >= strokeHistory.length) {
@@ -1901,7 +2162,7 @@ fitBtn.addEventListener('click', () => {
     // that was fitted with a different stroke size, fit it now
     const isSizeDependentFit = stroke.fitType === 'polyline' || stroke.fitType?.startsWith('polygon-');
     const needsRefit = !stroke.fittedPoints ||
-                      (isSizeDependentFit && stroke.fittedWithSize !== stroke.size);
+                      (isSizeDependentFit && stroke.fittedWithSize !== stroke.size!);
 
     if (turningOn && needsRefit) {
         fitStroke(stroke);
