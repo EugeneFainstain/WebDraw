@@ -99,6 +99,9 @@ let isGridMode: boolean = false;
 let selectionRectStart: Point | null = null;
 let selectionRectEnd: Point | null = null;
 
+// Highlighted strokes (indices of strokes currently highlighted by selection rectangle)
+let highlightedStrokes: Set<number> = new Set();
+
 // View transform (for 3-finger canvas transformation)
 let viewTransform = {
     scale: 1,
@@ -429,12 +432,20 @@ function getIndicatorScreenPos(): Point {
 // DRAWING FUNCTIONS
 // ============================================================================
 
-function drawStroke(stroke: Stroke) {
+function drawStroke(stroke: Stroke, isHighlighted: boolean = false) {
     const minSize = screenLengthToCanvasLength(1);
     const renderSize = Math.max(stroke.size, minSize);
 
     if (stroke.points.length < 2) {
         if (stroke.points.length === 1) {
+            // Draw highlighted version first (grey outline) for single point
+            if (isHighlighted) {
+                ctx.fillStyle = 'lightgrey';
+                ctx.beginPath();
+                ctx.arc(stroke.points[0].x, stroke.points[0].y, renderSize * 2 / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // Draw normal version on top
             ctx.fillStyle = stroke.color;
             ctx.beginPath();
             ctx.arc(stroke.points[0].x, stroke.points[0].y, renderSize / 2, 0, Math.PI * 2);
@@ -443,6 +454,19 @@ function drawStroke(stroke: Stroke) {
         return;
     }
 
+    // Draw highlighted version first (grey outline with 2x thickness)
+    if (isHighlighted) {
+        ctx.strokeStyle = 'lightgrey';
+        ctx.lineWidth = renderSize * 2;
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        for (let i = 1; i < stroke.points.length; i++) {
+            ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+        }
+        ctx.stroke();
+    }
+
+    // Draw normal stroke on top
     ctx.strokeStyle = stroke.color;
     ctx.lineWidth = renderSize;
     ctx.beginPath();
@@ -476,8 +500,9 @@ function redraw() {
     ctx.lineJoin = 'round';
 
     // Draw completed strokes
-    strokeHistory.forEach(stroke => {
-        drawStroke(stroke);
+    strokeHistory.forEach((stroke, index) => {
+        const isHighlighted = highlightedStrokes.has(index);
+        drawStroke(stroke, isHighlighted);
     });
 
     // Draw current in-progress stroke
@@ -712,6 +737,21 @@ function strokeIntersectsRectangle(stroke: Stroke, rectStart: Point, rectEnd: Po
     }
 
     return false;
+}
+
+function updateHighlightedStrokes(): void {
+    if (!selectionRectStart || !selectionRectEnd) {
+        highlightedStrokes.clear();
+        return;
+    }
+
+    // Update the set of highlighted strokes based on current rectangle
+    highlightedStrokes.clear();
+    for (let i = 0; i < strokeHistory.length; i++) {
+        if (strokeIntersectsRectangle(strokeHistory[i], selectionRectStart, selectionRectEnd)) {
+            highlightedStrokes.add(i);
+        }
+    }
 }
 
 function applySelectionRectangle(): void {
@@ -1018,6 +1058,8 @@ function handleActions(actions: Action[]): void {
                     const positions = eventHandler.getFingerPositions();
                     lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
                     lastSecondaryPos = positions.secondary ? { ...positions.secondary } : null;
+                    // Update highlighted strokes (initially empty)
+                    updateHighlightedStrokes();
                 }
                 break;
 
@@ -1025,6 +1067,8 @@ function handleActions(actions: Action[]): void {
                 // Update selection rectangle end point to current marker position
                 if (indicatorAnchor && selectionRectStart) {
                     selectionRectEnd = { ...indicatorAnchor };
+                    // Update highlighted strokes in real-time
+                    updateHighlightedStrokes();
                 }
                 break;
 
@@ -1035,12 +1079,16 @@ function handleActions(actions: Action[]): void {
                 }
                 selectionRectStart = null;
                 selectionRectEnd = null;
+                // Clear highlighted strokes
+                highlightedStrokes.clear();
                 break;
 
             case Action.CANCEL_SELECTION_RECTANGLE:
                 // Cancel selection rectangle
                 selectionRectStart = null;
                 selectionRectEnd = null;
+                // Clear highlighted strokes
+                highlightedStrokes.clear();
                 break;
 
             case Action.INIT_TRANSFORM:
@@ -1699,6 +1747,8 @@ function handlePointerMove(e: PointerEvent) {
         updateMarkerPosition();
         if (indicatorAnchor && selectionRectStart) {
             selectionRectEnd = { ...indicatorAnchor };
+            // Update highlighted strokes in real-time as the rectangle changes
+            updateHighlightedStrokes();
         }
         redraw();
     }

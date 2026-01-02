@@ -61,9 +61,9 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `SELECT_CLOSEST_STROKE` | Select closest stroke to marker |
 | `DESELECT_STROKE` | Deselect stroke (exit selected stroke mode) |
 | `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
-| `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag |
-| `APPLY_SELECTION_RECTANGLE` | Apply color/size to strokes in rectangle |
-| `CANCEL_SELECTION_RECTANGLE` | Cancel selection rectangle |
+| `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag (also updates real-time highlighting) |
+| `APPLY_SELECTION_RECTANGLE` | Apply color/size to highlighted strokes and clear highlighting |
+| `CANCEL_SELECTION_RECTANGLE` | Cancel selection rectangle and clear highlighting |
 | `INIT_TRANSFORM` | Initialize 3-finger transform |
 | `APPLY_TRANSFORM` | Apply transform (continuous) |
 | `PROCESS_DELETE` | Execute delete operation |
@@ -196,9 +196,11 @@ When in Drawing state and F3_DOWN event occurs:
 
 **Behavior:**
 - Dragging creates a semi-transparent blue selection rectangle
-- On FINGER_UP, applies current color and stroke width to all strokes that intersect the rectangle
+- **Real-time highlighting**: As the rectangle is dragged, strokes that intersect the rectangle are highlighted in real-time
+  - Highlighted strokes are drawn with a light grey outline at 2x thickness, then the normal stroke is drawn on top
+  - The highlighting updates continuously as the rectangle changes
+- On FINGER_UP, applies current color and stroke width to all strokes that were highlighted (intersecting the rectangle)
 - Any stroke with at least one point inside the rectangle is affected
-- Temporary feature until multi-stroke selection is implemented
 
 **Exit Conditions:**
 - FINGER_UP (applies selection)
