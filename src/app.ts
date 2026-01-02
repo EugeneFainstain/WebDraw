@@ -2047,9 +2047,6 @@ function getPointerPos(e: PointerEvent): Point {
 function handlePointerDown(e: PointerEvent) {
     e.preventDefault();
 
-    // Close any open pickers on canvas tap
-    combinedPicker.close();
-
     const pos = getPointerPos(e);
     const now = Date.now();
 
@@ -2146,6 +2143,17 @@ function handlePointerUp(e: PointerEvent) {
 
     // Clean up movement tracking if all fingers are up
     if (eventHandler.getFingerCount() === 0) {
+        // Close combined picker on tap (quick touch and release)
+        // Check if this was a quick single tap (not part of double-tap sequence)
+        if (firstTapDownTime > 0 && firstTapDownPos !== null &&
+            getDistance(pos, firstTapDownPos) < DOUBLE_TAP_DISTANCE &&
+            now - firstTapDownTime < DOUBLE_TAP_MAX_DURATION &&
+            !isTrackingDoubleTap) {
+            // This is a single tap completion - close the picker if it's open
+            if (combinedPicker.isOpen()) {
+                combinedPicker.close();
+            }
+        }
         // Check for double-tap completion (second finger lift)
         if (secondTapDownTime > 0 &&
             secondTapDownPos !== null &&
