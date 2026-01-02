@@ -2057,7 +2057,8 @@ function handlePointerUp(e: PointerEvent) {
             secondTapDownPos = null;
             isTrackingDoubleTap = false;
         } else if (firstTapDownTime > 0 && firstTapDownPos !== null &&
-                   getDistance(pos, firstTapDownPos) < DOUBLE_TAP_DISTANCE) {
+                   getDistance(pos, firstTapDownPos) < DOUBLE_TAP_DISTANCE &&
+                   now - firstTapDownTime < DOUBLE_TAP_MAX_DURATION) {  // First tap must be quick
             // First tap completed successfully - record the up time
             firstTapUpTime = now;
             isTrackingDoubleTap = false;
