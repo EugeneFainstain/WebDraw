@@ -1069,7 +1069,9 @@ function applyColorAndSizeToHighlightedStrokes(): void {
 // MARKER MOVEMENT
 // ============================================================================
 
-function updateMarkerPosition() {
+// Algorithm 1: Intricate batching mechanism
+// Handles finger promotion and mode transitions with batched deltas
+function updateMarkerPositionWithBatching() {
     const positions = eventHandler.getFingerPositions();
     if (!indicatorAnchor) return;
 
@@ -1130,7 +1132,7 @@ function updateMarkerPosition() {
             if (lastDelta !== null) {
                 const sameFingerTwice = (lastDelta.pointerId === movedPointerId);
 
-                if (USE_BATCHED_DELTA_MECHANISM && sameFingerTwice) {
+                if (sameFingerTwice) {
                     // Same finger moved twice - process first delta immediately
                     const canvasDelta = screenDeltaToCanvasDelta(lastDelta);
                     indicatorAnchor.x += canvasDelta.x;
@@ -1144,7 +1146,7 @@ function updateMarkerPosition() {
                     // Store current delta for next iteration
                     lastDelta = { x: deltaX, y: deltaY, pointerId: movedPointerId! };
                 } else {
-                    // Different fingers (or simple mode) - average them
+                    // Different fingers - average them
                     const avgDelta = {
                         x: (lastDelta.x + deltaX) / 2,
                         y: (lastDelta.y + deltaY) / 2
@@ -1193,6 +1195,99 @@ function updateMarkerPosition() {
             batchedDelta = { x: lastDelta.x, y: lastDelta.y };
             lastDelta = null;
         }
+    }
+}
+
+// Algorithm 2: Simple averaging mechanism
+// Average every 2 consecutive deltas regardless of finger ID
+function updateMarkerPositionSimple() {
+    const positions = eventHandler.getFingerPositions();
+    if (!indicatorAnchor) return;
+
+    // Determine which finger moved
+    let movedPointerId: number | null = null;
+    let deltaX = 0;
+    let deltaY = 0;
+
+    if (positions.primary && lastPrimaryPos) {
+        const primaryDeltaX = positions.primary.x - lastPrimaryPos.x;
+        const primaryDeltaY = positions.primary.y - lastPrimaryPos.y;
+        if (primaryDeltaX !== 0 || primaryDeltaY !== 0) {
+            deltaX = primaryDeltaX;
+            deltaY = primaryDeltaY;
+            movedPointerId = 1; // Primary finger
+        }
+    }
+
+    if (positions.secondary && lastSecondaryPos) {
+        const secondaryDeltaX = positions.secondary.x - lastSecondaryPos.x;
+        const secondaryDeltaY = positions.secondary.y - lastSecondaryPos.y;
+        if (secondaryDeltaX !== 0 || secondaryDeltaY !== 0) {
+            if (movedPointerId !== null) {
+                // Both fingers moved - average them
+                deltaX = (deltaX + secondaryDeltaX) / 2;
+                deltaY = (deltaY + secondaryDeltaY) / 2;
+                movedPointerId = 3; // Both fingers
+            } else {
+                deltaX = secondaryDeltaX;
+                deltaY = secondaryDeltaY;
+                movedPointerId = 2; // Secondary finger
+            }
+        }
+    }
+
+    // Update last positions
+    lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
+    lastSecondaryPos = positions.secondary ? { ...positions.secondary } : null;
+
+    // Two-finger mode: simple averaging
+    if (positions.primary && positions.secondary) {
+        if (deltaX !== 0 || deltaY !== 0) {
+            if (lastDelta !== null) {
+                // Average the buffered delta with the current delta
+                const avgDelta = {
+                    x: (lastDelta.x + deltaX) / 2,
+                    y: (lastDelta.y + deltaY) / 2
+                };
+
+                const canvasDelta = screenDeltaToCanvasDelta(avgDelta);
+                indicatorAnchor.x += canvasDelta.x;
+                indicatorAnchor.y += canvasDelta.y;
+                panToKeepIndicatorInView();
+
+                if (currentStroke && !isGridMode) {
+                    currentStroke.points!.push({ ...indicatorAnchor });
+                }
+
+                // Clear the buffer
+                lastDelta = null;
+            } else {
+                // Buffer this delta and wait for next
+                lastDelta = { x: deltaX, y: deltaY, pointerId: movedPointerId! };
+            }
+        }
+    } else {
+        // Single finger mode - process current delta immediately
+        if (deltaX !== 0 || deltaY !== 0) {
+            const canvasDelta = screenDeltaToCanvasDelta({ x: deltaX, y: deltaY });
+            indicatorAnchor.x += canvasDelta.x;
+            indicatorAnchor.y += canvasDelta.y;
+
+            panToKeepIndicatorInView();
+        }
+
+        // Clear lastDelta when transitioning from two-finger to one-finger
+        if (lastDelta !== null) {
+            lastDelta = null;
+        }
+    }
+}
+
+function updateMarkerPosition() {
+    if (USE_BATCHED_DELTA_MECHANISM) {
+        updateMarkerPositionWithBatching();
+    } else {
+        updateMarkerPositionSimple();
     }
 }
 
