@@ -10,6 +10,15 @@ import { fitPolyline, generatePolylinePoints } from './fitters/polylineFitter';
 import { fitEquilateralPolygon, generateEquilateralPolygonPoints } from './fitters/equilateralPolygonFitter';
 
 // ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+// Two-finger drawing mode: control delta averaging behavior
+// true = Use intricate batching mechanism (handles finger promotion, mode transitions)
+// false = Simple averaging of every 2 consecutive deltas (regardless of finger ID)
+const USE_BATCHED_DELTA_MECHANISM = false; //true;
+
+// ============================================================================
 // DOM ELEMENTS
 // ============================================================================
 
@@ -1121,7 +1130,7 @@ function updateMarkerPosition() {
             if (lastDelta !== null) {
                 const sameFingerTwice = (lastDelta.pointerId === movedPointerId);
 
-                if (sameFingerTwice) {
+                if (USE_BATCHED_DELTA_MECHANISM && sameFingerTwice) {
                     // Same finger moved twice - process first delta immediately
                     const canvasDelta = screenDeltaToCanvasDelta(lastDelta);
                     indicatorAnchor.x += canvasDelta.x;
@@ -1135,7 +1144,7 @@ function updateMarkerPosition() {
                     // Store current delta for next iteration
                     lastDelta = { x: deltaX, y: deltaY, pointerId: movedPointerId! };
                 } else {
-                    // Different fingers - average them
+                    // Different fingers (or simple mode) - average them
                     const avgDelta = {
                         x: (lastDelta.x + deltaX) / 2,
                         y: (lastDelta.y + deltaY) / 2
