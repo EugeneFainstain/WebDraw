@@ -308,6 +308,9 @@ let transformStart: {
 // Movement tracking for continuous updates
 let lastPrimaryPos: Point | null = null;
 let lastSecondaryPos: Point | null = null;
+let lastPrimaryDelta: Point | null = null;
+let lastSecondaryDelta: Point | null = null;
+let lastMovedPointerId = 0 // 1 for primary, 2 for secondary, 3 for both
 let lastDelta: { x: number, y: number, pointerId: number } | null = null;
 let batchedDelta: { x: number, y: number } | null = null;
 
@@ -1169,121 +1172,146 @@ function updateMarkerPositionWithBatching() {
                 lastDelta = { x: deltaX, y: deltaY, pointerId: movedPointerId! };
             }
         }
-    } else {
-        // Single finger mode - process any batched work first
-        if (batchedDelta !== null) {
-            const canvasDelta = screenDeltaToCanvasDelta(batchedDelta);
-            indicatorAnchor.x += canvasDelta.x;
-            indicatorAnchor.y += canvasDelta.y;
-            panToKeepIndicatorInView();
-
-            batchedDelta = null;
-        }
-
-        // Process current delta immediately
-        if (deltaX !== 0 || deltaY !== 0) {
-            const canvasDelta = screenDeltaToCanvasDelta({ x: deltaX, y: deltaY });
-            indicatorAnchor.x += canvasDelta.x;
-            indicatorAnchor.y += canvasDelta.y;
-
-            panToKeepIndicatorInView();
-        }
-
-        // Clear lastDelta when transitioning from two-finger to one-finger
-        if (lastDelta !== null) {
-            // Save it as batchedDelta for when we transition back
-            batchedDelta = { x: lastDelta.x, y: lastDelta.y };
-            lastDelta = null;
-        }
     }
 }
 
 // Algorithm 2: Simple averaging mechanism
-// Average every 2 consecutive deltas regardless of finger ID
+// Every delta produces movement - averaged with last delta from OTHER finger, or halved if same finger
 function updateMarkerPositionSimple() {
     const positions = eventHandler.getFingerPositions();
     if (!indicatorAnchor) return;
 
-    // Determine which finger moved
-    let movedPointerId: number | null = null;
-    let deltaX = 0;
-    let deltaY = 0;
+    if( !positions.primary || !positions.secondary ) return;
 
-    if (positions.primary && lastPrimaryPos) {
-        const primaryDeltaX = positions.primary.x - lastPrimaryPos.x;
-        const primaryDeltaY = positions.primary.y - lastPrimaryPos.y;
-        if (primaryDeltaX !== 0 || primaryDeltaY !== 0) {
-            deltaX = primaryDeltaX;
-            deltaY = primaryDeltaY;
-            movedPointerId = 1; // Primary finger
-        }
+    // Prepare for 2-finger processing
+    if( !lastPrimaryPos || !lastSecondaryPos )
+    {
+        if( !lastPrimaryPos && !lastSecondaryPos )
+            lastMovedPointerId = 0;
+        else
+        if( !lastSecondaryPos )
+            lastMovedPointerId = 1; // primary secondary moved last
+        else
+            lastMovedPointerId = 2; // secondary moved last (is this even possible?...)
+
+        if( !lastPrimaryPos )
+             lastPrimaryDelta = null;
+
+        if( !lastSecondaryPos )
+             lastSecondaryDelta = null;
+
+        lastPrimaryPos = positions.primary;
+        lastSecondaryPos = positions.secondary;
     }
 
-    if (positions.secondary && lastSecondaryPos) {
-        const secondaryDeltaX = positions.secondary.x - lastSecondaryPos.x;
-        const secondaryDeltaY = positions.secondary.y - lastSecondaryPos.y;
-        if (secondaryDeltaX !== 0 || secondaryDeltaY !== 0) {
-            if (movedPointerId !== null) {
-                // Both fingers moved - average them
-                deltaX = (deltaX + secondaryDeltaX) / 2;
-                deltaY = (deltaY + secondaryDeltaY) / 2;
-                movedPointerId = 3; // Both fingers
-            } else {
-                deltaX = secondaryDeltaX;
-                deltaY = secondaryDeltaY;
-                movedPointerId = 2; // Secondary finger
-            }
-        }
+    if( !lastPrimaryDelta )
+         lastPrimaryDelta = {x:0, y:0};
+
+    if( !lastSecondaryDelta )
+         lastSecondaryDelta = {x:0, y:0};
+
+    // Determine which finger moved and calculate its delta
+    let movedPointerId = 0;
+    let primaryDelta: Point = {x:0, y:0};
+    let secondaryDelta: Point = {x:0, y:0};
+
+    // Primary deltas
+    primaryDelta.x = positions.primary.x - lastPrimaryPos.x;
+    primaryDelta.y = positions.primary.y - lastPrimaryPos.y;
+    if( primaryDelta.x || primaryDelta.y )
+        movedPointerId += 1; // Primary finger moved
+
+    // Secondary deltas
+    secondaryDelta.x = positions.secondary.x - lastSecondaryPos.x;
+    secondaryDelta.y = positions.secondary.y - lastSecondaryPos.y;
+    if( secondaryDelta.x || secondaryDelta.y )
+        movedPointerId += 2; // Secondary finger moved
+
+    // Lets calculate the deltas
+    let delta : Point = {x:0, y:0};
+
+    if( movedPointerId == 1 && lastMovedPointerId == 2 )
+    {
+        delta.x = (primaryDelta.x + lastSecondaryDelta.x) / 4
+        delta.y = (primaryDelta.y + lastSecondaryDelta.y) / 4
+    }
+    else
+    if( movedPointerId == 2 && lastMovedPointerId == 1 )
+    {
+        delta.x = (secondaryDelta.x + lastPrimaryDelta.x) / 4
+        delta.y = (secondaryDelta.y + lastPrimaryDelta.y) / 4
+    }
+    else
+    if( lastMovedPointerId == 1 && movedPointerId == 1 )
+    {
+        delta.x = (primaryDelta.x + lastPrimaryDelta.x) / 2
+        delta.y = (primaryDelta.y + lastPrimaryDelta.y) / 2
+    }
+    else
+    if( lastMovedPointerId == 2 && movedPointerId == 2 )
+    {
+        delta.x = (secondaryDelta.x + lastSecondaryDelta.x) / 2
+        delta.y = (secondaryDelta.y + lastSecondaryDelta.y) / 2
+    }
+    else
+    if( movedPointerId == 3 ) // Both?! Shouldn't happen...
+    {
+        delta.x = (primaryDelta.x + secondaryDelta.x) / 2
+        delta.y = (primaryDelta.y + secondaryDelta.y) / 2
     }
 
     // Update last positions
-    lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
-    lastSecondaryPos = positions.secondary ? { ...positions.secondary } : null;
+    lastPrimaryPos = positions.primary;
+    lastSecondaryPos = positions.secondary;
+    lastPrimaryDelta = primaryDelta;
+    lastSecondaryDelta = secondaryDelta;
+    lastMovedPointerId = movedPointerId
 
-    // Two-finger mode: simple averaging
-    if (positions.primary && positions.secondary) {
-        if (deltaX !== 0 || deltaY !== 0) {
-            if (lastDelta !== null) {
-                // Average the buffered delta with the current delta
-                const avgDelta = {
-                    x: (lastDelta.x + deltaX) / 2,
-                    y: (lastDelta.y + deltaY) / 2
-                };
+    // Process deltas
+    const canvasDelta = screenDeltaToCanvasDelta(delta);
+    indicatorAnchor.x += canvasDelta.x;
+    indicatorAnchor.y += canvasDelta.y;
+    panToKeepIndicatorInView();
 
-                const canvasDelta = screenDeltaToCanvasDelta(avgDelta);
-                indicatorAnchor.x += canvasDelta.x;
-                indicatorAnchor.y += canvasDelta.y;
-                panToKeepIndicatorInView();
-
-                if (currentStroke && !isGridMode) {
-                    currentStroke.points!.push({ ...indicatorAnchor });
-                }
-
-                // Clear the buffer
-                lastDelta = null;
-            } else {
-                // Buffer this delta and wait for next
-                lastDelta = { x: deltaX, y: deltaY, pointerId: movedPointerId! };
-            }
-        }
-    } else {
-        // Single finger mode - process current delta immediately
-        if (deltaX !== 0 || deltaY !== 0) {
-            const canvasDelta = screenDeltaToCanvasDelta({ x: deltaX, y: deltaY });
-            indicatorAnchor.x += canvasDelta.x;
-            indicatorAnchor.y += canvasDelta.y;
-
-            panToKeepIndicatorInView();
-        }
-
-        // Clear lastDelta when transitioning from two-finger to one-finger
-        if (lastDelta !== null) {
-            lastDelta = null;
-        }
+    if (currentStroke && !isGridMode) {
+        currentStroke.points!.push({ ...indicatorAnchor });
     }
 }
 
 function updateMarkerPosition() {
+    const positions = eventHandler.getFingerPositions();
+    if (!indicatorAnchor) return;
+
+    // Single finger mode - handle directly without algorithm complexity
+    if (!positions.secondary) {
+        // Calculate delta
+        let deltaX = 0;
+        let deltaY = 0;
+
+        if (positions.primary && lastPrimaryPos) {
+            deltaX = positions.primary.x - lastPrimaryPos.x;
+            deltaY = positions.primary.y - lastPrimaryPos.y;
+        }
+
+        // Update last position
+        lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
+        lastSecondaryPos = null;
+        lastSecondaryDelta = null;
+        lastPrimaryDelta = null;
+
+        // Process delta immediately
+        if (deltaX !== 0 || deltaY !== 0) {
+            const canvasDelta = screenDeltaToCanvasDelta({ x: deltaX, y: deltaY });
+            indicatorAnchor.x += canvasDelta.x;
+            indicatorAnchor.y += canvasDelta.y;
+            panToKeepIndicatorInView();
+        }
+
+        lastDelta = null;
+        return;
+    }
+
+    // Two-finger mode - use the appropriate algorithm
     if (USE_BATCHED_DELTA_MECHANISM) {
         updateMarkerPositionWithBatching();
     } else {
