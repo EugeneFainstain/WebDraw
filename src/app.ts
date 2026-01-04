@@ -308,9 +308,6 @@ let transformStart: {
 // Movement tracking for continuous updates
 let lastPrimaryPos: Point | null = null;
 let lastSecondaryPos: Point | null = null;
-let lastPrimaryDelta: Point | null = null;
-let lastSecondaryDelta: Point | null = null;
-let lastMovedPointerId = 0 // 1 for primary, 2 for secondary, 3 for both
 let lastDelta: { x: number, y: number, pointerId: number } | null = null;
 let batchedDelta: { x: number, y: number } | null = null;
 
@@ -1184,31 +1181,14 @@ function updateMarkerPositionSimple() {
     if( !positions.primary || !positions.secondary ) return;
 
     // Prepare for 2-finger processing
-    if( !lastPrimaryPos || !lastSecondaryPos )
-    {
-        if( !lastPrimaryPos && !lastSecondaryPos )
-            lastMovedPointerId = 0;
-        else
-        if( !lastSecondaryPos )
-            lastMovedPointerId = 1; // primary secondary moved last
-        else
-            lastMovedPointerId = 2; // secondary moved last (is this even possible?...)
+    if( !lastPrimaryPos )
+         lastPrimaryPos = positions.primary;
 
-        if( !lastPrimaryPos )
-             lastPrimaryDelta = null;
+    if( !lastSecondaryPos )
+         lastSecondaryPos = positions.secondary;
 
-        if( !lastSecondaryPos )
-             lastSecondaryDelta = null;
-
-        lastPrimaryPos = positions.primary;
-        lastSecondaryPos = positions.secondary;
-    }
-
-    if( !lastPrimaryDelta )
-         lastPrimaryDelta = {x:0, y:0};
-
-    if( !lastSecondaryDelta )
-         lastSecondaryDelta = {x:0, y:0};
+    if( !lastDelta )
+         lastDelta = {x:0,y:0,pointerId:0}
 
     // Determine which finger moved and calculate its delta
     let movedPointerId = 0;
@@ -1227,48 +1207,43 @@ function updateMarkerPositionSimple() {
     if( secondaryDelta.x || secondaryDelta.y )
         movedPointerId += 2; // Secondary finger moved
 
-    // Lets calculate the deltas
-    let delta : Point = {x:0, y:0};
+    // "delta" will be the sum of deltas from both fingers - but only 1 should normally be non-zero...
+    let delta : Point = { x:primaryDelta.x + secondaryDelta.x,
+                          y:primaryDelta.y + secondaryDelta.y };
 
-    if( movedPointerId == 1 && lastMovedPointerId == 2 )
+    // Lets calculate the final delta
+    let finalDelta : Point = { x:0, y:0 };
+
+    if( movedPointerId == 1 || movedPointerId == 2 ) // Only 1 finger has moved
     {
-        delta.x = (primaryDelta.x + lastSecondaryDelta.x) / 4
-        delta.y = (primaryDelta.y + lastSecondaryDelta.y) / 4
+        if( movedPointerId == lastDelta.pointerId ) // The same finger moved as last time
+        {
+            // Note: if we are NOT dividing by 2 here - we get the same sensitivity
+            //       for one finger as we get for two - but this is a somewhat discontinuos
+            //       behavior - so we'll skip this for now (in the simple variant)
+            finalDelta.x = delta.x / 2
+            finalDelta.y = delta.y / 2
+        }
+        else  // A different finger moved compared to last time
+        {
+            finalDelta.x = (delta.x + lastDelta.x) / 4
+            finalDelta.y = (delta.y + lastDelta.y) / 4
+        }
     }
     else
-    if( movedPointerId == 2 && lastMovedPointerId == 1 )
+    if( movedPointerId == 3 ) // Both fingers moved - shouldn't really happen...
     {
-        delta.x = (secondaryDelta.x + lastPrimaryDelta.x) / 4
-        delta.y = (secondaryDelta.y + lastPrimaryDelta.y) / 4
-    }
-    else
-    if( lastMovedPointerId == 1 && movedPointerId == 1 )
-    {
-        delta.x = (primaryDelta.x + lastPrimaryDelta.x) / 2
-        delta.y = (primaryDelta.y + lastPrimaryDelta.y) / 2
-    }
-    else
-    if( lastMovedPointerId == 2 && movedPointerId == 2 )
-    {
-        delta.x = (secondaryDelta.x + lastSecondaryDelta.x) / 2
-        delta.y = (secondaryDelta.y + lastSecondaryDelta.y) / 2
-    }
-    else
-    if( movedPointerId == 3 ) // Both?! Shouldn't happen...
-    {
-        delta.x = (primaryDelta.x + secondaryDelta.x) / 2
-        delta.y = (primaryDelta.y + secondaryDelta.y) / 2
+        finalDelta.x = delta.x / 2
+        finalDelta.y = delta.y / 2
     }
 
     // Update last positions
     lastPrimaryPos = positions.primary;
     lastSecondaryPos = positions.secondary;
-    lastPrimaryDelta = primaryDelta;
-    lastSecondaryDelta = secondaryDelta;
-    lastMovedPointerId = movedPointerId
+    lastDelta = { x: delta.x, y: delta.y, pointerId: movedPointerId! };    
 
-    // Process deltas
-    const canvasDelta = screenDeltaToCanvasDelta(delta);
+    // Process finalDelta
+    const canvasDelta = screenDeltaToCanvasDelta(finalDelta);
     indicatorAnchor.x += canvasDelta.x;
     indicatorAnchor.y += canvasDelta.y;
     panToKeepIndicatorInView();
@@ -1296,8 +1271,6 @@ function updateMarkerPosition() {
         // Update last position
         lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
         lastSecondaryPos = null;
-        lastSecondaryDelta = null;
-        lastPrimaryDelta = null;
 
         // Process delta immediately
         if (deltaX !== 0 || deltaY !== 0) {
@@ -2273,6 +2246,14 @@ function handlePointerUp(e: PointerEvent) {
 
     eventHandler.handlePointerUp(e.pointerId);
 
+    if (eventHandler.getFingerCount() <= 1) // Only 1 finger left or no fingers left
+    {
+        lastPrimaryPos = null;
+        lastSecondaryPos = null;
+        lastDelta = null;
+        batchedDelta = null;
+    }
+
     // Clean up movement tracking if all fingers are up
     if (eventHandler.getFingerCount() === 0) {
         // Close combined picker on tap (quick touch and release)
@@ -2335,11 +2316,6 @@ function handlePointerUp(e: PointerEvent) {
             secondTapDownPos = null;
             isTrackingDoubleTap = false;
         }
-
-        lastPrimaryPos = null;
-        lastSecondaryPos = null;
-        lastDelta = null;
-        batchedDelta = null;
 
         // Mark transformation as complete if a stroke was transformed
         if (transformStart && transformStart.initialStrokeSnapshots && transformSnapshot) {
