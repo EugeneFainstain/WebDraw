@@ -784,12 +784,19 @@ function redraw() {
         drawStroke(currentStroke);
     }
 
-    // Draw selection rectangle (in canvas coordinates, inside transform)
+    ctx.restore();
+
+    // Draw selection rectangle (in screen space, aligned to screen axes)
     if (selectionRectStart && selectionRectEnd) {
-        const minX = Math.min(selectionRectStart.x, selectionRectEnd.x);
-        const maxX = Math.max(selectionRectStart.x, selectionRectEnd.x);
-        const minY = Math.min(selectionRectStart.y, selectionRectEnd.y);
-        const maxY = Math.max(selectionRectStart.y, selectionRectEnd.y);
+        // Convert canvas coordinates to screen coordinates
+        const screenStart = canvasToScreen(selectionRectStart);
+        const screenEnd = canvasToScreen(selectionRectEnd);
+
+        // Calculate screen-aligned rectangle bounds
+        const minX = Math.min(screenStart.x, screenEnd.x);
+        const maxX = Math.max(screenStart.x, screenEnd.x);
+        const minY = Math.min(screenStart.y, screenEnd.y);
+        const maxY = Math.max(screenStart.y, screenEnd.y);
 
         // Draw semi-transparent rectangle
         ctx.fillStyle = 'rgba(135, 206, 250, 0.3)'; // Light blue with 30% opacity
@@ -797,11 +804,9 @@ function redraw() {
 
         // Draw rectangle border
         ctx.strokeStyle = 'rgba(30, 144, 255, 0.8)'; // Dodger blue with 80% opacity
-        ctx.lineWidth = screenLengthToCanvasLength(2);
+        ctx.lineWidth = 2;
         ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     }
-
-    ctx.restore();
 
     // Draw marker indicator (in screen space)
     if (indicatorAnchor) {
@@ -1019,15 +1024,20 @@ function strokeIntersectsRectangle(stroke: Stroke, rectStart: Point, rectEnd: Po
         return stroke.strokes!.some(child => strokeIntersectsRectangle(child, rectStart, rectEnd));
     }
 
-    // Get rectangle bounds
-    const minX = Math.min(rectStart.x, rectEnd.x);
-    const maxX = Math.max(rectStart.x, rectEnd.x);
-    const minY = Math.min(rectStart.y, rectEnd.y);
-    const maxY = Math.max(rectStart.y, rectEnd.y);
+    // Convert rectangle corners to screen space to get screen-aligned bounds
+    const screenStart = canvasToScreen(rectStart);
+    const screenEnd = canvasToScreen(rectEnd);
 
-    // Check if any point in the stroke is inside or touches the rectangle
+    // Get screen-aligned rectangle bounds
+    const minX = Math.min(screenStart.x, screenEnd.x);
+    const maxX = Math.max(screenStart.x, screenEnd.x);
+    const minY = Math.min(screenStart.y, screenEnd.y);
+    const maxY = Math.max(screenStart.y, screenEnd.y);
+
+    // Check if any point in the stroke (converted to screen space) is inside the screen-aligned rectangle
     for (const point of stroke.points!) {
-        if (point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY) {
+        const screenPoint = canvasToScreen(point);
+        if (screenPoint.x >= minX && screenPoint.x <= maxX && screenPoint.y >= minY && screenPoint.y <= maxY) {
             return true;
         }
     }
