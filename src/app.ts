@@ -1226,6 +1226,12 @@ function updateMarkerPositionSimple() {
         }
         else  // A different finger moved compared to last time
         {
+            // Divide by 4 = divide by 2 (average) × divide by 2 (we emit 2x more deltas than batched mode)
+            // Unlike the batched algorithm which outputs every other delta, we output EVERY delta.
+            // So when two fingers alternate at 10px each:
+            //   Event A: delta=10, finalDelta=10/2=5px (same finger case above)
+            //   Event B: delta=10, finalDelta=(10+10)/4=5px (this case - average with last)
+            //   Total: 5+5=10px ✓ matches the speed when both fingers move together
             finalDelta.x = (delta.x + lastDelta.x) / 4
             finalDelta.y = (delta.y + lastDelta.y) / 4
         }
