@@ -96,6 +96,7 @@ export function createCombinedPicker(
                 updateColorSwatches();
                 // Update size dots to use new color
                 updateSizeDots();
+                closePopup();
             });
             colorGrid.appendChild(swatch);
         });
@@ -147,6 +148,7 @@ export function createCombinedPicker(
                 updateTrigger();
                 // Update all size cells to show current selection
                 updateSizeCells();
+                closePopup();
             });
 
             sizeGrid.appendChild(cell);
@@ -206,6 +208,7 @@ export function createCombinedPicker(
             gridBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 onGridToggle();
+                closePopup();
             });
 
             buttonsContainer.appendChild(gridBtn);
@@ -272,6 +275,7 @@ export function createCombinedPicker(
                 e.stopPropagation();
                 // Always call onFit - the callback itself will check if there's a selected stroke
                 onFit();
+                closePopup();
             });
 
             // Store the update function on the button for later use
