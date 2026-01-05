@@ -2550,9 +2550,8 @@ function handlePointerUp(e: PointerEvent) {
             getDistance(pos, secondTapDownPos) < DOUBLE_TAP_DISTANCE &&
             now - secondTapDownTime < DOUBLE_TAP_MAX_DURATION) {  // Second tap must be quick
             // Valid double-tap completed!
-            // DOUBLE-TAP SELECTION: Select stroke closest to the tap location
-            const canvasPos = screenToCanvas(pos);
-            const result = findClosestStrokeAndPoint(canvasPos);
+            // DOUBLE-TAP SELECTION: Select stroke closest to the cursor position
+            const result = cursorAnchor ? findClosestStrokeAndPoint(cursorAnchor) : null;
             if (result) {
                 // Move cursor to the closest point
                 cursorAnchor = result.point;
@@ -2565,6 +2564,9 @@ function handlePointerUp(e: PointerEvent) {
                 // Clear transformation undo state when manually selecting a stroke
                 transformSnapshot = null;
                 hasUndoableTransform = false;
+                // Highlight the selected stroke
+                highlightedStrokes.clear();
+                highlightedStrokes.add(result.strokeIdx);
                 // Update state machine to reflect selection
                 stateMachine.setStrokeSelected(true);
                 updateDelButton();
