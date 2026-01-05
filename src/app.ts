@@ -18,10 +18,21 @@ import { fitEquilateralPolygon, generateEquilateralPolygonPoints } from './fitte
 // false = Simple averaging of every 2 consecutive deltas (regardless of finger ID)
 const USE_BATCHED_DELTA_MECHANISM = false; //true;
 
-// Stroke length threshold for locking two-finger gesture as drawing (in pixels)
+// Stroke length threshold for locking two-finger gesture as drawing (in millimeters)
 // Once a stroke reaches this length, it's locked as a drawing gesture and won't
 // be converted to a zoom/pan/rotate gesture even if fingers start pinching
-const STROKE_LEN_THRESHOLD = 30; // pixels - same as MOVEMENT_THRESHOLD in eventHandler.ts
+const STROKE_LEN_THRESHOLD_MM = 8; // mm - same as MOVEMENT_THRESHOLD_MM in eventHandler.ts
+
+// Convert millimeters to screen pixels based on device DPI
+// Assumes 96 DPI as default (standard for web), adjusted by devicePixelRatio
+// 1 inch = 25.4 mm, so pixels = (mm / 25.4) * DPI * devicePixelRatio
+function mmToPixels(mm: number): number {
+    const dpi = 96; // Standard web DPI
+    const pixelRatio = window.devicePixelRatio || 1;
+    return (mm / 25.4) * dpi * pixelRatio;
+}
+
+const STROKE_LEN_THRESHOLD = mmToPixels(STROKE_LEN_THRESHOLD_MM); // pixels
 
 // ============================================================================
 // DOM ELEMENTS

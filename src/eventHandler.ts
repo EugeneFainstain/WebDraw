@@ -14,8 +14,22 @@ export interface Point {
 
 // Constants
 const TIMEOUT_DELAY = 250; // ms - timeout after any finger down
-const MOVEMENT_THRESHOLD = 30; // pixels - threshold for FINGER_MOVED_FAR event
-const PINCH_THRESHOLD = 30; // pixels - threshold for detecting pinch/zoom gesture
+
+// Physical thresholds in millimeters (scale-invariant)
+const MOVEMENT_THRESHOLD_MM = 8; // mm - threshold for FINGER_MOVED_FAR event
+const PINCH_THRESHOLD_MM = 4; // mm - threshold for detecting pinch/zoom gesture
+
+// Convert millimeters to screen pixels based on device DPI
+// Assumes 96 DPI as default (standard for web), adjusted by devicePixelRatio
+// 1 inch = 25.4 mm, so pixels = (mm / 25.4) * DPI * devicePixelRatio
+function mmToPixels(mm: number): number {
+    const dpi = 96; // Standard web DPI
+    const pixelRatio = window.devicePixelRatio || 1;
+    return (mm / 25.4) * dpi * pixelRatio;
+}
+
+const MOVEMENT_THRESHOLD = mmToPixels(MOVEMENT_THRESHOLD_MM); // pixels
+const PINCH_THRESHOLD = mmToPixels(PINCH_THRESHOLD_MM); // pixels
 
 /**
  * Tracks finger positions and generates state machine events

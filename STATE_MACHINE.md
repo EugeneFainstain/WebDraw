@@ -12,9 +12,11 @@ The application distinguishes between two-finger **drawing** gestures and two-fi
 
 1. When a second finger lands, the gesture initially assumes it's a drawing gesture and enters the **Drawing** state
 2. The distance between the two fingers is recorded at the moment the second finger lands
-3. **Pinch Detection**: If the distance between the fingers changes by more than 30px (PINCH_THRESHOLD), a `PINCH_DETECTED` event is fired, abandoning the stroke and transitioning to **Transform** state
-4. **Drawing Lock**: If the drawn stroke reaches a path length of 30px (STROKE_LEN_THRESHOLD) before any pinch is detected, the gesture is locked as a drawing gesture. Future changes in finger distance are ignored, and the stroke continues normally
+3. **Pinch Detection**: If the distance between the fingers changes by more than 8mm (PINCH_THRESHOLD_MM), a `PINCH_DETECTED` event is fired, abandoning the stroke and transitioning to **Transform** state
+4. **Drawing Lock**: If the drawn stroke reaches a path length of 8mm (STROKE_LEN_THRESHOLD_MM) before any pinch is detected, the gesture is locked as a drawing gesture. Future changes in finger distance are ignored, and the stroke continues normally
 5. This allows natural drawing with two fingers while still supporting zoom/pan/rotate when fingers move apart or together
+
+**Note**: All thresholds are specified in millimeters and converted to screen pixels based on device DPI, ensuring consistent physical gesture recognition across different devices and screen resolutions.
 
 ## States
 
@@ -44,8 +46,8 @@ The state machine responds to **9 events**:
 3. **F3_DOWN** - Third finger touches screen
 4. **FINGER_UP** - Any finger lifts from screen
 5. **TIMEOUT** - 250ms has elapsed since ANY finger down
-6. **FINGER_MOVED_FAR** - Finger moved >30px from reference point
-7. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (30px), indicating zoom/pan/rotate gesture
+6. **FINGER_MOVED_FAR** - Finger moved >8mm from reference point (screen-space)
+7. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (8mm screen-space), indicating zoom/pan/rotate gesture
 8. **DELETE** - Delete button pressed
 9. **CLEAR** - Clear button pressed
 
@@ -137,7 +139,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
-**Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >30px. The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached STROKE_LEN_THRESHOLD (30px path length), the gesture is locked as drawing and PINCH_DETECTED won't fire.
+**Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >8mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached STROKE_LEN_THRESHOLD_MM (8mm path length in screen-space), the gesture is locked as drawing and PINCH_DETECTED won't fire.
 
 **Note on F3_DOWN:** Actions depend on FINGER_MOVED_FAR_HAPPENED flag:
 - If flag is true: [SAVE_STROKE, INIT_TRANSFORM]
