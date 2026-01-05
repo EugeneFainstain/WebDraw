@@ -291,3 +291,18 @@ button {
     user-select: none;
     cursor: none;
 }
+
+#markerDiv {
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 9999;
+    border-radius: 50%;
+    box-sizing: border-box;
+    /* Inner ring via box-shadow, outer ring via border */
+    border: 2px solid black;
+    box-shadow: inset 0 0 0 2px white;
+    transform: translate(-50%, -50%);
+    display: none; /* Hidden until positioned */
+}

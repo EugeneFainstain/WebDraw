@@ -49,6 +49,7 @@ const btnDup = document.getElementById('btnDup') as HTMLButtonElement;
 const btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
 const btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
 const debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
+const markerDiv = document.getElementById('markerDiv') as HTMLElement;
 
 // Debug helper
 let debugMessages: string[] = [];
@@ -647,6 +648,9 @@ function getDefaultIndicatorOffset(): Point {
     };
 }
 
+// Toolbar height - marker can extend into this area
+const TOOLBAR_HEIGHT = 60;
+
 function setIndicatorToDefaultPosition(screenPos: Point): void {
     const offset = getDefaultIndicatorOffset();
     const targetScreenPos = {
@@ -656,7 +660,8 @@ function setIndicatorToDefaultPosition(screenPos: Point): void {
 
     const margin = 10;
     const clampedX = Math.max(margin, Math.min(canvas.width - margin, targetScreenPos.x));
-    const clampedY = Math.max(margin, Math.min(canvas.height - margin, targetScreenPos.y));
+    // Allow marker to go into toolbar area (negative Y in canvas space)
+    const clampedY = Math.max(-TOOLBAR_HEIGHT + margin, Math.min(canvas.height - margin, targetScreenPos.y));
 
     indicatorAnchor = screenToCanvas({ x: clampedX, y: clampedY });
 }
@@ -667,7 +672,8 @@ function clampIndicatorToView(): void {
 
     const margin = 10;
     const clampedX = Math.max(margin, Math.min(canvas.width - margin, screenPos.x));
-    const clampedY = Math.max(margin, Math.min(canvas.height - margin, screenPos.y));
+    // Allow marker to go into toolbar area (negative Y in canvas space)
+    const clampedY = Math.max(-TOOLBAR_HEIGHT + margin, Math.min(canvas.height - margin, screenPos.y));
 
     if (clampedX !== screenPos.x || clampedY !== screenPos.y) {
         indicatorAnchor = screenToCanvas({ x: clampedX, y: clampedY });
@@ -679,6 +685,7 @@ function panToKeepIndicatorInView(): void {
     const screenPos = canvasToScreen(indicatorAnchor);
 
     const margin = 10;
+    const minY = -TOOLBAR_HEIGHT + margin; // Allow marker into toolbar area
     let panDeltaX = 0;
     let panDeltaY = 0;
 
@@ -688,8 +695,8 @@ function panToKeepIndicatorInView(): void {
         panDeltaX = (canvas.width - margin) - screenPos.x;
     }
 
-    if (screenPos.y < margin) {
-        panDeltaY = margin - screenPos.y;
+    if (screenPos.y < minY) {
+        panDeltaY = minY - screenPos.y;
     } else if (screenPos.y > canvas.height - margin) {
         panDeltaY = (canvas.height - margin) - screenPos.y;
     }
@@ -705,6 +712,36 @@ function getIndicatorScreenPos(): Point {
         return { x: canvas.width / 2, y: canvas.height / 4 };
     }
     return canvasToScreen(indicatorAnchor);
+}
+
+function updateMarkerDiv(): void {
+    if (!indicatorAnchor) {
+        markerDiv.style.display = 'none';
+        return;
+    }
+
+    const indicatorPos = getIndicatorScreenPos();
+    const strokeSize = combinedPicker.getSize();
+    const renderedSize = Math.max(strokeSize * viewTransform.scale, 1);
+    const drawColor = combinedPicker.getColor();
+    const isWhite = drawColor.toUpperCase() === '#FFFFFF';
+    const outerColor = isWhite ? 'black' : drawColor;
+
+    // Inner ring color: lime if stroke selected, white otherwise
+    const hasSelectedStroke = selectedStrokeIdx !== null;
+    const innerColor = hasSelectedStroke ? 'lime' : 'white';
+
+    // Size includes the two rings (2px inner + 2px outer)
+    const totalSize = renderedSize + 8;
+
+    // Position accounts for toolbar offset (canvas is 60px from top)
+    markerDiv.style.display = 'block';
+    markerDiv.style.left = `${indicatorPos.x}px`;
+    markerDiv.style.top = `${indicatorPos.y + 60}px`; // Add toolbar height
+    markerDiv.style.width = `${totalSize}px`;
+    markerDiv.style.height = `${totalSize}px`;
+    markerDiv.style.borderColor = outerColor;
+    markerDiv.style.boxShadow = `inset 0 0 0 2px ${innerColor}`;
 }
 
 // ============================================================================
@@ -824,30 +861,8 @@ function redraw() {
         ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     }
 
-    // Draw marker indicator (in screen space)
-    if (indicatorAnchor) {
-        const indicatorPos = getIndicatorScreenPos();
-        const strokeSize = combinedPicker.getSize();
-        const renderedSize = Math.max(strokeSize * viewTransform.scale, 1);
-        const drawColor = combinedPicker.getColor();
-        const isWhite = drawColor.toUpperCase() === '#FFFFFF';
-        const outerColor = isWhite ? 'black' : drawColor;
-
-        // Inner ring (white, or green if a stroke is selected)
-        const hasSelectedStroke = selectedStrokeIdx !== null;
-        ctx.beginPath();
-        ctx.arc(indicatorPos.x, indicatorPos.y, renderedSize / 2 + 2, 0, Math.PI * 2);
-        ctx.strokeStyle = hasSelectedStroke ? 'lime' : 'white';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Outer ring (draw color, or black if white)
-        ctx.beginPath();
-        ctx.arc(indicatorPos.x, indicatorPos.y, renderedSize / 2 + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = outerColor;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
+    // Update CSS marker div position and appearance
+    updateMarkerDiv();
 
     // Update combined picker button states
     updateCombinedPickerButtonStates();
