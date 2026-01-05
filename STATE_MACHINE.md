@@ -6,6 +6,16 @@ This document describes the state machine implementation for the WebDraw applica
 
 The state machine is implemented in [src/stateMachine.ts](src/stateMachine.ts) and manages all gesture interactions in the WebDraw application. It provides a clean separation between interaction logic and rendering logic.
 
+## Two-Finger Gesture Disambiguation
+
+The application distinguishes between two-finger **drawing** gestures and two-finger **zoom/pan/rotate** gestures:
+
+1. When a second finger lands, the gesture initially assumes it's a drawing gesture and enters the **Drawing** state
+2. The distance between the two fingers is recorded at the moment the second finger lands
+3. **Pinch Detection**: If the distance between the fingers changes by more than 30px (PINCH_THRESHOLD), a `PINCH_DETECTED` event is fired, abandoning the stroke and transitioning to **Transform** state
+4. **Drawing Lock**: If the drawn stroke reaches a path length of 30px (STROKE_LEN_THRESHOLD) before any pinch is detected, the gesture is locked as a drawing gesture. Future changes in finger distance are ignored, and the stroke continues normally
+5. This allows natural drawing with two fingers while still supporting zoom/pan/rotate when fingers move apart or together
+
 ## States
 
 The application has **5 distinct states**:
@@ -13,7 +23,7 @@ The application has **5 distinct states**:
 1. **Idle** - No fingers touching the screen
 2. **MovingMarker** - One finger on screen, moving the drawing marker
 3. **Drawing** - Two fingers on screen, actively drawing a stroke
-4. **Transform** - Three fingers on screen, transforming canvas or selected stroke
+4. **Transform** - Two or three fingers on screen, transforming canvas or selected stroke (zoom/pan/rotate)
 5. **SelectionRectangle** - Tap-and-a-half gesture active, dragging selection rectangle
 
 ## State Modifier
@@ -27,7 +37,7 @@ The application has **5 distinct states**:
 
 ## Events
 
-The state machine responds to **8 events**:
+The state machine responds to **9 events**:
 
 1. **F1_DOWN** - First finger touches screen
 2. **F2_DOWN** - Second finger touches screen
@@ -35,8 +45,9 @@ The state machine responds to **8 events**:
 4. **FINGER_UP** - Any finger lifts from screen
 5. **TIMEOUT** - 250ms has elapsed since ANY finger down
 6. **FINGER_MOVED_FAR** - Finger moved >30px from reference point
-7. **DELETE** - Delete button pressed
-8. **CLEAR** - Clear button pressed
+7. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (30px), indicating zoom/pan/rotate gesture
+8. **DELETE** - Delete button pressed
+9. **CLEAR** - Clear button pressed
 
 ## Event Flags
 
@@ -90,6 +101,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | Idle (keep Normal) - [SET_TIMEOUT_FLAG] | Idle (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | Idle (keep Normal) | Idle (keep Selected) |
+| PINCH_DETECTED | Idle (keep Normal) | Idle (keep Selected) |
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
@@ -105,6 +117,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_UP (otherwise) | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | MovingMarker (keep Normal) - [SET_TIMEOUT_FLAG] | MovingMarker (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
+| PINCH_DETECTED | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
 | DELETE | MovingMarker (keep) - [PROCESS_DELETE] | MovingMarker (keep) - [PROCESS_DELETE] |
 | CLEAR | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
@@ -116,12 +129,15 @@ When a state transition occurs, the state machine returns a list of **actions** 
 |-------|------------------|------------------------|
 | F1_DOWN | Drawing (keep Normal) | Drawing (keep Selected) |
 | F2_DOWN | Drawing (keep Normal) | Drawing (keep Selected) |
+| PINCH_DETECTED | Transform (keep Normal) - [ABANDON_STROKE, INIT_TRANSFORM] | Transform (keep Selected) - [ABANDON_STROKE, INIT_TRANSFORM] |
 | F3_DOWN | Transform (keep Normal) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] | Transform (keep Selected) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] |
 | FINGER_UP | MovingMarker (→ Selected) - [SAVE_STROKE, SELECT_STROKE] | MovingMarker (keep Selected) - [SAVE_STROKE] |
 | TIMEOUT | Drawing (keep Normal) - [SET_TIMEOUT_FLAG] | Drawing (keep Selected) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
+
+**Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >30px. The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached STROKE_LEN_THRESHOLD (30px path length), the gesture is locked as drawing and PINCH_DETECTED won't fire.
 
 **Note on F3_DOWN:** Actions depend on FINGER_MOVED_FAR_HAPPENED flag:
 - If flag is true: [SAVE_STROKE, INIT_TRANSFORM]
@@ -137,6 +153,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | Transform (keep Normal) - [SET_TIMEOUT_FLAG] | Transform (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | Transform (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG] | Transform (keep Fresh) - [SET_FINGER_MOVED_FAR_FLAG] |
+| PINCH_DETECTED | Transform (keep Normal) | Transform (keep Selected) |
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
@@ -146,6 +163,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 |-------|--------------|
 | F1_DOWN | SelectionRectangle (keep Normal) |
 | F2_DOWN | Idle (→ Normal) - [CANCEL_SELECTION_RECTANGLE, DESELECT_STROKE] |
+| PINCH_DETECTED | SelectionRectangle (keep Normal) |
 | F3_DOWN | Idle (→ Normal) - [CANCEL_SELECTION_RECTANGLE, DESELECT_STROKE] |
 | FINGER_UP | Idle (→ Normal) - [APPLY_SELECTION_RECTANGLE, DESELECT_STROKE] |
 | TIMEOUT | SelectionRectangle (keep Normal) - [SET_TIMEOUT_FLAG, UPDATE_SELECTION_RECTANGLE] |

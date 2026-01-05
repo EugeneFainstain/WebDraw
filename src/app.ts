@@ -2,7 +2,7 @@ import '../styles.css';
 import { createCombinedPicker } from './combinedPicker';
 import { StateMachine, State, Event, Action, TransitionResult } from './stateMachine';
 import { EventHandler, Point } from './eventHandler';
-import { resampleStroke } from './resample';
+import { resampleStroke, getPathLength } from './resample';
 import { fitCircle, generateCirclePoints, isMostlyClosed } from './fitters/circleFitter';
 import { fitEllipse, generateEllipsePoints } from './fitters/ellipseFitter';
 import { fitSquare, fitSquareConstrained, generateRectanglePoints } from './fitters/squareFitter';
@@ -17,6 +17,11 @@ import { fitEquilateralPolygon, generateEquilateralPolygonPoints } from './fitte
 // true = Use intricate batching mechanism (handles finger promotion, mode transitions)
 // false = Simple averaging of every 2 consecutive deltas (regardless of finger ID)
 const USE_BATCHED_DELTA_MECHANISM = false; //true;
+
+// Stroke length threshold for locking two-finger gesture as drawing (in pixels)
+// Once a stroke reaches this length, it's locked as a drawing gesture and won't
+// be converted to a zoom/pan/rotate gesture even if fingers start pinching
+const STROKE_LEN_THRESHOLD = 30; // pixels - same as MOVEMENT_THRESHOLD in eventHandler.ts
 
 // ============================================================================
 // DOM ELEMENTS
@@ -857,47 +862,91 @@ function updateCombinedPickerButtonStates() {
 
 function initThreeFingerTransform() {
     const positions = eventHandler.getFingerPositions();
-    if (!positions.primary || !positions.secondary || !positions.tertiary) return;
+    const fingerCount = eventHandler.getFingerCount();
 
-    const pivot = {
-        x: (positions.primary.x + positions.secondary.x + positions.tertiary.x) / 3,
-        y: (positions.primary.y + positions.secondary.y + positions.tertiary.y) / 3
-    };
+    // Support both 2-finger and 3-finger gestures
+    if (fingerCount === 2) {
+        if (!positions.primary || !positions.secondary) return;
 
-    const dist1 = getDistance(pivot, positions.primary);
-    const dist2 = getDistance(pivot, positions.secondary);
-    const dist3 = getDistance(pivot, positions.tertiary);
-    const initialScale = (dist1 + dist2 + dist3) / 3;
-
-    const angle1 = getAngle(pivot, positions.primary);
-    const angle2 = getAngle(pivot, positions.secondary);
-    const angle3 = getAngle(pivot, positions.tertiary);
-
-    const baseTransformStart = {
-        pivot,
-        initialScale,
-        fingerAngles: [angle1, angle2, angle3],
-        unwrappedRotation: 0,
-        initialTransform: { ...viewTransform }
-    };
-
-    // If a stroke is selected, store initial stroke points for transformation
-    if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
-        const selectedStroke = strokeHistory[selectedStrokeIdx];
-        // Create snapshot of all point arrays for the stroke
-        const strokeSnapshots = createStrokeSnapshot(selectedStroke);
-        transformStart = {
-            ...baseTransformStart,
-            initialStrokeSnapshots: strokeSnapshots
+        // Two-finger transform
+        const pivot = {
+            x: (positions.primary.x + positions.secondary.x) / 2,
+            y: (positions.primary.y + positions.secondary.y) / 2
         };
 
-        // Save snapshot for undo functionality (only if not already saved)
-        if (!hasUndoableTransform) {
-            const allPoints = getAllPointsForTransform(selectedStroke);
-            transformSnapshot = allPoints.map(p => ({ ...p }));
+        const dist1 = getDistance(pivot, positions.primary);
+        const dist2 = getDistance(pivot, positions.secondary);
+        const initialScale = (dist1 + dist2) / 2;
+
+        const angle1 = getAngle(pivot, positions.primary);
+        const angle2 = getAngle(pivot, positions.secondary);
+
+        const baseTransformStart = {
+            pivot,
+            initialScale,
+            fingerAngles: [angle1, angle2],
+            unwrappedRotation: 0,
+            initialTransform: { ...viewTransform }
+        };
+
+        // If a stroke is selected, store initial stroke points for transformation
+        if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+            const selectedStroke = strokeHistory[selectedStrokeIdx];
+            const strokeSnapshots = createStrokeSnapshot(selectedStroke);
+            transformStart = {
+                ...baseTransformStart,
+                initialStrokeSnapshots: strokeSnapshots
+            };
+
+            if (!hasUndoableTransform) {
+                const allPoints = getAllPointsForTransform(selectedStroke);
+                transformSnapshot = allPoints.map(p => ({ ...p }));
+            }
+        } else {
+            transformStart = baseTransformStart;
         }
-    } else {
-        transformStart = baseTransformStart;
+    } else if (fingerCount >= 3) {
+        if (!positions.primary || !positions.secondary || !positions.tertiary) return;
+
+        // Three-finger transform
+        const pivot = {
+            x: (positions.primary.x + positions.secondary.x + positions.tertiary.x) / 3,
+            y: (positions.primary.y + positions.secondary.y + positions.tertiary.y) / 3
+        };
+
+        const dist1 = getDistance(pivot, positions.primary);
+        const dist2 = getDistance(pivot, positions.secondary);
+        const dist3 = getDistance(pivot, positions.tertiary);
+        const initialScale = (dist1 + dist2 + dist3) / 3;
+
+        const angle1 = getAngle(pivot, positions.primary);
+        const angle2 = getAngle(pivot, positions.secondary);
+        const angle3 = getAngle(pivot, positions.tertiary);
+
+        const baseTransformStart = {
+            pivot,
+            initialScale,
+            fingerAngles: [angle1, angle2, angle3],
+            unwrappedRotation: 0,
+            initialTransform: { ...viewTransform }
+        };
+
+        // If a stroke is selected, store initial stroke points for transformation
+        if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+            const selectedStroke = strokeHistory[selectedStrokeIdx];
+            const strokeSnapshots = createStrokeSnapshot(selectedStroke);
+            transformStart = {
+                ...baseTransformStart,
+                initialStrokeSnapshots: strokeSnapshots
+            };
+
+            if (!hasUndoableTransform) {
+                const allPoints = getAllPointsForTransform(selectedStroke);
+                transformSnapshot = allPoints.map(p => ({ ...p }));
+            }
+        } else {
+            transformStart = baseTransformStart;
+        }
     }
 }
 
@@ -905,30 +954,61 @@ function applyThreeFingerTransform() {
     if (!transformStart) return;
 
     const positions = eventHandler.getFingerPositions();
-    if (!positions.primary || !positions.secondary || !positions.tertiary) return;
+    const fingerCount = eventHandler.getFingerCount();
 
-    const currentPivot = {
-        x: (positions.primary.x + positions.secondary.x + positions.tertiary.x) / 3,
-        y: (positions.primary.y + positions.secondary.y + positions.tertiary.y) / 3
-    };
+    let currentPivot: Point;
+    let currentScale: number;
+    let averageDelta: number;
 
-    const dist1 = getDistance(currentPivot, positions.primary);
-    const dist2 = getDistance(currentPivot, positions.secondary);
-    const dist3 = getDistance(currentPivot, positions.tertiary);
-    const currentScale = (dist1 + dist2 + dist3) / 3;
+    // Support both 2-finger and 3-finger gestures
+    if (fingerCount === 2 && positions.primary && positions.secondary) {
+        // Two-finger transform
+        currentPivot = {
+            x: (positions.primary.x + positions.secondary.x) / 2,
+            y: (positions.primary.y + positions.secondary.y) / 2
+        };
 
-    const angle1 = getAngle(currentPivot, positions.primary);
-    const angle2 = getAngle(currentPivot, positions.secondary);
-    const angle3 = getAngle(currentPivot, positions.tertiary);
+        const dist1 = getDistance(currentPivot, positions.primary);
+        const dist2 = getDistance(currentPivot, positions.secondary);
+        currentScale = (dist1 + dist2) / 2;
 
-    const delta1 = normalizeAngleDelta(angle1 - transformStart.fingerAngles[0]);
-    const delta2 = normalizeAngleDelta(angle2 - transformStart.fingerAngles[1]);
-    const delta3 = normalizeAngleDelta(angle3 - transformStart.fingerAngles[2]);
+        const angle1 = getAngle(currentPivot, positions.primary);
+        const angle2 = getAngle(currentPivot, positions.secondary);
 
-    const averageDelta = (delta1 + delta2 + delta3) / 3;
-    transformStart.unwrappedRotation += averageDelta;
+        const delta1 = normalizeAngleDelta(angle1 - transformStart.fingerAngles[0]);
+        const delta2 = normalizeAngleDelta(angle2 - transformStart.fingerAngles[1]);
 
-    transformStart.fingerAngles = [angle1, angle2, angle3];
+        averageDelta = (delta1 + delta2) / 2;
+        transformStart.unwrappedRotation += averageDelta;
+
+        transformStart.fingerAngles = [angle1, angle2];
+    } else if (fingerCount >= 3 && positions.primary && positions.secondary && positions.tertiary) {
+        // Three-finger transform
+        currentPivot = {
+            x: (positions.primary.x + positions.secondary.x + positions.tertiary.x) / 3,
+            y: (positions.primary.y + positions.secondary.y + positions.tertiary.y) / 3
+        };
+
+        const dist1 = getDistance(currentPivot, positions.primary);
+        const dist2 = getDistance(currentPivot, positions.secondary);
+        const dist3 = getDistance(currentPivot, positions.tertiary);
+        currentScale = (dist1 + dist2 + dist3) / 3;
+
+        const angle1 = getAngle(currentPivot, positions.primary);
+        const angle2 = getAngle(currentPivot, positions.secondary);
+        const angle3 = getAngle(currentPivot, positions.tertiary);
+
+        const delta1 = normalizeAngleDelta(angle1 - transformStart.fingerAngles[0]);
+        const delta2 = normalizeAngleDelta(angle2 - transformStart.fingerAngles[1]);
+        const delta3 = normalizeAngleDelta(angle3 - transformStart.fingerAngles[2]);
+
+        averageDelta = (delta1 + delta2 + delta3) / 3;
+        transformStart.unwrappedRotation += averageDelta;
+
+        transformStart.fingerAngles = [angle1, angle2, angle3];
+    } else {
+        return; // Invalid finger count
+    }
 
     const scaleFactor = currentScale / transformStart.initialScale;
     const rotationDelta = transformStart.unwrappedRotation;
@@ -1344,6 +1424,15 @@ function addPointToStroke() {
     } else {
         // Normal mode: add every point
         currentStroke.points!.push({ ...indicatorAnchor });
+    }
+
+    // Check if stroke is long enough to lock the gesture as drawing
+    // This prevents the stroke from being abandoned if a pinch gesture is detected
+    if (currentStroke.points && currentStroke.points.length > 1 && !eventHandler.isGestureLockedAsDrawing()) {
+        const strokeLength = getPathLength(currentStroke.points);
+        if (strokeLength >= STROKE_LEN_THRESHOLD) {
+            eventHandler.lockGestureAsDrawing();
+        }
     }
 }
 

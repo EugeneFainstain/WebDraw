@@ -15,6 +15,7 @@ export interface Point {
 // Constants
 const TIMEOUT_DELAY = 250; // ms - timeout after any finger down
 const MOVEMENT_THRESHOLD = 30; // pixels - threshold for FINGER_MOVED_FAR event
+const PINCH_THRESHOLD = 30; // pixels - threshold for detecting pinch/zoom gesture
 
 /**
  * Tracks finger positions and generates state machine events
@@ -42,6 +43,10 @@ export class EventHandler {
 
     // Finger promotion tracking - stores the position delta when a finger is promoted
     private lastPromotionDelta: Point | null = null;
+
+    // Two-finger gesture disambiguation
+    private initialTwoFingerDistance: number | null = null;
+    private gestureLockedAsDrawing: boolean = false;
 
     /**
      * Set the callback for state machine events
@@ -113,6 +118,15 @@ export class EventHandler {
     }
 
     /**
+     * Calculate distance between two points
+     */
+    private getDistance(p1: Point, p2: Point): number {
+        const dx = p1.x - p2.x;
+        const dy = p1.y - p2.y;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    /**
      * Handle pointer down event
      */
     public handlePointerDown(pointerId: number, pos: Point): void {
@@ -134,6 +148,12 @@ export class EventHandler {
             this.secondaryPointerId = pointerId;
             this.secondaryPos = { ...pos };
             this.secondaryReferencePos = { ...pos };
+
+            // Record initial distance between two fingers for gesture disambiguation
+            if (this.primaryPos) {
+                this.initialTwoFingerDistance = this.getDistance(this.primaryPos, pos);
+                this.gestureLockedAsDrawing = false;
+            }
 
             // Restart timeout on any finger down
             this.startTimeout();
@@ -189,6 +209,18 @@ export class EventHandler {
         } else if (pointerId === this.tertiaryPointerId) {
             this.tertiaryPos = { ...pos };
             updated = true;
+        }
+
+        // Check for pinch gesture (two-finger distance change)
+        if (this.primaryPos && this.secondaryPos && this.initialTwoFingerDistance !== null && !this.gestureLockedAsDrawing) {
+            const currentDistance = this.getDistance(this.primaryPos, this.secondaryPos);
+            const distanceChange = Math.abs(currentDistance - this.initialTwoFingerDistance);
+
+            if (distanceChange > PINCH_THRESHOLD) {
+                // Pinch detected - this is a zoom gesture, not a drawing gesture
+                this.emitEvent(Event.PINCH_DETECTED);
+                this.gestureLockedAsDrawing = false;
+            }
         }
 
         // No specific state machine event for move (handled by the drawing/transform logic)
@@ -259,6 +291,12 @@ export class EventHandler {
         if (fingerLifted) {
             this.emitEvent(Event.FINGER_UP);
 
+            // Reset two-finger gesture tracking when we no longer have two fingers
+            if (this.secondaryPointerId === null) {
+                this.initialTwoFingerDistance = null;
+                this.gestureLockedAsDrawing = false;
+            }
+
             // Clear timeout if all fingers are up
             if (this.getFingerCount() === 0) {
                 if (this.timeoutHandle !== null) {
@@ -284,6 +322,21 @@ export class EventHandler {
     }
 
     /**
+     * Lock the gesture as a drawing gesture (called when stroke is long enough)
+     * Once locked, pinch detection is disabled
+     */
+    public lockGestureAsDrawing(): void {
+        this.gestureLockedAsDrawing = true;
+    }
+
+    /**
+     * Check if gesture is locked as drawing
+     */
+    public isGestureLockedAsDrawing(): boolean {
+        return this.gestureLockedAsDrawing;
+    }
+
+    /**
      * Reset all tracking state
      */
     public reset(): void {
@@ -295,6 +348,8 @@ export class EventHandler {
         this.tertiaryPos = null;
         this.primaryReferencePos = null;
         this.secondaryReferencePos = null;
+        this.initialTwoFingerDistance = null;
+        this.gestureLockedAsDrawing = false;
 
         if (this.timeoutHandle !== null) {
             clearTimeout(this.timeoutHandle);

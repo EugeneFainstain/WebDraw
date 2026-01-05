@@ -55,6 +55,7 @@ export enum Event {
     FINGER_UP = 'FINGER_UP',          // Any finger lifts from screen
     TIMEOUT = 'TIMEOUT',              // 250ms has elapsed since ANY finger down
     FINGER_MOVED_FAR = 'FINGER_MOVED_FAR', // Finger moved >30px from reference point
+    PINCH_DETECTED = 'PINCH_DETECTED', // Two-finger distance changed beyond threshold
     DELETE = 'DELETE',                // Delete button pressed
     CLEAR = 'CLEAR'                   // Clear button pressed
 }
@@ -264,6 +265,7 @@ export class StateMachine {
             case Event.F3_DOWN:
             case Event.FINGER_UP:
             case Event.FINGER_MOVED_FAR:
+            case Event.PINCH_DETECTED:
                 // Keep modifier unchanged
                 return {
                     newState: State.Idle,
@@ -380,6 +382,14 @@ export class StateMachine {
                     actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.DESELECT_STROKE, Action.MOVE_MARKER]
                 };
 
+            case Event.PINCH_DETECTED:
+                // Pinch in MovingMarker state - ignore (no stroke to abandon)
+                return {
+                    newState: State.MovingMarker,
+                    newModifier: { isStrokeSelected },  // keep
+                    actions: [Action.DO_NOTHING]
+                };
+
             case Event.DELETE:
                 // Delete keeps selection mode unchanged (processDelete handles selection logic)
                 return {
@@ -424,6 +434,14 @@ export class StateMachine {
                     newState: State.Drawing,
                     newModifier: { isStrokeSelected },  // keep
                     actions: [Action.DO_NOTHING]
+                };
+
+            case Event.PINCH_DETECTED:
+                // Two-finger pinch detected - abandon stroke and switch to transform
+                return {
+                    newState: State.Transform,
+                    newModifier: { isStrokeSelected },  // keep
+                    actions: [Action.ABANDON_STROKE, Action.INIT_TRANSFORM]
                 };
 
             case Event.F3_DOWN:
@@ -535,6 +553,14 @@ export class StateMachine {
                     actions: [Action.SET_FINGER_MOVED_FAR_FLAG]
                 };
 
+            case Event.PINCH_DETECTED:
+                // Already in transform - ignore (already handling pinch)
+                return {
+                    newState: State.Transform,
+                    newModifier: modifier,  // keep
+                    actions: [Action.DO_NOTHING]
+                };
+
             case Event.DELETE:
                 // Delete keeps selection mode unchanged (processDelete handles selection logic)
                 return {
@@ -600,6 +626,14 @@ export class StateMachine {
                     actions: event === Event.TIMEOUT ?
                         [Action.SET_TIMEOUT_FLAG, Action.UPDATE_SELECTION_RECTANGLE] :
                         [Action.SET_FINGER_MOVED_FAR_FLAG, Action.UPDATE_SELECTION_RECTANGLE]
+                };
+
+            case Event.PINCH_DETECTED:
+                // Pinch in selection rectangle - ignore
+                return {
+                    newState: State.SelectionRectangle,
+                    newModifier: modifier,  // keep
+                    actions: [Action.DO_NOTHING]
                 };
 
             case Event.DELETE:
