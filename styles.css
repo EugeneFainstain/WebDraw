@@ -36,6 +36,12 @@ html, body {
     gap: 10px;
 }
 
+.toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .tool-group {
     display: flex;
     align-items: center;
@@ -260,6 +266,26 @@ button {
 }
 
 .ungroup-btn svg {
+    display: block;
+}
+
+.fullscreen-btn {
+    width: 36px;
+    height: 36px;
+    padding: 8px;
+    background: #555;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.fullscreen-btn:hover {
+    background: #666;
+}
+
+.fullscreen-btn svg {
     display: block;
 }
 

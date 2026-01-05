@@ -48,6 +48,9 @@ const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 const btnDup = document.getElementById('btnDup') as HTMLButtonElement;
 const btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
 const btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
+const fullscreenBtn = document.getElementById('fullscreenBtn') as HTMLButtonElement;
+const enterFullscreenIcon = document.getElementById('enterFullscreenIcon') as unknown as SVGElement;
+const exitFullscreenIcon = document.getElementById('exitFullscreenIcon') as unknown as SVGElement;
 const debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
 const cursorDiv = document.getElementById('cursorDiv') as HTMLElement;
 
@@ -2413,11 +2416,9 @@ function handlePointerDown(e: PointerEvent) {
         }
     }
 
-    // Capture pointer on the target element to continue receiving events during drag
-    const target = e.target as HTMLElement;
-    if (target && target.setPointerCapture) {
-        target.setPointerCapture(e.pointerId);
-    }
+    // Capture pointer on document.body - this ensures we receive all events
+    // regardless of where the touch started
+    document.body.setPointerCapture(e.pointerId);
 
     // Pass to event handler
     eventHandler.handlePointerDown(e.pointerId, pos);
@@ -2596,10 +2597,11 @@ document.addEventListener('pointermove', handlePointerMove);
 document.addEventListener('pointerup', handlePointerUp);
 document.addEventListener('pointercancel', handlePointerUp);
 
-canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
-canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
-canvas.addEventListener('touchend', e => e.preventDefault(), { passive: false });
-canvas.addEventListener('touchcancel', e => e.preventDefault(), { passive: false });
+// Prevent default touch behavior on the entire document
+document.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+document.addEventListener('touchend', e => e.preventDefault(), { passive: false });
+document.addEventListener('touchcancel', e => e.preventDefault(), { passive: false });
 
 delBtn.addEventListener('click', () => eventHandler.handleDelete());
 clearBtn.addEventListener('click', () => eventHandler.handleClear());
@@ -2614,6 +2616,27 @@ btnGroup.addEventListener('click', () => {
 
 btnUngroup.addEventListener('click', () => {
     ungroupSelectedStroke();
+});
+
+// Fullscreen toggle
+function updateFullscreenIcon() {
+    const isFullscreen = !!document.fullscreenElement;
+    enterFullscreenIcon.style.display = isFullscreen ? 'none' : 'block';
+    exitFullscreenIcon.style.display = isFullscreen ? 'block' : 'none';
+}
+
+fullscreenBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+        document.exitFullscreen();
+    } else {
+        document.documentElement.requestFullscreen();
+    }
+});
+
+document.addEventListener('fullscreenchange', () => {
+    updateFullscreenIcon();
+    // Resize canvas after fullscreen change
+    setTimeout(resizeCanvas, 100);
 });
 
 window.addEventListener('resize', resizeCanvas);
