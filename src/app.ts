@@ -2413,8 +2413,11 @@ function handlePointerDown(e: PointerEvent) {
         }
     }
 
-    // Capture pointer
-    canvas.setPointerCapture(e.pointerId);
+    // Capture pointer on the target element to continue receiving events during drag
+    const target = e.target as HTMLElement;
+    if (target && target.setPointerCapture) {
+        target.setPointerCapture(e.pointerId);
+    }
 
     // Pass to event handler
     eventHandler.handlePointerDown(e.pointerId, pos);
@@ -2586,11 +2589,12 @@ function resizeCanvas() {
 // EVENT LISTENERS
 // ============================================================================
 
-canvas.addEventListener('pointerdown', handlePointerDown);
-canvas.addEventListener('pointermove', handlePointerMove);
-canvas.addEventListener('pointerup', handlePointerUp);
-canvas.addEventListener('pointercancel', handlePointerUp);
-canvas.addEventListener('pointerleave', handlePointerUp);
+// Attach pointer events to document so dragging works even when starting over menu/picker
+// The handlePointerDown function will capture the pointer to continue receiving events
+document.addEventListener('pointerdown', handlePointerDown);
+document.addEventListener('pointermove', handlePointerMove);
+document.addEventListener('pointerup', handlePointerUp);
+document.addEventListener('pointercancel', handlePointerUp);
 
 canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
 canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
