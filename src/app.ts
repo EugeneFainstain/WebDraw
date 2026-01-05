@@ -51,6 +51,8 @@ const btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
 const fullscreenBtn = document.getElementById('fullscreenBtn') as HTMLButtonElement;
 const enterFullscreenIcon = document.getElementById('enterFullscreenIcon') as unknown as SVGElement;
 const exitFullscreenIcon = document.getElementById('exitFullscreenIcon') as unknown as SVGElement;
+const iosFullscreenTooltip = document.getElementById('iosFullscreenTooltip') as HTMLElement;
+const iosTooltipClose = document.getElementById('iosTooltipClose') as HTMLButtonElement;
 const debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
 const cursorDiv = document.getElementById('cursorDiv') as HTMLElement;
 
@@ -2665,18 +2667,41 @@ btnUngroup.addEventListener('click', () => {
 });
 
 // Fullscreen toggle
+// Detect iOS (iPhone/iPad in Safari or any iOS browser)
+function isIOS(): boolean {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+// Check if running as standalone PWA (added to home screen)
+function isStandalone(): boolean {
+    return (window.navigator as any).standalone === true ||
+        window.matchMedia('(display-mode: standalone)').matches;
+}
+
 function updateFullscreenIcon() {
-    const isFullscreen = !!document.fullscreenElement;
+    const isFullscreen = !!document.fullscreenElement || isStandalone();
     enterFullscreenIcon.style.display = isFullscreen ? 'none' : 'block';
     exitFullscreenIcon.style.display = isFullscreen ? 'block' : 'none';
 }
 
+function hideIosTooltip() {
+    iosFullscreenTooltip.classList.remove('visible');
+}
+
 fullscreenBtn.addEventListener('click', () => {
-    if (document.fullscreenElement) {
+    if (isIOS() && !isStandalone()) {
+        // On iOS (not in PWA mode), show the tooltip instead
+        iosFullscreenTooltip.classList.toggle('visible');
+    } else if (document.fullscreenElement) {
         document.exitFullscreen();
     } else {
         document.documentElement.requestFullscreen();
     }
+});
+
+iosTooltipClose.addEventListener('click', () => {
+    hideIosTooltip();
 });
 
 document.addEventListener('fullscreenchange', () => {

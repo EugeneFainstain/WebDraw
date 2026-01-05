@@ -289,6 +289,58 @@ button {
     display: block;
 }
 
+.ios-fullscreen-tooltip {
+    display: none;
+    position: fixed;
+    top: 60px;
+    right: 10px;
+    background: #222;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 12px 16px;
+    z-index: 200;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    max-width: 280px;
+}
+
+.ios-fullscreen-tooltip.visible {
+    display: block;
+}
+
+.ios-fullscreen-tooltip .tooltip-content {
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.ios-fullscreen-tooltip p {
+    margin: 0 0 8px 0;
+}
+
+.ios-fullscreen-tooltip p:last-of-type {
+    margin-bottom: 12px;
+}
+
+.ios-fullscreen-tooltip svg {
+    vertical-align: middle;
+    margin: 0 2px;
+}
+
+.ios-fullscreen-tooltip .tooltip-close {
+    width: 100%;
+    padding: 8px 16px;
+    background: #4a90d9;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.ios-fullscreen-tooltip .tooltip-close:hover {
+    background: #357abd;
+}
+
 #debugOverlay {
     position: fixed;
     top: 70px;
