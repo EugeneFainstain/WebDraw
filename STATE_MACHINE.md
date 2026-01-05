@@ -36,10 +36,21 @@ The application has **5 distinct states**:
 
 **Selected Stroke Mode** (`isStrokeSelected: boolean`)
 
-- When `true`: A stroke is selected (cursor shows green), and 3-finger transform affects only the selected stroke
-- When `false`: No selection (normal mode), 3-finger transform affects entire canvas
+- When `true`: A stroke is selected (cursor shows green)
+- When `false`: No selection (normal mode)
 - The actual selected stroke index is tracked separately in `app.ts` as `selectedStrokeIdx`
 - Note: `app.ts` also tracks `isFreshStroke` to distinguish between freshly-drawn selections vs manual selections
+
+## Gesture Separation: 2-Finger vs 3-Finger Transform
+
+The application separates zoom/pan/rotate gestures by finger count:
+
+- **2-finger gesture**: ALWAYS transforms the **canvas** (zoom/pan/rotate the entire view), regardless of whether a stroke is selected
+- **3-finger gesture**: ALWAYS transforms the **selected stroke** only. If no stroke is selected, the 3-finger gesture does nothing
+
+This separation allows users to:
+1. Zoom/pan the canvas while keeping a selected stroke intact (using 2 fingers)
+2. Transform only the selected stroke without affecting the canvas view (using 3 fingers)
 
 ## Events
 
@@ -202,8 +213,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 - Too many fingers (F3_DOWN in MovingCursor)
 
 **Behavior:**
-- When a stroke is selected: 3-finger transform only affects the selected stroke
-- When no stroke is selected (Normal mode): 3-finger transform affects the entire canvas
+- 2-finger transform always affects the entire canvas (regardless of selection)
+- 3-finger transform only affects the selected stroke (does nothing if no stroke selected)
 - Visual indicator: cursor shows green when a stroke is selected, white otherwise
 - The selected stroke index is tracked in `app.ts` as `selectedStrokeIdx` (null = no selection)
 - The `isFreshStroke` flag in `app.ts` distinguishes freshly-drawn vs manually-selected strokes (for button behavior)

@@ -985,11 +985,12 @@ function initThreeFingerTransform() {
     const positions = eventHandler.getFingerPositions();
     const fingerCount = eventHandler.getFingerCount();
 
-    // Support both 2-finger and 3-finger gestures
+    // 2-finger gesture: ONLY canvas zoom (never transforms selected stroke)
+    // 3-finger gesture: ONLY selected stroke zoom (does nothing if no stroke selected)
     if (fingerCount === 2) {
         if (!positions.primary || !positions.secondary) return;
 
-        // Two-finger transform
+        // Two-finger transform - ALWAYS transforms canvas, never selected stroke
         const pivot = {
             x: (positions.primary.x + positions.secondary.x) / 2,
             y: (positions.primary.y + positions.secondary.y) / 2
@@ -1002,34 +1003,23 @@ function initThreeFingerTransform() {
         const angle1 = getAngle(pivot, positions.primary);
         const angle2 = getAngle(pivot, positions.secondary);
 
-        const baseTransformStart = {
+        transformStart = {
             pivot,
             initialScale,
             fingerAngles: [angle1, angle2],
             unwrappedRotation: 0,
             initialTransform: { ...viewTransform }
+            // No initialStrokeSnapshots - 2-finger always transforms canvas
         };
-
-        // If a stroke is selected, store initial stroke points for transformation
-        if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
-            const selectedStroke = strokeHistory[selectedStrokeIdx];
-            const strokeSnapshots = createStrokeSnapshot(selectedStroke);
-            transformStart = {
-                ...baseTransformStart,
-                initialStrokeSnapshots: strokeSnapshots
-            };
-
-            if (!hasUndoableTransform) {
-                const allPoints = getAllPointsForTransform(selectedStroke);
-                transformSnapshot = allPoints.map(p => ({ ...p }));
-            }
-        } else {
-            transformStart = baseTransformStart;
-        }
     } else if (fingerCount >= 3) {
+        // Three-finger transform - ONLY transforms selected stroke, does nothing if no selection
+        if (selectedStrokeIdx === null || selectedStrokeIdx >= strokeHistory.length) {
+            // No stroke selected - do nothing for 3-finger gesture
+            return;
+        }
+
         if (!positions.primary || !positions.secondary || !positions.tertiary) return;
 
-        // Three-finger transform
         const pivot = {
             x: (positions.primary.x + positions.secondary.x + positions.tertiary.x) / 3,
             y: (positions.primary.y + positions.secondary.y + positions.tertiary.y) / 3
@@ -1044,29 +1034,21 @@ function initThreeFingerTransform() {
         const angle2 = getAngle(pivot, positions.secondary);
         const angle3 = getAngle(pivot, positions.tertiary);
 
-        const baseTransformStart = {
+        const selectedStroke = strokeHistory[selectedStrokeIdx];
+        const strokeSnapshots = createStrokeSnapshot(selectedStroke);
+
+        transformStart = {
             pivot,
             initialScale,
             fingerAngles: [angle1, angle2, angle3],
             unwrappedRotation: 0,
-            initialTransform: { ...viewTransform }
+            initialTransform: { ...viewTransform },
+            initialStrokeSnapshots: strokeSnapshots
         };
 
-        // If a stroke is selected, store initial stroke points for transformation
-        if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
-            const selectedStroke = strokeHistory[selectedStrokeIdx];
-            const strokeSnapshots = createStrokeSnapshot(selectedStroke);
-            transformStart = {
-                ...baseTransformStart,
-                initialStrokeSnapshots: strokeSnapshots
-            };
-
-            if (!hasUndoableTransform) {
-                const allPoints = getAllPointsForTransform(selectedStroke);
-                transformSnapshot = allPoints.map(p => ({ ...p }));
-            }
-        } else {
-            transformStart = baseTransformStart;
+        if (!hasUndoableTransform) {
+            const allPoints = getAllPointsForTransform(selectedStroke);
+            transformSnapshot = allPoints.map(p => ({ ...p }));
         }
     }
 }
@@ -1134,9 +1116,11 @@ function applyThreeFingerTransform() {
     const scaleFactor = currentScale / transformStart.initialScale;
     const rotationDelta = transformStart.unwrappedRotation;
 
-    // Check if we're transforming a selected stroke or the entire canvas
+    // Gesture separation:
+    // - 2-finger: ALWAYS transforms canvas (initialStrokeSnapshots is never set)
+    // - 3-finger: ALWAYS transforms selected stroke (initialStrokeSnapshots is always set)
     if (transformStart.initialStrokeSnapshots && selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
-        // Transform only the selected stroke (works for both single strokes and groups)
+        // 3-finger transform: Transform only the selected stroke (works for both single strokes and groups)
         const selectedStroke = strokeHistory[selectedStrokeIdx];
 
         // Calculate bounding box from all points in the snapshots
@@ -1183,7 +1167,7 @@ function applyThreeFingerTransform() {
             }
         }
     } else {
-        // Transform the entire canvas view
+        // 2-finger transform: Transform the entire canvas view
         const newScale = transformStart.initialTransform.scale * scaleFactor;
         const newRotation = transformStart.initialTransform.rotation + rotationDelta;
 
