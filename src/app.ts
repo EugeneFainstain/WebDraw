@@ -21,7 +21,7 @@ const USE_BATCHED_DELTA_MECHANISM = false; //true;
 // Stroke length threshold for locking two-finger gesture as drawing (in millimeters)
 // Once a stroke reaches this length, it's locked as a drawing gesture and won't
 // be converted to a zoom/pan/rotate gesture even if fingers start pinching
-const STROKE_LEN_THRESHOLD_MM = 8; // mm - same as MOVEMENT_THRESHOLD_MM in eventHandler.ts
+const STROKE_LEN_THRESHOLD_MM = 4; // mm - same as MOVEMENT_THRESHOLD_MM in eventHandler.ts
 
 // Convert millimeters to screen pixels based on device DPI
 // Assumes 96 DPI as default (standard for web), adjusted by devicePixelRatio

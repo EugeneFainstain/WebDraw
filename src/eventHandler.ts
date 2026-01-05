@@ -16,7 +16,7 @@ export interface Point {
 const TIMEOUT_DELAY = 250; // ms - timeout after any finger down
 
 // Physical thresholds in millimeters (scale-invariant)
-const MOVEMENT_THRESHOLD_MM = 8; // mm - threshold for FINGER_MOVED_FAR event
+const MOVEMENT_THRESHOLD_MM = 4; // mm - threshold for FINGER_MOVED_FAR event
 const PINCH_THRESHOLD_MM = 4; // mm - threshold for detecting pinch/zoom gesture
 
 // Convert millimeters to screen pixels based on device DPI
