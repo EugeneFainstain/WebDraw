@@ -2683,6 +2683,11 @@ function updateFullscreenIcon() {
     const isFullscreen = !!document.fullscreenElement || isStandalone();
     enterFullscreenIcon.style.display = isFullscreen ? 'none' : 'block';
     exitFullscreenIcon.style.display = isFullscreen ? 'block' : 'none';
+
+    // Disable button when running as standalone PWA on iOS (already fullscreen, can't exit)
+    if (isIOS() && isStandalone()) {
+        fullscreenBtn.disabled = true;
+    }
 }
 
 function hideIosTooltip() {
@@ -2718,5 +2723,6 @@ window.addEventListener('resize', resizeCanvas);
 
 resizeCanvas();
 updateDelButton();
+updateFullscreenIcon();
 cursorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
 redraw();
