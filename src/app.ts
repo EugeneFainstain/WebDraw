@@ -731,17 +731,36 @@ function updateMarkerDiv(): void {
     const hasSelectedStroke = selectedStrokeIdx !== null;
     const innerColor = hasSelectedStroke ? 'lime' : 'white';
 
-    // Size includes the two rings (2px inner + 2px outer)
-    const totalSize = renderedSize + 8;
+    // Scale cursor based on stroke size (base size ~48px, scales with stroke)
+    // 2x larger than before
+    const baseSize = 48;
+    const scale = Math.max(0.5, (renderedSize + 8) / (baseSize / 2));
+    const cursorSize = baseSize * scale;
+
+    // Windows cursor arrow SVG path - tip starts at (0,0)
+    // Path draws a classic Windows pointer arrow
+    const cursorPath = 'M 0 0 L 0 18 L 4 14 L 8 22 L 11 20 L 7 12 L 13 12 Z';
+
+    // Filled cursor with colored outline:
+    // - Fill: white/lime (inner color)
+    // - Stroke: draw color (outer color)
+    // viewBox starts at -1,-1 to accommodate stroke width around the tip
+    // Stroke width is adjusted inversely to scale so it stays fixed at 2px on screen
+    const svgScale = cursorSize / 17; // How much the SVG is scaled up
+    const strokeWidth = 2 / svgScale; // Counter-scale to keep 2px on screen
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 17 26" width="${cursorSize}" height="${cursorSize * 26/17}">
+        <path d="${cursorPath}" fill="${innerColor}" stroke="${outerColor}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
+    </svg>`;
 
     // Position accounts for toolbar offset (canvas is 60px from top)
+    // Offset by 1px (scaled) to align the tip precisely with the marker position
+    const tipOffset = cursorSize / 17; // 1 unit in SVG coords, scaled to actual size
     markerDiv.style.display = 'block';
-    markerDiv.style.left = `${indicatorPos.x}px`;
-    markerDiv.style.top = `${indicatorPos.y + 60}px`; // Add toolbar height
-    markerDiv.style.width = `${totalSize}px`;
-    markerDiv.style.height = `${totalSize}px`;
-    markerDiv.style.borderColor = outerColor;
-    markerDiv.style.boxShadow = `inset 0 0 0 2px ${innerColor}`;
+    markerDiv.style.left = `${indicatorPos.x - tipOffset}px`;
+    markerDiv.style.top = `${indicatorPos.y + 60 - tipOffset}px`; // Add toolbar height
+    markerDiv.style.width = `${cursorSize}px`;
+    markerDiv.style.height = `${cursorSize * 26/17}px`;
+    markerDiv.innerHTML = svg;
 }
 
 // ============================================================================
