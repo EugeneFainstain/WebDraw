@@ -324,7 +324,10 @@ let transformStart: {
     fingerAngles: number[];
     unwrappedRotation: number;
     initialTransform: typeof viewTransform;
-    initialStrokeSnapshots?: StrokeSnapshot[];  // For selected stroke transformation
+    // For 3-finger stroke transformation: maps stroke index -> snapshots
+    strokeSnapshotsMap?: Map<number, StrokeSnapshot[]>;
+    // Combined bounding box center for all transformed strokes
+    initialCombinedCenter?: Point;
 } | null = null;
 
 // Movement tracking for continuous updates
@@ -1009,12 +1012,27 @@ function initThreeFingerTransform() {
             fingerAngles: [angle1, angle2],
             unwrappedRotation: 0,
             initialTransform: { ...viewTransform }
-            // No initialStrokeSnapshots - 2-finger always transforms canvas
+            // No strokeSnapshotsMap - 2-finger always transforms canvas
         };
     } else if (fingerCount >= 3) {
-        // Three-finger transform - ONLY transforms selected stroke, does nothing if no selection
-        if (selectedStrokeIdx === null || selectedStrokeIdx >= strokeHistory.length) {
-            // No stroke selected - do nothing for 3-finger gesture
+        // Three-finger transform - transforms selected stroke AND all highlighted strokes
+        // Collect all stroke indices to transform
+        const strokesToTransform = new Set<number>();
+
+        // Add selected stroke if any
+        if (selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+            strokesToTransform.add(selectedStrokeIdx);
+        }
+
+        // Add all highlighted strokes
+        for (const idx of highlightedStrokes) {
+            if (idx < strokeHistory.length) {
+                strokesToTransform.add(idx);
+            }
+        }
+
+        // If no strokes to transform, do nothing
+        if (strokesToTransform.size === 0) {
             return;
         }
 
@@ -1034,8 +1052,30 @@ function initThreeFingerTransform() {
         const angle2 = getAngle(pivot, positions.secondary);
         const angle3 = getAngle(pivot, positions.tertiary);
 
-        const selectedStroke = strokeHistory[selectedStrokeIdx];
-        const strokeSnapshots = createStrokeSnapshot(selectedStroke);
+        // Create snapshots for all strokes and calculate combined bounding box
+        const strokeSnapshotsMap = new Map<number, StrokeSnapshot[]>();
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+        for (const idx of strokesToTransform) {
+            const stroke = strokeHistory[idx];
+            const snapshots = createStrokeSnapshot(stroke);
+            strokeSnapshotsMap.set(idx, snapshots);
+
+            // Update combined bounding box
+            for (const snapshot of snapshots) {
+                for (const point of snapshot.points) {
+                    minX = Math.min(minX, point.x);
+                    minY = Math.min(minY, point.y);
+                    maxX = Math.max(maxX, point.x);
+                    maxY = Math.max(maxY, point.y);
+                }
+            }
+        }
+
+        const initialCombinedCenter = {
+            x: (minX + maxX) / 2,
+            y: (minY + maxY) / 2
+        };
 
         transformStart = {
             pivot,
@@ -1043,11 +1083,13 @@ function initThreeFingerTransform() {
             fingerAngles: [angle1, angle2, angle3],
             unwrappedRotation: 0,
             initialTransform: { ...viewTransform },
-            initialStrokeSnapshots: strokeSnapshots
+            strokeSnapshotsMap,
+            initialCombinedCenter
         };
 
-        if (!hasUndoableTransform) {
-            const allPoints = getAllPointsForTransform(selectedStroke);
+        // Store transform snapshot for undo (only for selected stroke)
+        if (!hasUndoableTransform && selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+            const allPoints = getAllPointsForTransform(strokeHistory[selectedStrokeIdx]);
             transformSnapshot = allPoints.map(p => ({ ...p }));
         }
     }
@@ -1117,26 +1159,11 @@ function applyThreeFingerTransform() {
     const rotationDelta = transformStart.unwrappedRotation;
 
     // Gesture separation:
-    // - 2-finger: ALWAYS transforms canvas (initialStrokeSnapshots is never set)
-    // - 3-finger: ALWAYS transforms selected stroke (initialStrokeSnapshots is always set)
-    if (transformStart.initialStrokeSnapshots && selectedStrokeIdx !== null && selectedStrokeIdx < strokeHistory.length) {
-        // 3-finger transform: Transform only the selected stroke (works for both single strokes and groups)
-        const selectedStroke = strokeHistory[selectedStrokeIdx];
-
-        // Calculate bounding box from all points in the snapshots
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const snapshot of transformStart.initialStrokeSnapshots) {
-            for (const point of snapshot.points) {
-                minX = Math.min(minX, point.x);
-                minY = Math.min(minY, point.y);
-                maxX = Math.max(maxX, point.x);
-                maxY = Math.max(maxY, point.y);
-            }
-        }
-        const initialStrokeCenter = {
-            x: (minX + maxX) / 2,
-            y: (minY + maxY) / 2
-        };
+    // - 2-finger: ALWAYS transforms canvas (strokeSnapshotsMap is never set)
+    // - 3-finger: ALWAYS transforms selected stroke + highlighted strokes (strokeSnapshotsMap is set)
+    if (transformStart.strokeSnapshotsMap && transformStart.initialCombinedCenter) {
+        // 3-finger transform: Transform all strokes in the map around the combined center
+        const initialCenter = transformStart.initialCombinedCenter;
 
         const initialCanvasPivot = screenToCanvas(transformStart.pivot);
         const currentCanvasPivot = screenToCanvas(currentPivot);
@@ -1144,24 +1171,29 @@ function applyThreeFingerTransform() {
         const panDeltaX = currentCanvasPivot.x - initialCanvasPivot.x;
         const panDeltaY = currentCanvasPivot.y - initialCanvasPivot.y;
 
-        const newStrokeCenter = {
-            x: initialStrokeCenter.x + panDeltaX,
-            y: initialStrokeCenter.y + panDeltaY
+        const newCenter = {
+            x: initialCenter.x + panDeltaX,
+            y: initialCenter.y + panDeltaY
         };
 
-        // Apply transformation to all points in the stroke (handles groups recursively)
-        applyTransformToStroke(
-            selectedStroke,
-            transformStart.initialStrokeSnapshots,
-            initialStrokeCenter,
-            scaleFactor,
-            rotationDelta,
-            newStrokeCenter
-        );
+        // Apply transformation to each stroke in the map
+        for (const [idx, snapshots] of transformStart.strokeSnapshotsMap) {
+            if (idx < strokeHistory.length) {
+                const stroke = strokeHistory[idx];
+                applyTransformToStroke(
+                    stroke,
+                    snapshots,
+                    initialCenter,
+                    scaleFactor,
+                    rotationDelta,
+                    newCenter
+                );
+            }
+        }
 
-        // Update cursor to the transformed position of the same point
-        if (selectedStrokePointIdx !== null) {
-            const transformedPoints = getAllPointsForTransform(selectedStroke);
+        // Update cursor to the transformed position of the same point on the selected stroke
+        if (selectedStrokeIdx !== null && selectedStrokePointIdx !== null && selectedStrokeIdx < strokeHistory.length) {
+            const transformedPoints = getAllPointsForTransform(strokeHistory[selectedStrokeIdx]);
             if (selectedStrokePointIdx < transformedPoints.length) {
                 cursorAnchor = { ...transformedPoints[selectedStrokePointIdx] };
             }
@@ -2580,8 +2612,8 @@ function handlePointerUp(e: PointerEvent) {
             isTrackingDoubleTap = false;
         }
 
-        // Mark transformation as complete if a stroke was transformed
-        if (transformStart && transformStart.initialStrokeSnapshots && transformSnapshot) {
+        // Mark transformation as complete if strokes were transformed
+        if (transformStart && transformStart.strokeSnapshotsMap && transformSnapshot) {
             hasUndoableTransform = true;
             updateDelButton();
         }

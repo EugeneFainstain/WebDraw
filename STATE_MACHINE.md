@@ -45,12 +45,17 @@ The application has **5 distinct states**:
 
 The application separates zoom/pan/rotate gestures by finger count:
 
-- **2-finger gesture**: ALWAYS transforms the **canvas** (zoom/pan/rotate the entire view), regardless of whether a stroke is selected
-- **3-finger gesture**: ALWAYS transforms the **selected stroke** only. If no stroke is selected, the 3-finger gesture does nothing
+- **2-finger gesture**: ALWAYS transforms the **canvas** (zoom/pan/rotate the entire view), regardless of whether any strokes are selected or highlighted
+- **3-finger gesture**: ALWAYS transforms the **selected stroke AND all highlighted strokes** together. If no stroke is selected and no strokes are highlighted, the 3-finger gesture does nothing
+
+**Multi-stroke transformation behavior:**
+- All transformed strokes rotate and scale around a shared pivot point
+- The pivot point is the center of the combined bounding box of all selected/highlighted strokes
+- This allows coherent group transformations where strokes maintain their relative positions
 
 This separation allows users to:
-1. Zoom/pan the canvas while keeping a selected stroke intact (using 2 fingers)
-2. Transform only the selected stroke without affecting the canvas view (using 3 fingers)
+1. Zoom/pan the canvas while keeping selected/highlighted strokes intact (using 2 fingers)
+2. Transform selected and highlighted strokes together without affecting the canvas view (using 3 fingers)
 
 ## Events
 
@@ -213,8 +218,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 - Too many fingers (F3_DOWN in MovingCursor)
 
 **Behavior:**
-- 2-finger transform always affects the entire canvas (regardless of selection)
-- 3-finger transform only affects the selected stroke (does nothing if no stroke selected)
+- 2-finger transform always affects the entire canvas (regardless of selection/highlighting)
+- 3-finger transform affects the selected stroke AND all highlighted strokes together (does nothing if none)
 - Visual indicator: cursor shows green when a stroke is selected, white otherwise
 - The selected stroke index is tracked in `app.ts` as `selectedStrokeIdx` (null = no selection)
 - The `isFreshStroke` flag in `app.ts` distinguishes freshly-drawn vs manually-selected strokes (for button behavior)
