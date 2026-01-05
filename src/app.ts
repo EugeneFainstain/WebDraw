@@ -2384,11 +2384,23 @@ function getPointerPos(e: PointerEvent): Point {
     };
 }
 
-function handlePointerDown(e: PointerEvent) {
-    e.preventDefault();
+// Track pointers that started on UI elements (for drag detection)
+const pointersOnUI = new Map<number, { startX: number, startY: number }>();
+const UI_DRAG_THRESHOLD = 15; // pixels before UI touch becomes canvas drag
 
+function handlePointerDown(e: PointerEvent) {
+    const target = e.target as HTMLElement;
     const pos = getPointerPos(e);
     const now = Date.now();
+
+    // Check if this started on a UI element
+    if (target.closest('.toolbar, button, #combinedPicker, [style*="z-index: 1000"]')) {
+        // Track this pointer - it might become a drag
+        pointersOnUI.set(e.pointerId, { startX: e.clientX, startY: e.clientY });
+        return;
+    }
+
+    e.preventDefault();
 
     // Only track taps when no fingers are down (single finger gestures)
     if (eventHandler.getFingerCount() === 0) {
@@ -2425,9 +2437,28 @@ function handlePointerDown(e: PointerEvent) {
 }
 
 function handlePointerMove(e: PointerEvent) {
-    e.preventDefault();
-
     const pos = getPointerPos(e);
+
+    // Check if this pointer started on UI and should be converted to a drag
+    const uiPointer = pointersOnUI.get(e.pointerId);
+    if (uiPointer) {
+        const dx = e.clientX - uiPointer.startX;
+        const dy = e.clientY - uiPointer.startY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > UI_DRAG_THRESHOLD) {
+            // Convert to canvas drag - remove from UI tracking and initialize as pointer down
+            pointersOnUI.delete(e.pointerId);
+            e.preventDefault();
+
+            // Initialize this pointer in the event handler
+            eventHandler.handlePointerDown(e.pointerId, pos);
+            document.body.setPointerCapture(e.pointerId);
+        }
+        return; // Don't process as move yet
+    }
+
+    e.preventDefault();
     eventHandler.handlePointerMove(e.pointerId, pos);
 
     const state = stateMachine.getState();
@@ -2475,6 +2506,12 @@ function handlePointerMove(e: PointerEvent) {
 }
 
 function handlePointerUp(e: PointerEvent) {
+    // Clean up UI pointer tracking if this pointer was on UI
+    if (pointersOnUI.has(e.pointerId)) {
+        pointersOnUI.delete(e.pointerId);
+        return; // This was a UI tap, don't process as canvas event
+    }
+
     e.preventDefault();
 
     const pos = getPointerPos(e);
@@ -2597,11 +2634,20 @@ document.addEventListener('pointermove', handlePointerMove);
 document.addEventListener('pointerup', handlePointerUp);
 document.addEventListener('pointercancel', handlePointerUp);
 
-// Prevent default touch behavior on the entire document
-document.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
-document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
-document.addEventListener('touchend', e => e.preventDefault(), { passive: false });
-document.addEventListener('touchcancel', e => e.preventDefault(), { passive: false });
+// Prevent default touch behavior, but only for canvas area (not toolbar/UI elements)
+function shouldPreventDefault(e: TouchEvent): boolean {
+    const target = e.target as HTMLElement;
+    // Don't prevent default for toolbar buttons, picker, or popups
+    if (target.closest('.toolbar, button, #combinedPicker, [style*="z-index: 1000"]')) {
+        return false;
+    }
+    return true;
+}
+
+document.addEventListener('touchstart', e => { if (shouldPreventDefault(e)) e.preventDefault(); }, { passive: false });
+document.addEventListener('touchmove', e => { if (shouldPreventDefault(e)) e.preventDefault(); }, { passive: false });
+document.addEventListener('touchend', e => { if (shouldPreventDefault(e)) e.preventDefault(); }, { passive: false });
+document.addEventListener('touchcancel', e => { if (shouldPreventDefault(e)) e.preventDefault(); }, { passive: false });
 
 delBtn.addEventListener('click', () => eventHandler.handleDelete());
 clearBtn.addEventListener('click', () => eventHandler.handleClear());
