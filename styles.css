@@ -292,7 +292,7 @@ button {
     cursor: none;
 }
 
-#markerDiv {
+#cursorDiv {
     position: fixed;
     top: 0;
     left: 0;

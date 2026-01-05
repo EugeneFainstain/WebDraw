@@ -27,7 +27,7 @@ The application distinguishes between two-finger **drawing** gestures and two-fi
 The application has **5 distinct states**:
 
 1. **Idle** - No fingers touching the screen
-2. **MovingMarker** - One finger on screen, moving the drawing marker
+2. **MovingCursor** - One finger on screen, moving the drawing cursor
 3. **Drawing** - Two fingers on screen, actively drawing a stroke
 4. **Transform** - Two or three fingers on screen, transforming canvas or selected stroke (zoom/pan/rotate)
 5. **SelectionRectangle** - Tap-and-a-half gesture active, dragging selection rectangle
@@ -36,7 +36,7 @@ The application has **5 distinct states**:
 
 **Selected Stroke Mode** (`isStrokeSelected: boolean`)
 
-- When `true`: A stroke is selected (marker shows green), and 3-finger transform affects only the selected stroke
+- When `true`: A stroke is selected (cursor shows green), and 3-finger transform affects only the selected stroke
 - When `false`: No selection (normal mode), 3-finger transform affects entire canvas
 - The actual selected stroke index is tracked separately in `app.ts` as `selectedStrokeIdx`
 - Note: `app.ts` also tracks `isFreshStroke` to distinguish between freshly-drawn selections vs manual selections
@@ -70,12 +70,12 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 | Action | Description |
 |--------|-------------|
-| `MOVE_MARKER` | Move the drawing marker |
+| `MOVE_CURSOR` | Move the drawing cursor |
 | `CREATE_STROKE` | Create a new stroke |
 | `SAVE_STROKE` | Save current stroke to history |
 | `ABANDON_STROKE` | Discard current stroke |
 | `SELECT_STROKE` | Select a stroke (enter selected stroke mode) |
-| `SELECT_CLOSEST_STROKE` | Select closest stroke to marker |
+| `SELECT_CLOSEST_STROKE` | Select closest stroke to cursor |
 | `DESELECT_STROKE` | Deselect stroke (exit selected stroke mode) |
 | `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
 | `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag (also updates real-time highlighting) |
@@ -101,7 +101,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 | Event | IF Normal Mode → | IF Stroke Selected → |
 |-------|------------------|------------------------|
-| F1_DOWN | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
+| F1_DOWN | MovingCursor (keep Normal) | MovingCursor (keep Selected) |
 | F2_DOWN | Idle (keep Normal) | Idle (keep Selected) |
 | F3_DOWN | Idle (keep Normal) | Idle (keep Selected) |
 | FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
@@ -111,21 +111,21 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
-### FROM MovingMarker State
+### FROM MovingCursor State
 
 | Event | IF Normal Mode → | IF Stroke Selected → |
 |-------|------------------|------------------------|
 | F1_DOWN (tap-and-a-half) | SelectionRectangle (→ Normal) - [START_SELECTION_RECTANGLE, DESELECT_STROKE] | SelectionRectangle (→ Normal) - [START_SELECTION_RECTANGLE, DESELECT_STROKE] |
-| F1_DOWN (otherwise) | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
+| F1_DOWN (otherwise) | MovingCursor (keep Normal) | MovingCursor (keep Selected) |
 | F2_DOWN | Drawing (keep Normal) - [CREATE_STROKE] | Drawing (keep Fresh) - [CREATE_STROKE] |
 | F3_DOWN | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
 | FINGER_UP (if single tap) | Idle (keep Normal) - [CLEAR_HIGHLIGHTING] | Idle (→ Normal) - [CLEAR_HIGHLIGHTING, DESELECT_STROKE] |
 | FINGER_UP (otherwise) | Idle (keep Normal) | Idle (keep Selected) |
-| TIMEOUT | MovingMarker (keep Normal) - [SET_TIMEOUT_FLAG] | MovingMarker (keep Fresh) - [SET_TIMEOUT_FLAG] |
-| FINGER_MOVED_FAR | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | MovingMarker (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
-| PINCH_DETECTED | MovingMarker (keep Normal) | MovingMarker (keep Selected) |
-| DELETE | MovingMarker (keep) - [PROCESS_DELETE] | MovingMarker (keep) - [PROCESS_DELETE] |
-| CLEAR | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | MovingMarker (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
+| TIMEOUT | MovingCursor (keep Normal) - [SET_TIMEOUT_FLAG] | MovingCursor (keep Fresh) - [SET_TIMEOUT_FLAG] |
+| FINGER_MOVED_FAR | MovingCursor (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | MovingCursor (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
+| PINCH_DETECTED | MovingCursor (keep Normal) | MovingCursor (keep Selected) |
+| DELETE | MovingCursor (keep) - [PROCESS_DELETE] | MovingCursor (keep) - [PROCESS_DELETE] |
+| CLEAR | MovingCursor (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | MovingCursor (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
 **Note on F1_DOWN:** Tap-and-a-half is detected when F1_DOWN occurs without timeout and without movement (quick tap then another tap).
 
@@ -137,7 +137,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F2_DOWN | Drawing (keep Normal) | Drawing (keep Selected) |
 | PINCH_DETECTED | Transform (keep Normal) - [ABANDON_STROKE, INIT_TRANSFORM] | Transform (keep Selected) - [ABANDON_STROKE, INIT_TRANSFORM] |
 | F3_DOWN | Transform (keep Normal) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] | Transform (keep Selected) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] |
-| FINGER_UP | MovingMarker (→ Selected) - [SAVE_STROKE, SELECT_STROKE] | MovingMarker (keep Selected) - [SAVE_STROKE] |
+| FINGER_UP | MovingCursor (→ Selected) - [SAVE_STROKE, SELECT_STROKE] | MovingCursor (keep Selected) - [SAVE_STROKE] |
 | TIMEOUT | Drawing (keep Normal) - [SET_TIMEOUT_FLAG] | Drawing (keep Selected) - [SET_TIMEOUT_FLAG] |
 | FINGER_MOVED_FAR | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
@@ -191,20 +191,20 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 **Entry Conditions:**
 - Automatically when completing a stroke (FINGER_UP in Drawing state) - selects the stroke that was just drawn
-- Manually via double-tap (handled in `app.ts`) - selects the closest stroke to the marker
+- Manually via double-tap (handled in `app.ts`) - selects the closest stroke to the cursor
   - Manual selection calls `stateMachine.setStrokeSelected(true)` to update the state machine
 
 **Exit Conditions:**
 - Single tap (quick tap without timeout or movement) when a stroke is selected - deselects the stroke
 - DELETE button pressed (removes selected stroke, selects another)
 - CLEAR button pressed
-- Marker movement >30px from selected stroke position (FINGER_MOVED_FAR in MovingMarker)
-- Too many fingers (F3_DOWN in MovingMarker)
+- Cursor movement >30px from selected stroke position (FINGER_MOVED_FAR in MovingCursor)
+- Too many fingers (F3_DOWN in MovingCursor)
 
 **Behavior:**
 - When a stroke is selected: 3-finger transform only affects the selected stroke
 - When no stroke is selected (Normal mode): 3-finger transform affects the entire canvas
-- Visual indicator: marker shows green ring when a stroke is selected, white ring otherwise
+- Visual indicator: cursor shows green when a stroke is selected, white otherwise
 - The selected stroke index is tracked in `app.ts` as `selectedStrokeIdx` (null = no selection)
 - The `isFreshStroke` flag in `app.ts` distinguishes freshly-drawn vs manually-selected strokes (for button behavior)
 
@@ -270,11 +270,11 @@ const stateMachine = new StateMachine();
 
 // Process an event
 const result = stateMachine.processEvent(Event.F1_DOWN);
-console.log(result.newState);  // State.MovingMarker
+console.log(result.newState);  // State.MovingCursor
 console.log(result.actions);    // []
 
 // Check current state
-console.log(stateMachine.getState());  // State.MovingMarker
+console.log(stateMachine.getState());  // State.MovingCursor
 
 // Check if a stroke is selected
 console.log(stateMachine.isStrokeSelected());  // false

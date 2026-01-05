@@ -49,7 +49,7 @@ const btnDup = document.getElementById('btnDup') as HTMLButtonElement;
 const btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
 const btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
 const debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
-const markerDiv = document.getElementById('markerDiv') as HTMLElement;
+const cursorDiv = document.getElementById('cursorDiv') as HTMLElement;
 
 // Debug helper
 let debugMessages: string[] = [];
@@ -272,17 +272,17 @@ let strokeHistory: Stroke[] = [];
 // Current stroke being drawn
 let currentStroke: Stroke | null = null;
 
-// Indicator anchor point (in canvas coordinates)
-let indicatorAnchor: Point | null = null;
+// Cursor anchor point (in canvas coordinates)
+let cursorAnchor: Point | null = null;
 
 // Selected stroke index (null = no selection, number = index in strokeHistory)
 let selectedStrokeIdx: number | null = null;
 
-// Index of the point within the selected stroke where the marker is positioned
+// Index of the point within the selected stroke where the cursor is positioned
 let selectedStrokePointIdx: number | null = null;
 
 // Reference position for selected stroke tracking
-let selectedStrokeMarkerPos: Point | null = null;
+let selectedStrokeCursorPos: Point | null = null;
 
 // Track if we're in "fresh stroke" mode (just drew, not manually selected)
 let isFreshStroke: boolean = false;
@@ -383,8 +383,8 @@ const combinedPicker = createCombinedPicker(
         // Grid toggle
         isGridMode = !isGridMode;
 
-        if (isGridMode && indicatorAnchor) {
-            indicatorAnchor = snapToGrid(indicatorAnchor);
+        if (isGridMode && cursorAnchor) {
+            cursorAnchor = snapToGrid(cursorAnchor);
         }
         redraw();
     },
@@ -476,8 +476,8 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
         return null;
     }
 
-    // Use provided search position, or fall back to indicator anchor
-    const referencePos = searchPos || indicatorAnchor;
+    // Use provided search position, or fall back to cursor anchor
+    const referencePos = searchPos || cursorAnchor;
     if (!referencePos) {
         return null;
     }
@@ -635,10 +635,10 @@ function drawGrid() {
 }
 
 // ============================================================================
-// INDICATOR FUNCTIONS
+// CURSOR FUNCTIONS
 // ============================================================================
 
-function getDefaultIndicatorOffset(): Point {
+function getDefaultCursorOffset(): Point {
     const maxDim = Math.max(canvas.width, canvas.height);
     const offset = maxDim / 8;
     const diagonalOffset = offset / Math.SQRT2;
@@ -648,11 +648,11 @@ function getDefaultIndicatorOffset(): Point {
     };
 }
 
-// Toolbar height - marker can extend into this area
+// Toolbar height - cursor can extend into this area
 const TOOLBAR_HEIGHT = 60;
 
-function setIndicatorToDefaultPosition(screenPos: Point): void {
-    const offset = getDefaultIndicatorOffset();
+function setCursorToDefaultPosition(screenPos: Point): void {
+    const offset = getDefaultCursorOffset();
     const targetScreenPos = {
         x: screenPos.x + offset.x,
         y: screenPos.y + offset.y
@@ -660,32 +660,32 @@ function setIndicatorToDefaultPosition(screenPos: Point): void {
 
     const margin = 10;
     const clampedX = Math.max(margin, Math.min(canvas.width - margin, targetScreenPos.x));
-    // Allow marker to go into toolbar area (negative Y in canvas space)
+    // Allow cursor to go into toolbar area (negative Y in canvas space)
     const clampedY = Math.max(-TOOLBAR_HEIGHT + margin, Math.min(canvas.height - margin, targetScreenPos.y));
 
-    indicatorAnchor = screenToCanvas({ x: clampedX, y: clampedY });
+    cursorAnchor = screenToCanvas({ x: clampedX, y: clampedY });
 }
 
-function clampIndicatorToView(): void {
-    if (!indicatorAnchor) return;
-    const screenPos = canvasToScreen(indicatorAnchor);
+function clampCursorToView(): void {
+    if (!cursorAnchor) return;
+    const screenPos = canvasToScreen(cursorAnchor);
 
     const margin = 10;
     const clampedX = Math.max(margin, Math.min(canvas.width - margin, screenPos.x));
-    // Allow marker to go into toolbar area (negative Y in canvas space)
+    // Allow cursor to go into toolbar area (negative Y in canvas space)
     const clampedY = Math.max(-TOOLBAR_HEIGHT + margin, Math.min(canvas.height - margin, screenPos.y));
 
     if (clampedX !== screenPos.x || clampedY !== screenPos.y) {
-        indicatorAnchor = screenToCanvas({ x: clampedX, y: clampedY });
+        cursorAnchor = screenToCanvas({ x: clampedX, y: clampedY });
     }
 }
 
-function panToKeepIndicatorInView(): void {
-    if (!indicatorAnchor) return;
-    const screenPos = canvasToScreen(indicatorAnchor);
+function panToKeepCursorInView(): void {
+    if (!cursorAnchor) return;
+    const screenPos = canvasToScreen(cursorAnchor);
 
     const margin = 10;
-    const minY = -TOOLBAR_HEIGHT + margin; // Allow marker into toolbar area
+    const minY = -TOOLBAR_HEIGHT + margin; // Allow cursor into toolbar area
     let panDeltaX = 0;
     let panDeltaY = 0;
 
@@ -707,20 +707,20 @@ function panToKeepIndicatorInView(): void {
     }
 }
 
-function getIndicatorScreenPos(): Point {
-    if (!indicatorAnchor) {
+function getCursorScreenPos(): Point {
+    if (!cursorAnchor) {
         return { x: canvas.width / 2, y: canvas.height / 4 };
     }
-    return canvasToScreen(indicatorAnchor);
+    return canvasToScreen(cursorAnchor);
 }
 
-function updateMarkerDiv(): void {
-    if (!indicatorAnchor) {
-        markerDiv.style.display = 'none';
+function updateCursorDiv(): void {
+    if (!cursorAnchor) {
+        cursorDiv.style.display = 'none';
         return;
     }
 
-    const indicatorPos = getIndicatorScreenPos();
+    const cursorPos = getCursorScreenPos();
     const strokeSize = combinedPicker.getSize();
     const renderedSize = Math.max(strokeSize * viewTransform.scale, 1);
     const drawColor = combinedPicker.getColor();
@@ -753,14 +753,14 @@ function updateMarkerDiv(): void {
     </svg>`;
 
     // Position accounts for toolbar offset (canvas is 60px from top)
-    // Offset by 1px (scaled) to align the tip precisely with the marker position
+    // Offset by 1px (scaled) to align the tip precisely with the cursor position
     const tipOffset = cursorSize / 17; // 1 unit in SVG coords, scaled to actual size
-    markerDiv.style.display = 'block';
-    markerDiv.style.left = `${indicatorPos.x - tipOffset}px`;
-    markerDiv.style.top = `${indicatorPos.y + 60 - tipOffset}px`; // Add toolbar height
-    markerDiv.style.width = `${cursorSize}px`;
-    markerDiv.style.height = `${cursorSize * 26/17}px`;
-    markerDiv.innerHTML = svg;
+    cursorDiv.style.display = 'block';
+    cursorDiv.style.left = `${cursorPos.x - tipOffset}px`;
+    cursorDiv.style.top = `${cursorPos.y + 60 - tipOffset}px`; // Add toolbar height
+    cursorDiv.style.width = `${cursorSize}px`;
+    cursorDiv.style.height = `${cursorSize * 26/17}px`;
+    cursorDiv.innerHTML = svg;
 }
 
 // ============================================================================
@@ -880,8 +880,8 @@ function redraw() {
         ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     }
 
-    // Update CSS marker div position and appearance
-    updateMarkerDiv();
+    // Update CSS cursor div position and appearance
+    updateCursorDiv();
 
     // Update combined picker button states
     updateCombinedPickerButtonStates();
@@ -1099,11 +1099,11 @@ function applyThreeFingerTransform() {
             newStrokeCenter
         );
 
-        // Update marker to the transformed position of the same point
+        // Update cursor to the transformed position of the same point
         if (selectedStrokePointIdx !== null) {
             const transformedPoints = getAllPointsForTransform(selectedStroke);
             if (selectedStrokePointIdx < transformedPoints.length) {
-                indicatorAnchor = { ...transformedPoints[selectedStrokePointIdx] };
+                cursorAnchor = { ...transformedPoints[selectedStrokePointIdx] };
             }
         }
     } else {
@@ -1201,14 +1201,14 @@ function applyColorAndSizeToHighlightedStrokes(): void {
 }
 
 // ============================================================================
-// MARKER MOVEMENT
+// CURSOR MOVEMENT
 // ============================================================================
 
 // Algorithm 1: Intricate batching mechanism
 // Handles finger promotion and mode transitions with batched deltas
-function updateMarkerPositionWithBatching() {
+function updateCursorPositionWithBatching() {
     const positions = eventHandler.getFingerPositions();
-    if (!indicatorAnchor) return;
+    if (!cursorAnchor) return;
 
     // Determine which finger moved
     let movedPointerId: number | null = null;
@@ -1251,12 +1251,12 @@ function updateMarkerPositionWithBatching() {
         // Process batched delta first
         if (batchedDelta !== null) {
             const canvasDelta = screenDeltaToCanvasDelta(batchedDelta);
-            indicatorAnchor.x += canvasDelta.x;
-            indicatorAnchor.y += canvasDelta.y;
-            panToKeepIndicatorInView();
+            cursorAnchor.x += canvasDelta.x;
+            cursorAnchor.y += canvasDelta.y;
+            panToKeepCursorInView();
 
             if (currentStroke && !isGridMode) {
-                currentStroke.points!.push({ ...indicatorAnchor });
+                currentStroke.points!.push({ ...cursorAnchor });
             }
 
             batchedDelta = null;
@@ -1270,12 +1270,12 @@ function updateMarkerPositionWithBatching() {
                 if (sameFingerTwice) {
                     // Same finger moved twice - process first delta immediately
                     const canvasDelta = screenDeltaToCanvasDelta(lastDelta);
-                    indicatorAnchor.x += canvasDelta.x;
-                    indicatorAnchor.y += canvasDelta.y;
-                    panToKeepIndicatorInView();
+                    cursorAnchor.x += canvasDelta.x;
+                    cursorAnchor.y += canvasDelta.y;
+                    panToKeepCursorInView();
 
                     if (currentStroke && !isGridMode) {
-                        currentStroke.points!.push({ ...indicatorAnchor });
+                        currentStroke.points!.push({ ...cursorAnchor });
                     }
 
                     // Store current delta for next iteration
@@ -1288,12 +1288,12 @@ function updateMarkerPositionWithBatching() {
                     };
 
                     const canvasDelta = screenDeltaToCanvasDelta(avgDelta);
-                    indicatorAnchor.x += canvasDelta.x;
-                    indicatorAnchor.y += canvasDelta.y;
-                    panToKeepIndicatorInView();
+                    cursorAnchor.x += canvasDelta.x;
+                    cursorAnchor.y += canvasDelta.y;
+                    panToKeepCursorInView();
 
                     if (currentStroke && !isGridMode) {
-                        currentStroke.points!.push({ ...indicatorAnchor });
+                        currentStroke.points!.push({ ...cursorAnchor });
                     }
 
                     // Clear the buffer
@@ -1309,9 +1309,9 @@ function updateMarkerPositionWithBatching() {
 
 // Algorithm 2: Simple averaging mechanism
 // Every delta produces movement - averaged with last delta from OTHER finger, or halved if same finger
-function updateMarkerPositionSimple() {
+function updateCursorPositionSimple() {
     const positions = eventHandler.getFingerPositions();
-    if (!indicatorAnchor) return;
+    if (!cursorAnchor) return;
 
     if( !positions.primary || !positions.secondary ) return;
 
@@ -1385,18 +1385,18 @@ function updateMarkerPositionSimple() {
 
     // Process finalDelta
     const canvasDelta = screenDeltaToCanvasDelta(finalDelta);
-    indicatorAnchor.x += canvasDelta.x;
-    indicatorAnchor.y += canvasDelta.y;
-    panToKeepIndicatorInView();
+    cursorAnchor.x += canvasDelta.x;
+    cursorAnchor.y += canvasDelta.y;
+    panToKeepCursorInView();
 
     if (currentStroke && !isGridMode) {
-        currentStroke.points!.push({ ...indicatorAnchor });
+        currentStroke.points!.push({ ...cursorAnchor });
     }
 }
 
-function updateMarkerPosition() {
+function updateCursorPosition() {
     const positions = eventHandler.getFingerPositions();
-    if (!indicatorAnchor) return;
+    if (!cursorAnchor) return;
 
     // Single finger mode - handle directly without algorithm complexity
     if (!positions.secondary) {
@@ -1416,9 +1416,9 @@ function updateMarkerPosition() {
         // Process delta immediately
         if (deltaX !== 0 || deltaY !== 0) {
             const canvasDelta = screenDeltaToCanvasDelta({ x: deltaX, y: deltaY });
-            indicatorAnchor.x += canvasDelta.x;
-            indicatorAnchor.y += canvasDelta.y;
-            panToKeepIndicatorInView();
+            cursorAnchor.x += canvasDelta.x;
+            cursorAnchor.y += canvasDelta.y;
+            panToKeepCursorInView();
         }
 
         lastDelta = null;
@@ -1427,14 +1427,14 @@ function updateMarkerPosition() {
 
     // Two-finger mode - use the appropriate algorithm
     if (USE_BATCHED_DELTA_MECHANISM) {
-        updateMarkerPositionWithBatching();
+        updateCursorPositionWithBatching();
     } else {
-        updateMarkerPositionSimple();
+        updateCursorPositionSimple();
     }
 }
 
 function addPointToStroke() {
-    if (!currentStroke || !indicatorAnchor) return;
+    if (!currentStroke || !cursorAnchor) return;
 
     // In grid mode, only add points when moving a full cell size away
     if (isGridMode) {
@@ -1443,11 +1443,11 @@ function addPointToStroke() {
         const cellSize = getGridCellSize();
         const threshold = cellSize * 0.9;
 
-        const deltaFromLastX = Math.abs(indicatorAnchor.x - lastGridPosition.x);
-        const deltaFromLastY = Math.abs(indicatorAnchor.y - lastGridPosition.y);
+        const deltaFromLastX = Math.abs(cursorAnchor.x - lastGridPosition.x);
+        const deltaFromLastY = Math.abs(cursorAnchor.y - lastGridPosition.y);
 
         if (deltaFromLastX >= threshold || deltaFromLastY >= threshold) {
-            const gridPoint = snapToGrid(indicatorAnchor);
+            const gridPoint = snapToGrid(cursorAnchor);
 
             // Add 9 interpolated points between last grid position and new grid point
             const numInterpolated = 9;
@@ -1463,12 +1463,12 @@ function addPointToStroke() {
             // Add the actual grid point
             currentStroke.points!.push(gridPoint);
             lastGridPosition = gridPoint;
-            // Snap the marker to the grid point while drawing
-            indicatorAnchor = { ...gridPoint };
+            // Snap the cursor to the grid point while drawing
+            cursorAnchor = { ...gridPoint };
         }
     } else {
         // Normal mode: add every point
-        currentStroke.points!.push({ ...indicatorAnchor });
+        currentStroke.points!.push({ ...cursorAnchor });
     }
 
     // Check if stroke is long enough to lock the gesture as drawing
@@ -1493,15 +1493,15 @@ function handleActions(actions: Action[]): void {
     for (const action of actions) {
         switch (action) {
             case Action.CREATE_STROKE:
-                if (indicatorAnchor) {
-                    const startPoint = isGridMode ? snapToGrid(indicatorAnchor) : indicatorAnchor;
+                if (cursorAnchor) {
+                    const startPoint = isGridMode ? snapToGrid(cursorAnchor) : cursorAnchor;
                     currentStroke = {
                         color: combinedPicker.getColor(),
                         size: combinedPicker.getSize(),
                         points: [{ ...startPoint }]
                     };
                     // In grid mode, initialize lastGridPosition to the start point
-                    // but don't snap indicatorAnchor - let it move freely
+                    // but don't snap cursorAnchor - let it move freely
                     if (isGridMode) {
                         lastGridPosition = { ...startPoint };
                     } else {
@@ -1528,14 +1528,14 @@ function handleActions(actions: Action[]): void {
                 // SELECT_STROKE: Automatically select the stroke that was just drawn
                 // Triggered after: Finishing a drawing (lifting second finger)
                 // Behavior: Selects the last stroke in history (the one just completed)
-                //           Marker stays at its current position
+                //           Cursor stays at its current position
                 //           Marks as "fresh stroke" (Undo button will delete it)
-                selectedStrokeMarkerPos = indicatorAnchor ? { ...indicatorAnchor } : null;
+                selectedStrokeCursorPos = cursorAnchor ? { ...cursorAnchor } : null;
                 // Set selected stroke to the last stroke in history
                 if (strokeHistory.length > 0) {
                     selectedStrokeIdx = strokeHistory.length - 1;
                     const selectedStroke = strokeHistory[selectedStrokeIdx];
-                    // Set marker to the last point of the stroke
+                    // Set cursor to the last point of the stroke
                     if (selectedStroke.points!.length > 0) {
                         selectedStrokePointIdx = selectedStroke.points!.length - 1;
                     }
@@ -1549,21 +1549,21 @@ function handleActions(actions: Action[]): void {
                 break;
 
             case Action.SELECT_CLOSEST_STROKE:
-                // SELECT_CLOSEST_STROKE: Manually select stroke closest to marker
+                // SELECT_CLOSEST_STROKE: Manually select stroke closest to cursor
                 // Triggered by: Single tap (quick tap with no timeout or movement)
-                // Behavior: Finds closest stroke to current marker position
-                //           Marker jumps to the closest point on that stroke
+                // Behavior: Finds closest stroke to current cursor position
+                //           Cursor jumps to the closest point on that stroke
                 //           Marks as manual selection (Del button will delete it)
                 //           Updates color/size pickers to match the selected stroke
                 // Note: This is different from double-tap, which searches from tap location
                 const closestResult = findClosestStrokeAndPoint();
                 if (closestResult) {
-                    // Move marker to the closest point
-                    indicatorAnchor = closestResult.point;
+                    // Move cursor to the closest point
+                    cursorAnchor = closestResult.point;
                     // Select the stroke and store the point index
                     selectedStrokeIdx = closestResult.strokeIdx;
                     selectedStrokePointIdx = closestResult.pointIdx;
-                    selectedStrokeMarkerPos = { ...closestResult.point };
+                    selectedStrokeCursorPos = { ...closestResult.point };
                     // Manual selection exits fresh stroke mode
                     isFreshStroke = false;
                     // Clear transformation undo state when manually selecting a stroke
@@ -1576,7 +1576,7 @@ function handleActions(actions: Action[]): void {
                 break;
 
             case Action.DESELECT_STROKE:
-                selectedStrokeMarkerPos = null;
+                selectedStrokeCursorPos = null;
                 selectedStrokeIdx = null;
                 selectedStrokePointIdx = null;
                 // Clear transformation undo state on deselection
@@ -1588,11 +1588,11 @@ function handleActions(actions: Action[]): void {
                 break;
 
             case Action.START_SELECTION_RECTANGLE:
-                // Start selection rectangle at current marker position
-                if (indicatorAnchor) {
-                    selectionRectStart = { ...indicatorAnchor };
-                    selectionRectEnd = { ...indicatorAnchor };
-                    // Initialize position tracking for marker movement
+                // Start selection rectangle at current cursor position
+                if (cursorAnchor) {
+                    selectionRectStart = { ...cursorAnchor };
+                    selectionRectEnd = { ...cursorAnchor };
+                    // Initialize position tracking for cursor movement
                     const positions = eventHandler.getFingerPositions();
                     lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
                     lastSecondaryPos = positions.secondary ? { ...positions.secondary } : null;
@@ -1602,9 +1602,9 @@ function handleActions(actions: Action[]): void {
                 break;
 
             case Action.UPDATE_SELECTION_RECTANGLE:
-                // Update selection rectangle end point to current marker position
-                if (indicatorAnchor && selectionRectStart) {
-                    selectionRectEnd = { ...indicatorAnchor };
+                // Update selection rectangle end point to current cursor position
+                if (cursorAnchor && selectionRectStart) {
+                    selectionRectEnd = { ...cursorAnchor };
                     // Update highlighted strokes in real-time
                     updateHighlightedStrokes();
                 }
@@ -1989,11 +1989,11 @@ function processDelete() {
             leafStroke.points = restoredPoints;
         });
 
-        // Update marker position to follow the stroke back to its original position
+        // Update cursor position to follow the stroke back to its original position
         if (selectedStrokePointIdx !== null && selectedStrokePointIdx < transformSnapshot.length) {
-            indicatorAnchor = { ...transformSnapshot[selectedStrokePointIdx] };
-            selectedStrokeMarkerPos = { ...indicatorAnchor };
-            panToKeepIndicatorInView();
+            cursorAnchor = { ...transformSnapshot[selectedStrokePointIdx] };
+            selectedStrokeCursorPos = { ...cursorAnchor };
+            panToKeepCursorInView();
         }
 
         // Clear the transformation undo state
@@ -2020,10 +2020,10 @@ function processDelete() {
 
     const deletedStroke = strokeHistory[indexToDelete];
 
-    // Save marker position before deletion (for finding closest stroke after)
-    const markerPosBeforeDeletion = indicatorAnchor ? { ...indicatorAnchor } : null;
+    // Save cursor position before deletion (for finding closest stroke after)
+    const cursorPosBeforeDeletion = cursorAnchor ? { ...cursorAnchor } : null;
 
-    // Move marker to the beginning of the first stroke being removed
+    // Move cursor to the beginning of the first stroke being removed
     let firstPointX = 0;
     let firstPointY = 0;
     let foundPoint = false;
@@ -2035,8 +2035,8 @@ function processDelete() {
         }
     });
     if (foundPoint) {
-        indicatorAnchor = { x: firstPointX, y: firstPointY };
-        panToKeepIndicatorInView();
+        cursorAnchor = { x: firstPointX, y: firstPointY };
+        panToKeepCursorInView();
     }
 
     // Remove the stroke FIRST (before finding closest, to avoid index shift issues)
@@ -2051,31 +2051,31 @@ function processDelete() {
 
     // Determine the new selection state
     if (strokeHistory.length > 0) {
-        if (wasManualSelection && markerPosBeforeDeletion) {
-            // Manual selection (Del button) - restore marker position and find closest stroke
-            indicatorAnchor = markerPosBeforeDeletion;
+        if (wasManualSelection && cursorPosBeforeDeletion) {
+            // Manual selection (Del button) - restore cursor position and find closest stroke
+            cursorAnchor = cursorPosBeforeDeletion;
             const result = findClosestStrokeAndPoint();
             if (result) {
                 selectedStrokeIdx = result.strokeIdx;
                 selectedStrokePointIdx = result.pointIdx;
-                indicatorAnchor = { ...result.point };
-                selectedStrokeMarkerPos = { ...indicatorAnchor };
-                panToKeepIndicatorInView();
+                cursorAnchor = { ...result.point };
+                selectedStrokeCursorPos = { ...cursorAnchor };
+                panToKeepCursorInView();
                 // Update pickers to match the newly selected stroke
                 updatePickersForSelectedStroke();
             }
         } else {
             // Fresh stroke mode (Undo button) - DON'T select any stroke
-            // The marker is already at the beginning of the deleted stroke
+            // The cursor is already at the beginning of the deleted stroke
             selectedStrokeIdx = null;
             selectedStrokePointIdx = null;
-            selectedStrokeMarkerPos = null;
+            selectedStrokeCursorPos = null;
         }
     } else {
         // No more strokes - deselect
         selectedStrokeIdx = null;
         selectedStrokePointIdx = null;
-        selectedStrokeMarkerPos = null;
+        selectedStrokeCursorPos = null;
     }
 
     updateDelButton();
@@ -2089,7 +2089,7 @@ function processClear() {
     transformSnapshot = null;
     hasUndoableTransform = false;
     viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
-    indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
+    cursorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
     isFreshStroke = false;
     updateDelButton();
 
@@ -2165,7 +2165,7 @@ function duplicateSelectedStroke() {
     // Add the duplicated stroke to history
     strokeHistory.push(duplicatedStroke);
 
-    // Select the new stroke and move marker to its first point
+    // Select the new stroke and move cursor to its first point
     selectedStrokeIdx = strokeHistory.length - 1;
     let firstPointX = 0;
     let firstPointY = 0;
@@ -2179,9 +2179,9 @@ function duplicateSelectedStroke() {
     });
     if (foundPoint) {
         selectedStrokePointIdx = 0;
-        indicatorAnchor = { x: firstPointX, y: firstPointY };
-        selectedStrokeMarkerPos = { ...indicatorAnchor };
-        panToKeepIndicatorInView();
+        cursorAnchor = { x: firstPointX, y: firstPointY };
+        selectedStrokeCursorPos = { ...cursorAnchor };
+        panToKeepCursorInView();
     }
 
     // Update pickers to match the duplicated stroke
@@ -2230,13 +2230,13 @@ function groupHighlightedStrokes() {
     selectedStrokeIdx = indices[0];
     isFreshStroke = false;
 
-    // Move marker to the first point of the first stroke in the group
+    // Move cursor to the first point of the first stroke in the group
     forEachLeafStroke(groupStroke, (leafStroke: Stroke) => {
         if (leafStroke.points!.length > 0) {
-            indicatorAnchor = { ...leafStroke.points![0] };
+            cursorAnchor = { ...leafStroke.points![0] };
             selectedStrokePointIdx = 0;
-            selectedStrokeMarkerPos = { ...indicatorAnchor };
-            panToKeepIndicatorInView();
+            selectedStrokeCursorPos = { ...cursorAnchor };
+            panToKeepCursorInView();
         }
         return; // Only process first leaf stroke
     });
@@ -2271,7 +2271,7 @@ function ungroupSelectedStroke() {
     // Deselect
     selectedStrokeIdx = null;
     selectedStrokePointIdx = null;
-    selectedStrokeMarkerPos = null;
+    selectedStrokeCursorPos = null;
     isFreshStroke = false;
 
     updateDelButton();
@@ -2351,7 +2351,7 @@ function handlePointerMove(e: PointerEvent) {
     const state = stateMachine.getState();
 
     // Tap-and-a-half detection: if user is holding second tap and moves, enter selection rectangle
-    if (isTrackingDoubleTap && state === State.MovingMarker) {
+    if (isTrackingDoubleTap && state === State.MovingCursor) {
         const now = Date.now();
         // If second tap is held longer than double-tap max duration, it's tap-and-a-half
         if (now - secondTapDownTime > DOUBLE_TAP_MAX_DURATION) {
@@ -2364,8 +2364,8 @@ function handlePointerMove(e: PointerEvent) {
     }
 
     // Handle state-specific continuous updates
-    if (state === State.MovingMarker || state === State.Drawing) {
-        updateMarkerPosition();
+    if (state === State.MovingCursor || state === State.Drawing) {
+        updateCursorPosition();
 
         if (state === State.Drawing && currentStroke) {
             addPointToStroke();
@@ -2381,10 +2381,10 @@ function handlePointerMove(e: PointerEvent) {
         secondTapDownPos = null;
         isTrackingDoubleTap = false;
 
-        // Update marker position and selection rectangle
-        updateMarkerPosition();
-        if (indicatorAnchor && selectionRectStart) {
-            selectionRectEnd = { ...indicatorAnchor };
+        // Update cursor position and selection rectangle
+        updateCursorPosition();
+        if (cursorAnchor && selectionRectStart) {
+            selectionRectEnd = { ...cursorAnchor };
             // Update highlighted strokes in real-time as the rectangle changes
             updateHighlightedStrokes();
         }
@@ -2431,12 +2431,12 @@ function handlePointerUp(e: PointerEvent) {
             const canvasPos = screenToCanvas(pos);
             const result = findClosestStrokeAndPoint(canvasPos);
             if (result) {
-                // Move marker to the closest point
-                indicatorAnchor = result.point;
+                // Move cursor to the closest point
+                cursorAnchor = result.point;
                 // Select the stroke and store the point index
                 selectedStrokeIdx = result.strokeIdx;
                 selectedStrokePointIdx = result.pointIdx;
-                selectedStrokeMarkerPos = { ...result.point };
+                selectedStrokeCursorPos = { ...result.point };
                 // Manual selection exits fresh stroke mode
                 isFreshStroke = false;
                 // Clear transformation undo state when manually selecting a stroke
@@ -2478,12 +2478,12 @@ function handlePointerUp(e: PointerEvent) {
         }
         transformStart = null;
 
-        // Clamp indicator after transform
-        clampIndicatorToView();
+        // Clamp cursor after transform
+        clampCursorToView();
 
         // Snap to grid in grid mode
-        if (isGridMode && indicatorAnchor) {
-            indicatorAnchor = snapToGrid(indicatorAnchor);
+        if (isGridMode && cursorAnchor) {
+            cursorAnchor = snapToGrid(cursorAnchor);
         }
 
         redraw();
@@ -2498,7 +2498,7 @@ function resizeCanvas() {
     const toolbarHeight = 60;
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight - toolbarHeight;
-    clampIndicatorToView();
+    clampCursorToView();
     redraw();
 }
 
@@ -2540,5 +2540,5 @@ window.addEventListener('resize', resizeCanvas);
 
 resizeCanvas();
 updateDelButton();
-indicatorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
+cursorAnchor = screenToCanvas({ x: canvas.width / 2, y: canvas.height / 2 });
 redraw();

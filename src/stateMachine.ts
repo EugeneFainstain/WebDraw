@@ -16,7 +16,7 @@
 
 export enum State {
     Idle = 'Idle',
-    MovingMarker = 'MovingMarker',
+    MovingCursor = 'MovingCursor',
     Drawing = 'Drawing',
     Transform = 'Transform',
     SelectionRectangle = 'SelectionRectangle'
@@ -28,7 +28,7 @@ export enum State {
 
 /**
  * Selected Stroke Mode
- * When true: A stroke is selected (marker shows green), and 3-finger transform affects only that stroke
+ * When true: A stroke is selected (cursor shows green), and 3-finger transform affects only that stroke
  * When false: No selection (normal mode), 3-finger transform affects entire canvas
  *
  * Note: The actual selected stroke index is tracked in app.ts (selectedStrokeIdx)
@@ -36,7 +36,7 @@ export enum State {
  *
  * Exit conditions:
  * - Single tap (quick tap without timeout or movement)
- * - Moving the marker far from the selected stroke position
+ * - Moving the cursor far from the selected stroke position
  * - Undo/Clear operations
  * - Too many fingers touching
  */
@@ -80,8 +80,8 @@ export type EventFlags = {
  * Actions to execute during state transitions
  */
 export enum Action {
-    // Marker actions
-    MOVE_MARKER = 'MOVE_MARKER',
+    // Cursor actions
+    MOVE_CURSOR = 'MOVE_CURSOR',
 
     // Stroke actions
     CREATE_STROKE = 'CREATE_STROKE',
@@ -90,7 +90,7 @@ export enum Action {
 
     // Selected stroke actions
     SELECT_STROKE = 'SELECT_STROKE',                     // Select last drawn stroke (after drawing)
-    SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to marker (single tap)
+    SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to cursor (single tap)
     DESELECT_STROKE = 'DESELECT_STROKE',
 
     // Selection rectangle actions
@@ -223,8 +223,8 @@ export class StateMachine {
             case State.Idle:
                 return this.transitionFromIdle(modifier, event, flags);
 
-            case State.MovingMarker:
-                return this.transitionFromMovingMarker(modifier, event, flags);
+            case State.MovingCursor:
+                return this.transitionFromMovingCursor(modifier, event, flags);
 
             case State.Drawing:
                 return this.transitionFromDrawing(modifier, event, flags);
@@ -254,9 +254,9 @@ export class StateMachine {
 
         switch (event) {
             case Event.F1_DOWN:
-                // Enter MovingMarker (tap-and-a-half will be handled by app.ts)
+                // Enter MovingCursor (tap-and-a-half will be handled by app.ts)
                 return {
-                    newState: State.MovingMarker,
+                    newState: State.MovingCursor,
                     newModifier: { isStrokeSelected },  // keep
                     actions: []
                 };
@@ -307,17 +307,17 @@ export class StateMachine {
     }
 
     // ========================================================================
-    // TRANSITIONS FROM MOVING MARKER STATE
+    // TRANSITIONS FROM MOVING CURSOR STATE
     // ========================================================================
 
-    private transitionFromMovingMarker(modifier: StateModifier, event: Event, flags: EventFlags): TransitionResult {
+    private transitionFromMovingCursor(modifier: StateModifier, event: Event, flags: EventFlags): TransitionResult {
         const { isStrokeSelected } = modifier;
 
         switch (event) {
             case Event.F1_DOWN:
-                // Keep in MovingMarker (tap-and-a-half will be handled by app.ts)
+                // Keep in MovingCursor (tap-and-a-half will be handled by app.ts)
                 return {
-                    newState: State.MovingMarker,
+                    newState: State.MovingCursor,
                     newModifier: { isStrokeSelected },  // keep
                     actions: [Action.DO_NOTHING]
                 };
@@ -369,7 +369,7 @@ export class StateMachine {
             case Event.TIMEOUT:
                 // Keep modifier unchanged
                 return {
-                    newState: State.MovingMarker,
+                    newState: State.MovingCursor,
                     newModifier: { isStrokeSelected },  // keep
                     actions: [Action.SET_TIMEOUT_FLAG]
                 };
@@ -377,15 +377,15 @@ export class StateMachine {
             case Event.FINGER_MOVED_FAR:
                 // Deselect stroke (→ Normal)
                 return {
-                    newState: State.MovingMarker,
+                    newState: State.MovingCursor,
                     newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.DESELECT_STROKE, Action.MOVE_MARKER]
+                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.DESELECT_STROKE, Action.MOVE_CURSOR]
                 };
 
             case Event.PINCH_DETECTED:
-                // Pinch in MovingMarker state - ignore (no stroke to abandon)
+                // Pinch in MovingCursor state - ignore (no stroke to abandon)
                 return {
-                    newState: State.MovingMarker,
+                    newState: State.MovingCursor,
                     newModifier: { isStrokeSelected },  // keep
                     actions: [Action.DO_NOTHING]
                 };
@@ -393,7 +393,7 @@ export class StateMachine {
             case Event.DELETE:
                 // Delete keeps selection mode unchanged (processDelete handles selection logic)
                 return {
-                    newState: State.MovingMarker,
+                    newState: State.MovingCursor,
                     newModifier: { isStrokeSelected },  // keep (processDelete will manage)
                     actions: [Action.PROCESS_DELETE]
                 };
@@ -401,14 +401,14 @@ export class StateMachine {
             case Event.CLEAR:
                 // Deselect stroke (→ Normal)
                 return {
-                    newState: State.MovingMarker,
+                    newState: State.MovingCursor,
                     newModifier: { isStrokeSelected: false },  // → Normal
                     actions: [Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
                 };
 
             default:
                 return {
-                    newState: State.MovingMarker,
+                    newState: State.MovingCursor,
                     newModifier: { isStrokeSelected },
                     actions: [Action.DO_NOTHING]
                 };
@@ -462,10 +462,10 @@ export class StateMachine {
                 }
 
             case Event.FINGER_UP:
-                // Transition to MovingMarker with remaining finger
+                // Transition to MovingCursor with remaining finger
                 // Select the stroke that was just drawn (Normal → Selected, Selected → keep Selected)
                 return {
-                    newState: State.MovingMarker,
+                    newState: State.MovingCursor,
                     newModifier: { isStrokeSelected: true },  // → Stroke Selected
                     actions: isStrokeSelected ?
                         [Action.SAVE_STROKE] :  // already selected, just save

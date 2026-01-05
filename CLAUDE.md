@@ -33,16 +33,16 @@ The application uses a state machine architecture with the following main files:
 ### State Machine
 
 The app uses a formal state machine architecture (see [STATE_MACHINE.md](STATE_MACHINE.md) for complete documentation):
-- **4 states**: Idle, MovingMarker, Drawing, Transform
+- **4 states**: Idle, MovingCursor, Drawing, Transform
 - **Events**: Finger down/up, timeouts, movement thresholds, undo/clear
 - **Actions**: Returned by state transitions, executed by app.ts
-- **Selected Stroke Mode**: After drawing, the stroke is selected (green indicator) and can be transformed independently
+- **Selected Stroke Mode**: After drawing, the stroke is selected (green cursor) and can be transformed independently
 
 ### Core State (src/app.ts)
 
 - `strokeHistory` (Array) - Stores completed strokes for undo functionality
 - `currentStroke` - Stroke currently being drawn
-- `indicatorAnchor` - Position of the drawing marker in canvas coordinates
+- `cursorAnchor` - Position of the drawing cursor in canvas coordinates
 - `selectedStrokeIdx` - Index of the selected stroke (null = no selection)
-- `selectedStrokeMarkerPos` - Reference position when entering selected stroke mode
+- `selectedStrokeCursorPos` - Reference position when entering selected stroke mode
 - `viewTransform` - Canvas transformation (scale, rotation, pan)
