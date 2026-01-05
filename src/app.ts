@@ -1441,7 +1441,11 @@ function addPointToStroke() {
     // This prevents the stroke from being abandoned if a pinch gesture is detected
     if (currentStroke.points && currentStroke.points.length > 1 && !eventHandler.isGestureLockedAsDrawing()) {
         const strokeLength = getPathLength(currentStroke.points);
-        if (strokeLength >= STROKE_LEN_THRESHOLD) {
+        // Convert threshold from screen-space to canvas-space by dividing by current zoom scale
+        // When zoomed in (scale > 1), the threshold in canvas units becomes smaller
+        // When zoomed out (scale < 1), the threshold in canvas units becomes larger
+        const canvasSpaceThreshold = STROKE_LEN_THRESHOLD / viewTransform.scale;
+        if (strokeLength >= canvasSpaceThreshold) {
             eventHandler.lockGestureAsDrawing();
         }
     }

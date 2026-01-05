@@ -16,7 +16,11 @@ The application distinguishes between two-finger **drawing** gestures and two-fi
 4. **Drawing Lock**: If the drawn stroke reaches a path length of 8mm (STROKE_LEN_THRESHOLD_MM) before any pinch is detected, the gesture is locked as a drawing gesture. Future changes in finger distance are ignored, and the stroke continues normally
 5. This allows natural drawing with two fingers while still supporting zoom/pan/rotate when fingers move apart or together
 
-**Note**: All thresholds are specified in millimeters and converted to screen pixels based on device DPI, ensuring consistent physical gesture recognition across different devices and screen resolutions.
+**Note on Thresholds**:
+- All thresholds are specified in millimeters (mm) to ensure consistent physical gesture recognition
+- Thresholds are converted to pixels using device DPI (96) and `devicePixelRatio`
+- **Screen-space measurements** (pinch detection, finger movement): Measured in screen pixels, unaffected by canvas zoom
+- **Canvas-space measurements** (stroke path length): The threshold is dynamically adjusted by dividing by the current canvas zoom scale, ensuring 8mm of physical finger movement always locks the drawing gesture regardless of zoom level
 
 ## States
 
