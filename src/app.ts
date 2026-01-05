@@ -714,6 +714,77 @@ function getCursorScreenPos(): Point {
     return canvasToScreen(cursorAnchor);
 }
 
+/**
+ * Get the page coordinates of the cursor tip.
+ */
+function getCursorPagePos(): { x: number, y: number } | null {
+    if (!cursorAnchor) return null;
+    const cursorScreenPos = getCursorScreenPos();
+    return {
+        x: cursorScreenPos.x,
+        y: cursorScreenPos.y + TOOLBAR_HEIGHT
+    };
+}
+
+/**
+ * Check if the cursor tip is in the menu region (above the canvas)
+ * or over a UI element like an open popup.
+ */
+function isCursorInMenuRegion(): boolean {
+    if (!cursorAnchor) return false;
+    const cursorScreenPos = getCursorScreenPos();
+
+    // Cursor is in menu region if Y is negative (above the canvas)
+    if (cursorScreenPos.y < 0) return true;
+
+    // Also check if cursor is over an open picker popup
+    const pagePos = getCursorPagePos();
+    if (pagePos) {
+        const element = document.elementFromPoint(pagePos.x, pagePos.y);
+        if (element) {
+            // Check if we're over a popup or toolbar element
+            const uiElement = element.closest('.toolbar, [style*="z-index: 1000"]');
+            if (uiElement) return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Check if the cursor tip is over a clickable UI element (toolbar or popup).
+ * Returns the clickable element if found, null otherwise.
+ */
+function getClickableElementAtCursor(): HTMLElement | null {
+    const pagePos = getCursorPagePos();
+    if (!pagePos) return null;
+
+    // Find the element at the cursor tip position
+    const element = document.elementFromPoint(pagePos.x, pagePos.y);
+    if (!element) return null;
+
+    // Don't count canvas or its children as clickable UI
+    if (element.closest('#drawingCanvas, #cursorDiv')) return null;
+
+    // Find the closest clickable element - buttons, combined picker, or elements in popups
+    return element.closest('button, [role="button"], #combinedPicker, div[style*="border-radius: 4px"][style*="cursor: pointer"]') as HTMLElement | null;
+}
+
+/**
+ * Simulate a tap at the cursor tip position if it's over a UI element.
+ * This allows users to tap anywhere on the screen to "click" menu buttons
+ * using the cursor as the actual click location.
+ * Returns true if a UI element was clicked, false otherwise.
+ */
+function simulateTapAtCursor(): boolean {
+    const clickable = getClickableElementAtCursor();
+    if (clickable) {
+        clickable.click();
+        return true;
+    }
+    return false;
+}
+
 function updateCursorDiv(): void {
     if (!cursorAnchor) {
         cursorDiv.style.display = 'none';
@@ -1626,8 +1697,15 @@ function handleActions(actions: Action[]): void {
                 break;
 
             case Action.CLEAR_HIGHLIGHTING:
-                // Clear all highlighted strokes
-                highlightedStrokes.clear();
+                // Check if cursor is in the menu region
+                if (isCursorInMenuRegion()) {
+                    // Cursor is in menu region - try to tap a menu element
+                    // Don't clear highlighting regardless (menu taps shouldn't affect canvas)
+                    simulateTapAtCursor();
+                } else {
+                    // Cursor is in canvas region - clear highlighting as normal
+                    highlightedStrokes.clear();
+                }
                 break;
 
             case Action.INIT_TRANSFORM:
@@ -2412,10 +2490,12 @@ function handlePointerUp(e: PointerEvent) {
     if (eventHandler.getFingerCount() === 0) {
         // Close combined picker on tap (quick touch and release)
         // Check if this was a quick single tap (not part of double-tap sequence)
+        // But don't close if cursor is in menu region (user is interacting with menu)
         if (firstTapDownTime > 0 && firstTapDownPos !== null &&
             getDistance(pos, firstTapDownPos) < DOUBLE_TAP_DISTANCE &&
             now - firstTapDownTime < DOUBLE_TAP_MAX_DURATION &&
-            !isTrackingDoubleTap) {
+            !isTrackingDoubleTap &&
+            !isCursorInMenuRegion()) {
             // This is a single tap completion - close the picker if it's open
             if (combinedPicker.isOpen()) {
                 combinedPicker.close();
