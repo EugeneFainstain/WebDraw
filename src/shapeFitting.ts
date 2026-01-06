@@ -1,3 +1,23 @@
+/**
+ * SHAPEFITTING.TS - Stroke Shape Recognition and Fitting
+ *
+ * This module analyzes hand-drawn strokes and fits them to geometric shapes.
+ * It orchestrates multiple specialized fitters and selects the best match.
+ *
+ * Responsibilities:
+ * - Determine if a stroke is closed (loop) or open (line)
+ * - For closed strokes: fit circles, ellipses, rectangles, squares, polygons, stars
+ * - For open strokes: fit polylines using RDP simplification
+ * - Select the best-fitting shape based on error metrics
+ * - Generate fitted points for rendering
+ * - Provide debug output for shape fitting analysis
+ *
+ * Design: Stateless module - takes a stroke, analyzes it, and modifies the stroke's
+ * fittedPoints/fitType properties. Uses fitters from the fitters/ directory.
+ *
+ * NOTE: If this file's responsibilities drift, update this description!
+ */
+
 import { Point } from './eventHandler';
 import { Stroke, showDebug } from './state';
 import { fitCircle, generateCirclePoints, isMostlyClosed } from './fitters/circleFitter';

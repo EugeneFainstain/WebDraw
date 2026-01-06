@@ -1,3 +1,23 @@
+/**
+ * STATE.TS - Centralized Application State
+ *
+ * This module serves as the single source of truth for all mutable application state.
+ * It provides a singleton `state` object that all other modules import and use directly.
+ *
+ * Responsibilities:
+ * - Define core data types (Stroke, ViewTransform, etc.)
+ * - Hold all mutable application state (strokes, cursor, selection, transforms)
+ * - Store DOM element references
+ * - Provide state initialization and reset functions
+ * - Define configuration constants
+ *
+ * Design: Other modules import `state` and read/write directly. This avoids circular
+ * dependencies since state.ts has no dependencies on other app modules (only eventHandler
+ * for the Point type and state machine instances).
+ *
+ * NOTE: If this file's responsibilities drift, update this description!
+ */
+
 import { Point } from './eventHandler';
 import { StateMachine } from './stateMachine';
 import { EventHandler } from './eventHandler';

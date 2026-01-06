@@ -1,3 +1,24 @@
+/**
+ * STROKEOPERATIONS.TS - Stroke Manipulation and History Operations
+ *
+ * This module handles high-level operations on strokes: deletion, duplication,
+ * grouping, and undo/redo functionality.
+ *
+ * Responsibilities:
+ * - Stroke helper functions: isGroup, forEachLeafStroke, transformStroke, cloneStroke
+ * - Delete/undo operations (processDelete) with transform undo support
+ * - Clear canvas (processClear)
+ * - Duplicate selected stroke with mirror transform
+ * - Group multiple strokes into a hierarchy
+ * - Ungroup a stroke group into individual strokes
+ * - Update UI button states (del/undo, duplicate, group/ungroup)
+ *
+ * Design: Uses a callback pattern for dependencies on app.ts functions.
+ * Directly mutates state.strokeHistory and related selection state.
+ *
+ * NOTE: If this file's responsibilities drift, update this description!
+ */
+
 import { Point } from './eventHandler';
 import { state, resetState, showDebug, Stroke } from './state';
 

@@ -1,3 +1,23 @@
+/**
+ * POINTERHANDLERS.TS - Pointer/Touch Event Processing
+ *
+ * This module handles all low-level pointer and touch events from the browser.
+ * It translates raw DOM events into application-level actions.
+ *
+ * Responsibilities:
+ * - Handle pointerdown, pointermove, pointerup events
+ * - Detect double-tap gestures for stroke selection
+ * - Detect tap-and-a-half gestures for selection rectangles
+ * - Track pointers that start on UI elements (for drag detection)
+ * - Prevent default touch behaviors on canvas
+ * - Delegate to state machine and trigger appropriate callbacks
+ *
+ * Design: Uses a callback pattern to avoid circular dependencies. All functions
+ * that depend on app.ts logic are passed in via initPointerHandlers().
+ *
+ * NOTE: If this file's responsibilities drift, update this description!
+ */
+
 import { Point } from './eventHandler';
 import { State, Action } from './stateMachine';
 import {
