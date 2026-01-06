@@ -1,7 +1,8 @@
 export function createMenuPicker(
     triggerElement: HTMLElement,
     onFullscreen: () => void,
-    onReset: () => void
+    onReset: () => void,
+    onBeforeOpen?: () => void
 ) {
     let popup: HTMLElement | null = null;
 
@@ -193,6 +194,8 @@ export function createMenuPicker(
 
     function openPopup() {
         if (popup) return;
+        // Close any other open pickers first
+        if (onBeforeOpen) onBeforeOpen();
         popup = createPopup();
         document.body.appendChild(popup);
         positionPopup();

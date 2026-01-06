@@ -71,6 +71,9 @@ const dom = state.dom;
 // CUSTOM UI COMPONENTS
 // ============================================================================
 
+// Holder for pickers - allows cross-referencing between them
+const pickers: { combined?: ReturnType<typeof createCombinedPicker>; menu?: ReturnType<typeof createMenuPicker> } = {};
+
 const menuPicker = createMenuPicker(
     dom.menuPickerEl!,
     () => {
@@ -87,8 +90,13 @@ const menuPicker = createMenuPicker(
     () => {
         // Reset (clear) - use the event handler
         state.eventHandler.handleClear();
+    },
+    () => {
+        // Close other picker before opening
+        pickers.combined?.close();
     }
 );
+pickers.menu = menuPicker;
 
 const combinedPicker = createCombinedPicker(
     dom.combinedPickerEl!,
@@ -163,8 +171,13 @@ const combinedPicker = createCombinedPicker(
         }
 
         redraw();
+    },
+    () => {
+        // Close other picker before opening
+        pickers.menu?.close();
     }
 );
+pickers.combined = combinedPicker;
 
 // ============================================================================
 // UTILITY FUNCTIONS

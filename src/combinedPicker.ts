@@ -22,7 +22,8 @@ export function createCombinedPicker(
     onColorChange: (color: string) => void,
     onSizeChange: (size: number) => void,
     onGridToggle?: () => void,
-    onFit?: () => void
+    onFit?: () => void,
+    onBeforeOpen?: () => void
 ) {
     let currentColor = COLORS[1]; // Orange
     let currentSize = SIZES[4]; // Default to 6
@@ -359,6 +360,8 @@ export function createCombinedPicker(
 
     function openPopup() {
         if (popup) return;
+        // Close any other open pickers first
+        if (onBeforeOpen) onBeforeOpen();
         popup = createPopup();
         document.body.appendChild(popup);
         positionPopup();
