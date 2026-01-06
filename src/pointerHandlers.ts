@@ -44,7 +44,7 @@ export interface PointerHandlerCallbacks {
     clampCursorToView: () => void;
     snapToGrid: (point: Point) => Point;
     findClosestStrokeAndPoint: (searchPos?: Point) => { strokeIdx: number; pointIdx: number; point: Point } | null;
-    updateDelButton: () => void;
+    updateUI: () => void;
     updatePickersForSelectedStroke: () => void;
     isPickerOpen: () => boolean;
     closePicker: () => void;
@@ -256,7 +256,7 @@ export function handlePointerUp(e: PointerEvent): void {
                 state.highlightedStrokes.add(result.strokeIdx);
                 // Update state machine to reflect selection
                 state.stateMachine.setStrokeSelected(true);
-                callbacks.updateDelButton();
+                callbacks.updateUI();
                 // Update color and size pickers to match selected stroke
                 callbacks.updatePickersForSelectedStroke();
             }
@@ -286,7 +286,7 @@ export function handlePointerUp(e: PointerEvent): void {
         // Mark transformation as complete if strokes were transformed
         if (state.transformStart && state.transformStart.strokeSnapshotsMap && state.transformSnapshot) {
             state.hasUndoableTransform = true;
-            callbacks.updateDelButton();
+            callbacks.updateUI();
         }
         state.transformStart = null;
 

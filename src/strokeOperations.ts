@@ -111,7 +111,7 @@ export function cloneStroke(stroke: Stroke): Stroke {
 // BUTTON STATE UPDATES
 // ============================================================================
 
-export function updateDelButton(): void {
+export function updateUI(): void {
     const dom = state.dom;
     const hasStrokes = state.strokeHistory.length > 0;
 
@@ -157,8 +157,8 @@ export function updateDelButton(): void {
         dom.delBtn!.setAttribute('aria-label', 'Undo');
     }
 
-    // Update duplicate button state - only enabled when a stroke is selected
-    dom.btnDup!.disabled = state.selectedStrokeIdx === null;
+    // Update duplicate button state - enabled when exactly one stroke is highlighted
+    dom.btnDup!.disabled = state.highlightedStrokes.size !== 1;
 
     // Update group/ungroup buttons
     updateGroupButtons();
@@ -170,9 +170,13 @@ export function updateGroupButtons(): void {
     // Determine enabled states
     const canGroup = state.highlightedStrokes.size >= 2;
     let canUngroup = false;
-    if (state.selectedStrokeIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length) {
-        const stroke = state.strokeHistory[state.selectedStrokeIdx];
-        canUngroup = isGroup(stroke);
+    // Ungroup enabled when exactly one stroke is highlighted and it's a group
+    if (state.highlightedStrokes.size === 1) {
+        const highlightedIdx = Array.from(state.highlightedStrokes)[0];
+        if (highlightedIdx < state.strokeHistory.length) {
+            const stroke = state.strokeHistory[highlightedIdx];
+            canUngroup = isGroup(stroke);
+        }
     }
 
     // Show only one button at a time:
@@ -232,7 +236,7 @@ function undoTransformation(): void {
     state.hasUndoableTransform = false;
 
     // Update button to show "Del" now
-    updateDelButton();
+    updateUI();
     callbacks.redraw();
 }
 
@@ -309,7 +313,7 @@ function deleteStroke(): void {
         state.selectedStrokeCursorPos = null;
     }
 
-    updateDelButton();
+    updateUI();
 }
 
 // ============================================================================
@@ -319,7 +323,7 @@ function deleteStroke(): void {
 export function processClear(): void {
     resetState();
     state.cursorAnchor = callbacks.screenToCanvas({ x: state.canvas!.width / 2, y: state.canvas!.height / 2 });
-    updateDelButton();
+    updateUI();
 }
 
 // ============================================================================
@@ -327,12 +331,19 @@ export function processClear(): void {
 // ============================================================================
 
 export function duplicateSelectedStroke(): void {
-    if (state.selectedStrokeIdx === null || state.selectedStrokeIdx >= state.strokeHistory.length) {
-        showDebug('No stroke selected to duplicate!');
+    // Duplicate the single highlighted stroke
+    if (state.highlightedStrokes.size !== 1) {
+        showDebug('Need exactly 1 highlighted stroke to duplicate!');
         return;
     }
 
-    const sourceStroke = state.strokeHistory[state.selectedStrokeIdx];
+    const highlightedIdx = Array.from(state.highlightedStrokes)[0];
+    if (highlightedIdx >= state.strokeHistory.length) {
+        showDebug('Invalid highlighted stroke index!');
+        return;
+    }
+
+    const sourceStroke = state.strokeHistory[highlightedIdx];
 
     // Calculate bounding box of the source stroke (works for groups too)
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -393,36 +404,22 @@ export function duplicateSelectedStroke(): void {
     // Add the duplicated stroke to history
     state.strokeHistory.push(duplicatedStroke);
 
-    // Select the new stroke and move cursor to its first point
-    state.selectedStrokeIdx = state.strokeHistory.length - 1;
-    let firstPointX = 0;
-    let firstPointY = 0;
-    let foundPoint = false;
-    forEachLeafStroke(duplicatedStroke, (leafStroke: Stroke) => {
-        if (!foundPoint && leafStroke.points!.length > 0) {
-            firstPointX = leafStroke.points![0].x;
-            firstPointY = leafStroke.points![0].y;
-            foundPoint = true;
-        }
-    });
-    if (foundPoint) {
-        state.selectedStrokePointIdx = 0;
-        state.cursorAnchor = { x: firstPointX, y: firstPointY };
-        state.selectedStrokeCursorPos = { ...state.cursorAnchor };
-        callbacks.panToKeepCursorInView();
-    }
+    // Highlight the new stroke (clear previous highlights)
+    const newIdx = state.strokeHistory.length - 1;
+    state.highlightedStrokes.clear();
+    state.highlightedStrokes.add(newIdx);
 
-    // Update pickers to match the duplicated stroke
-    callbacks.updatePickersForSelectedStroke();
-
-    // Exit fresh stroke mode
+    // Deselect any selected stroke
+    state.selectedStrokeIdx = null;
+    state.selectedStrokePointIdx = null;
+    state.selectedStrokeCursorPos = null;
     state.isFreshStroke = false;
 
     // Clear transformation undo state
     state.transformSnapshot = null;
     state.hasUndoableTransform = false;
 
-    updateDelButton();
+    updateUI();
     callbacks.redraw();
 }
 
@@ -463,32 +460,28 @@ export function groupHighlightedStrokes(): void {
     state.selectedStrokeIdx = indices[0];
     state.isFreshStroke = false;
 
-    // Move cursor to the first point of the first stroke in the group
-    forEachLeafStroke(groupStroke, (leafStroke: Stroke) => {
-        if (leafStroke.points!.length > 0) {
-            state.cursorAnchor = { ...leafStroke.points![0] };
-            state.selectedStrokePointIdx = 0;
-            state.selectedStrokeCursorPos = { ...state.cursorAnchor };
-            callbacks.panToKeepCursorInView();
-        }
-        return; // Only process first leaf stroke
-    });
-
-    updateDelButton();
+    updateUI();
     callbacks.updatePickersForSelectedStroke();
     callbacks.redraw();
 }
 
 export function ungroupSelectedStroke(): void {
-    if (state.selectedStrokeIdx === null || state.selectedStrokeIdx >= state.strokeHistory.length) {
-        showDebug('No stroke selected to ungroup!');
+    // Ungroup the single highlighted stroke
+    if (state.highlightedStrokes.size !== 1) {
+        showDebug('Need exactly 1 highlighted stroke to ungroup!');
         return;
     }
 
-    const stroke = state.strokeHistory[state.selectedStrokeIdx];
+    const highlightedIdx = Array.from(state.highlightedStrokes)[0];
+    if (highlightedIdx >= state.strokeHistory.length) {
+        showDebug('Invalid highlighted stroke index!');
+        return;
+    }
+
+    const stroke = state.strokeHistory[highlightedIdx];
 
     if (!isGroup(stroke)) {
-        showDebug('Selected stroke is not a group!');
+        showDebug('Highlighted stroke is not a group!');
         return;
     }
 
@@ -496,10 +489,10 @@ export function ungroupSelectedStroke(): void {
     const children = stroke.strokes!.map(child => cloneStroke(child));
 
     // Remove the group from history
-    state.strokeHistory.splice(state.selectedStrokeIdx, 1);
+    state.strokeHistory.splice(highlightedIdx, 1);
 
     // Insert all children at the same position
-    const insertionIndex = state.selectedStrokeIdx;
+    const insertionIndex = highlightedIdx;
     state.strokeHistory.splice(insertionIndex, 0, ...children);
 
     // Highlight all the ungrouped strokes
@@ -514,7 +507,7 @@ export function ungroupSelectedStroke(): void {
     state.selectedStrokeCursorPos = null;
     state.isFreshStroke = false;
 
-    updateDelButton();
+    updateUI();
     updateGroupButtons();
     callbacks.redraw();
 }

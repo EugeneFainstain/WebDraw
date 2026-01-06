@@ -20,7 +20,7 @@
 
 import { Point } from './eventHandler';
 import { state, Stroke, TOOLBAR_HEIGHT } from './state';
-import { isGroup, forEachLeafStroke } from './strokeOperations';
+import { isGroup, forEachLeafStroke, updateUI } from './strokeOperations';
 
 // ============================================================================
 // TYPES
@@ -351,6 +351,7 @@ export function strokeIntersectsRectangle(stroke: Stroke, rectStart: Point, rect
 export function updateHighlightedStrokes(): void {
     if (!state.selectionRectStart || !state.selectionRectEnd) {
         state.highlightedStrokes.clear();
+        updateUI();
         return;
     }
 
@@ -361,6 +362,7 @@ export function updateHighlightedStrokes(): void {
             state.highlightedStrokes.add(i);
         }
     }
+    updateUI();
 }
 
 export function applyColorAndSizeToHighlightedStrokes(): void {

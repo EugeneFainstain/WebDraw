@@ -18,7 +18,7 @@ import {
     isGroup,
     forEachLeafStroke,
     transformStroke,
-    updateDelButton,
+    updateUI,
     processDelete,
     processClear,
     duplicateSelectedStroke,
@@ -287,7 +287,7 @@ function handleActions(actions: Action[]): void {
             case Action.SAVE_STROKE:
                 if (state.currentStroke && state.currentStroke.points!.length > 0) {
                     state.strokeHistory.push(state.currentStroke);
-                    updateDelButton();
+                    updateUI();
                 }
                 state.currentStroke = null;
                 state.lastGridPosition = null;
@@ -319,7 +319,7 @@ function handleActions(actions: Action[]): void {
                 state.hasUndoableTransform = false;
                 // Mark as fresh stroke (just drew)
                 state.isFreshStroke = true;
-                updateDelButton();
+                updateUI();
                 break;
 
             case Action.SELECT_CLOSEST_STROKE:
@@ -346,7 +346,7 @@ function handleActions(actions: Action[]): void {
                     // Update color and size pickers to match selected stroke
                     updatePickersForSelectedStroke();
                 }
-                updateDelButton();
+                updateUI();
                 break;
 
             case Action.DESELECT_STROKE:
@@ -358,7 +358,7 @@ function handleActions(actions: Action[]): void {
                 state.hasUndoableTransform = false;
                 // Don't change isFreshStroke - it persists through deselection
                 // NOTE: Don't clearDebug() here - debug messages should persist
-                updateDelButton();
+                updateUI();
                 break;
 
             case Action.START_SELECTION_RECTANGLE:
@@ -397,6 +397,7 @@ function handleActions(actions: Action[]): void {
                 state.selectionRectEnd = null;
                 // Clear highlighted strokes
                 state.highlightedStrokes.clear();
+                updateUI();
                 break;
 
             case Action.CLEAR_HIGHLIGHTING:
@@ -408,6 +409,7 @@ function handleActions(actions: Action[]): void {
                 } else {
                     // Cursor is in canvas region - clear highlighting as normal
                     state.highlightedStrokes.clear();
+                    updateUI();
                 }
                 break;
 
@@ -512,7 +514,7 @@ initPointerHandlers({
     clampCursorToView,
     snapToGrid,
     findClosestStrokeAndPoint,
-    updateDelButton,
+    updateUI,
     updatePickersForSelectedStroke,
     isPickerOpen: () => combinedPicker.isOpen() || menuPicker.isOpen(),
     closePicker: () => { combinedPicker.close(); menuPicker.close(); },
@@ -553,6 +555,6 @@ window.addEventListener('resize', () => resizeCanvas(clampCursorToView));
 // ============================================================================
 
 resizeCanvas(clampCursorToView);
-updateDelButton();
+updateUI();
 state.cursorAnchor = screenToCanvas({ x: state.canvas!.width / 2, y: state.canvas!.height / 2 });
 redraw();
