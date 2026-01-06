@@ -196,7 +196,7 @@ button {
 .dup-btn {
     width: 36px;
     height: 36px;
-    padding: 8px;
+    padding: 0;
     background: #4a90d9;
     color: #fff;
     display: flex;

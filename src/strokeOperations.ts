@@ -167,15 +167,25 @@ export function updateDelButton(): void {
 export function updateGroupButtons(): void {
     const dom = state.dom;
 
-    // Group button: enabled when 2+ strokes are highlighted
-    dom.btnGroup!.disabled = state.highlightedStrokes.size < 2;
-
-    // Ungroup button: enabled when a single group is selected
+    // Determine enabled states
+    const canGroup = state.highlightedStrokes.size >= 2;
+    let canUngroup = false;
     if (state.selectedStrokeIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length) {
         const stroke = state.strokeHistory[state.selectedStrokeIdx];
-        dom.btnUngroup!.disabled = !isGroup(stroke);
+        canUngroup = isGroup(stroke);
+    }
+
+    // Show only one button at a time:
+    // - If ungroup is enabled, show ungroup button
+    // - Otherwise show group button (enabled or disabled)
+    if (canUngroup) {
+        dom.btnGroup!.style.display = 'none';
+        dom.btnUngroup!.style.display = 'flex';
+        dom.btnUngroup!.disabled = false;
     } else {
-        dom.btnUngroup!.disabled = true;
+        dom.btnGroup!.style.display = 'flex';
+        dom.btnUngroup!.style.display = 'none';
+        dom.btnGroup!.disabled = !canGroup;
     }
 }
 
