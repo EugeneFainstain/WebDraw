@@ -40,6 +40,22 @@ import {
     initThreeFingerTransform,
     applyThreeFingerTransform,
 } from './transform';
+import {
+    initRendering,
+    redraw,
+    screenToCanvas,
+    canvasToScreen,
+    screenDeltaToCanvasDelta,
+    getDistance,
+    getGridCellSize,
+    snapToGrid,
+    updateHighlightedStrokes,
+    isIOS,
+    isStandalone,
+    updateFullscreenIcon,
+    hideIosTooltip,
+    resizeCanvas,
+} from './rendering';
 
 // ============================================================================
 // INITIALIZATION
@@ -49,7 +65,6 @@ const canvas = document.getElementById('drawingCanvas') as HTMLCanvasElement;
 initState(canvas);
 
 // Aliases for frequently accessed state (for cleaner code)
-const ctx = state.ctx!;
 const dom = state.dom;
 
 
@@ -137,12 +152,6 @@ const combinedPicker = createCombinedPicker(
 // UTILITY FUNCTIONS
 // ============================================================================
 
-function getDistance(p1: Point, p2: Point): number {
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    return Math.sqrt(dx * dx + dy * dy);
-}
-
 // Helper function to update color and size pickers when a stroke is selected
 function updatePickersForSelectedStroke() {
     if (state.selectedStrokeIdx !== null) {
@@ -166,13 +175,6 @@ function updatePickersForSelectedStroke() {
             combinedPicker.setSize(stroke.size!);
         }
     }
-}
-
-function getMidpoint(p1: Point, p2: Point): Point {
-    return {
-        x: (p1.x + p2.x) / 2,
-        y: (p1.y + p2.y) / 2
-    };
 }
 
 function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; pointIdx: number; point: Point } | null {
@@ -224,317 +226,6 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
         pointIdx: closestPointIdx,
         point: { x: closestPointX, y: closestPointY }
     };
-}
-
-// ============================================================================
-// COORDINATE TRANSFORMATIONS
-// ============================================================================
-
-function screenToCanvas(screenPos: Point): Point {
-    const cos = Math.cos(-state.viewTransform.rotation);
-    const sin = Math.sin(-state.viewTransform.rotation);
-
-    const x1 = screenPos.x - state.viewTransform.panX;
-    const y1 = screenPos.y - state.viewTransform.panY;
-
-    const cx = state.canvas!.width / 2;
-    const cy = state.canvas!.height / 2;
-    const x2 = cos * (x1 - cx) - sin * (y1 - cy) + cx;
-    const y2 = sin * (x1 - cx) + cos * (y1 - cy) + cy;
-
-    const x3 = (x2 - cx) / state.viewTransform.scale + cx;
-    const y3 = (y2 - cy) / state.viewTransform.scale + cy;
-
-    return { x: x3, y: y3 };
-}
-
-function canvasToScreen(canvasPos: Point): Point {
-    const cx = state.canvas!.width / 2;
-    const cy = state.canvas!.height / 2;
-
-    const x1 = (canvasPos.x - cx) * state.viewTransform.scale + cx;
-    const y1 = (canvasPos.y - cy) * state.viewTransform.scale + cy;
-
-    const cos = Math.cos(state.viewTransform.rotation);
-    const sin = Math.sin(state.viewTransform.rotation);
-    const x2 = cos * (x1 - cx) - sin * (y1 - cy) + cx;
-    const y2 = sin * (x1 - cx) + cos * (y1 - cy) + cy;
-
-    const x3 = x2 + state.viewTransform.panX;
-    const y3 = y2 + state.viewTransform.panY;
-
-    return { x: x3, y: y3 };
-}
-
-// Transform a delta/vector from screen space to canvas space
-// Deltas only need rotation and scale, no translation
-function screenDeltaToCanvasDelta(screenDelta: Point): Point {
-    const cos = Math.cos(-state.viewTransform.rotation);
-    const sin = Math.sin(-state.viewTransform.rotation);
-    const canvasDeltaX = (cos * screenDelta.x - sin * screenDelta.y) / state.viewTransform.scale;
-    const canvasDeltaY = (sin * screenDelta.x + cos * screenDelta.y) / state.viewTransform.scale;
-    return { x: canvasDeltaX, y: canvasDeltaY };
-}
-
-// Convert a screen-space vector length to canvas-space vector length
-// Only scale matters for lengths, not rotation or translation
-function screenLengthToCanvasLength(screenLength: number): number {
-    return screenLength / state.viewTransform.scale;
-}
-
-// ============================================================================
-// GRID FUNCTIONS
-// ============================================================================
-
-function getGridCellSize(): number {
-    const defaultStrokeSize = 6;
-    return defaultStrokeSize * 4;
-}
-
-function snapToGrid(point: Point): Point {
-    const cellSize = getGridCellSize();
-    return {
-        x: Math.round(point.x / cellSize) * cellSize,
-        y: Math.round(point.y / cellSize) * cellSize
-    };
-}
-
-function drawGrid() {
-    const cellSize = getGridCellSize();
-
-    ctx.strokeStyle = 'lightblue';
-    ctx.lineWidth = screenLengthToCanvasLength(1);
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'miter';
-
-    const topLeft = screenToCanvas({ x: 0, y: 0 });
-    const topRight = screenToCanvas({ x: state.canvas!.width, y: 0 });
-    const bottomLeft = screenToCanvas({ x: 0, y: state.canvas!.height });
-    const bottomRight = screenToCanvas({ x: state.canvas!.width, y: state.canvas!.height });
-
-    const minX = Math.min(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x);
-    const maxX = Math.max(topLeft.x, topRight.x, bottomLeft.x, bottomRight.x);
-    const minY = Math.min(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y);
-    const maxY = Math.max(topLeft.y, topRight.y, bottomLeft.y, bottomRight.y);
-
-    const margin = cellSize * 2;
-    const gridLeft = Math.floor((minX - margin) / cellSize) * cellSize;
-    const gridRight = Math.ceil((maxX + margin) / cellSize) * cellSize;
-    const gridTop = Math.floor((minY - margin) / cellSize) * cellSize;
-    const gridBottom = Math.ceil((maxY + margin) / cellSize) * cellSize;
-
-    for (let x = gridLeft; x <= gridRight; x += cellSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, gridTop);
-        ctx.lineTo(x, gridBottom);
-        ctx.stroke();
-    }
-
-    for (let y = gridTop; y <= gridBottom; y += cellSize) {
-        ctx.beginPath();
-        ctx.moveTo(gridLeft, y);
-        ctx.lineTo(gridRight, y);
-        ctx.stroke();
-    }
-}
-
-// ============================================================================
-// DRAWING FUNCTIONS
-// ============================================================================
-
-function drawStroke(stroke: Stroke, isHighlighted: boolean = false) {
-    // If this is a group, draw all children recursively
-    if (isGroup(stroke)) {
-        for (const child of stroke.strokes!) {
-            drawStroke(child, isHighlighted);
-        }
-        return;
-    }
-
-    // Determine which points to use - fitted or original
-    const pointsToUse = (stroke.showingFitted && stroke.fittedPoints) ? stroke.fittedPoints : stroke.points!;
-
-    const minSize = screenLengthToCanvasLength(1);
-    const renderSize = Math.max(stroke.size!, minSize);
-
-    if (pointsToUse.length < 2) {
-        if (pointsToUse.length === 1) {
-            // Draw highlighted version first (grey outline) for single point
-            if (isHighlighted) {
-                ctx.fillStyle = 'lightgrey';
-                ctx.beginPath();
-                ctx.arc(pointsToUse[0].x, pointsToUse[0].y, renderSize * 2 / 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            // Draw normal version on top
-            ctx.fillStyle = stroke.color!;
-            ctx.beginPath();
-            ctx.arc(pointsToUse[0].x, pointsToUse[0].y, renderSize / 2, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        return;
-    }
-
-    // Draw highlighted version first (grey outline with 2x thickness)
-    if (isHighlighted) {
-        ctx.strokeStyle = 'lightgrey';
-        ctx.lineWidth = renderSize * 2;
-        ctx.beginPath();
-        ctx.moveTo(pointsToUse[0].x, pointsToUse[0].y);
-        for (let i = 1; i < pointsToUse.length; i++) {
-            ctx.lineTo(pointsToUse[i].x, pointsToUse[i].y);
-        }
-        ctx.stroke();
-    }
-
-    // Draw normal stroke on top
-    ctx.strokeStyle = stroke.color!;
-    ctx.lineWidth = renderSize;
-    ctx.beginPath();
-    ctx.moveTo(pointsToUse[0].x, pointsToUse[0].y);
-
-    for (let i = 1; i < pointsToUse.length; i++) {
-        ctx.lineTo(pointsToUse[i].x, pointsToUse[i].y);
-    }
-    ctx.stroke();
-}
-
-function redraw() {
-    ctx.clearRect(0, 0, state.canvas!.width, state.canvas!.height);
-
-    // Apply view transform
-    ctx.save();
-    const cx = state.canvas!.width / 2;
-    const cy = state.canvas!.height / 2;
-    ctx.translate(state.viewTransform.panX, state.viewTransform.panY);
-    ctx.translate(cx, cy);
-    ctx.rotate(state.viewTransform.rotation);
-    ctx.scale(state.viewTransform.scale, state.viewTransform.scale);
-    ctx.translate(-cx, -cy);
-
-    // Draw grid if grid mode is enabled
-    if (state.isGridMode) {
-        drawGrid();
-    }
-
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // Draw completed strokes (including groups)
-    state.strokeHistory.forEach((stroke, index) => {
-        const isHighlighted = state.highlightedStrokes.has(index);
-        drawStroke(stroke, isHighlighted);
-    });
-
-    // Draw current in-progress stroke
-    if (state.currentStroke) {
-        drawStroke(state.currentStroke);
-    }
-
-    ctx.restore();
-
-    // Draw selection rectangle (in screen space, aligned to screen axes)
-    if (state.selectionRectStart && state.selectionRectEnd) {
-        // Convert canvas coordinates to screen coordinates
-        const screenStart = canvasToScreen(state.selectionRectStart);
-        const screenEnd = canvasToScreen(state.selectionRectEnd);
-
-        // Calculate screen-aligned rectangle bounds
-        const minX = Math.min(screenStart.x, screenEnd.x);
-        const maxX = Math.max(screenStart.x, screenEnd.x);
-        const minY = Math.min(screenStart.y, screenEnd.y);
-        const maxY = Math.max(screenStart.y, screenEnd.y);
-
-        // Draw semi-transparent rectangle
-        ctx.fillStyle = 'rgba(135, 206, 250, 0.3)'; // Light blue with 30% opacity
-        ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
-
-        // Draw rectangle border
-        ctx.strokeStyle = 'rgba(30, 144, 255, 0.8)'; // Dodger blue with 80% opacity
-        ctx.lineWidth = 2;
-        ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
-    }
-
-    // Update CSS cursor div position and appearance
-    updateCursorDiv();
-
-    // Update combined picker button states
-    updateCombinedPickerButtonStates();
-}
-
-function updateCombinedPickerButtonStates() {
-    // Update grid button state
-    combinedPicker.setGridActive(state.isGridMode);
-
-    // Update fit button state
-    if (state.selectedStrokeIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length) {
-        const stroke = state.strokeHistory[state.selectedStrokeIdx];
-        const isFitActive = stroke.showingFitted === true;
-        combinedPicker.setFitState(true, isFitActive);
-    } else {
-        combinedPicker.setFitState(false, false);
-    }
-}
-
-// ============================================================================
-// SELECTION RECTANGLE
-// ============================================================================
-
-function strokeIntersectsRectangle(stroke: Stroke, rectStart: Point, rectEnd: Point): boolean {
-    // If this is a group, check if any child intersects
-    if (isGroup(stroke)) {
-        return stroke.strokes!.some(child => strokeIntersectsRectangle(child, rectStart, rectEnd));
-    }
-
-    // Convert rectangle corners to screen space to get screen-aligned bounds
-    const screenStart = canvasToScreen(rectStart);
-    const screenEnd = canvasToScreen(rectEnd);
-
-    // Get screen-aligned rectangle bounds
-    const minX = Math.min(screenStart.x, screenEnd.x);
-    const maxX = Math.max(screenStart.x, screenEnd.x);
-    const minY = Math.min(screenStart.y, screenEnd.y);
-    const maxY = Math.max(screenStart.y, screenEnd.y);
-
-    // Check if any point in the stroke (converted to screen space) is inside the screen-aligned rectangle
-    for (const point of stroke.points!) {
-        const screenPoint = canvasToScreen(point);
-        if (screenPoint.x >= minX && screenPoint.x <= maxX && screenPoint.y >= minY && screenPoint.y <= maxY) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-function updateHighlightedStrokes(): void {
-    if (!state.selectionRectStart || !state.selectionRectEnd) {
-        state.highlightedStrokes.clear();
-        return;
-    }
-
-    // Update the set of highlighted strokes based on current rectangle
-    state.highlightedStrokes.clear();
-    for (let i = 0; i < state.strokeHistory.length; i++) {
-        if (strokeIntersectsRectangle(state.strokeHistory[i], state.selectionRectStart, state.selectionRectEnd)) {
-            state.highlightedStrokes.add(i);
-        }
-    }
-}
-
-function applyColorAndSizeToHighlightedStrokes(): void {
-    if (state.highlightedStrokes.size === 0) return;
-
-    const currentColor = combinedPicker.getColor();
-    const currentSize = combinedPicker.getSize();
-
-    // Apply color and size to all highlighted strokes
-    for (const index of state.highlightedStrokes) {
-        if (index < state.strokeHistory.length) {
-            state.strokeHistory[index].color = currentColor;
-            state.strokeHistory[index].size = currentSize;
-        }
-    }
 }
 
 // ============================================================================
@@ -739,20 +430,17 @@ state.eventHandler.setEventCallback((event: Event) => {
 });
 
 // ============================================================================
-// CANVAS AND WINDOW
+// MODULE INITIALIZATION
 // ============================================================================
 
-function resizeCanvas() {
-    const toolbarHeight = 60;
-    state.canvas!.width = window.innerWidth;
-    state.canvas!.height = window.innerHeight - toolbarHeight;
-    clampCursorToView();
-    redraw();
-}
-
-// ============================================================================
-// EVENT LISTENERS
-// ============================================================================
+// Initialize rendering
+initRendering({
+    getPickerColor: () => combinedPicker.getColor(),
+    getPickerSize: () => combinedPicker.getSize(),
+    setPickerGridActive: (active: boolean) => combinedPicker.setGridActive(active),
+    setPickerFitState: (enabled: boolean, active: boolean) => combinedPicker.setFitState(enabled, active),
+    updateCursorDiv,
+});
 
 // Initialize stroke operations
 initStrokeOperations({
@@ -800,6 +488,10 @@ initPointerHandlers({
 });
 setupPointerEventListeners();
 
+// ============================================================================
+// EVENT LISTENERS
+// ============================================================================
+
 dom.delBtn!.addEventListener('click', () => state.eventHandler.handleDelete());
 dom.clearBtn!.addEventListener('click', () => state.eventHandler.handleClear());
 
@@ -816,33 +508,6 @@ dom.btnUngroup!.addEventListener('click', () => {
 });
 
 // Fullscreen toggle
-// Detect iOS (iPhone/iPad in Safari or any iOS browser)
-function isIOS(): boolean {
-    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-
-// Check if running as standalone PWA (added to home screen)
-function isStandalone(): boolean {
-    return (window.navigator as any).standalone === true ||
-        window.matchMedia('(display-mode: standalone)').matches;
-}
-
-function updateFullscreenIcon() {
-    const isFullscreen = !!document.fullscreenElement || isStandalone();
-    dom.enterFullscreenIcon!.style.display = isFullscreen ? 'none' : 'block';
-    dom.exitFullscreenIcon!.style.display = isFullscreen ? 'block' : 'none';
-
-    // Disable button when running as standalone PWA on iOS (already fullscreen, can't exit)
-    if (isIOS() && isStandalone()) {
-        dom.fullscreenBtn!.disabled = true;
-    }
-}
-
-function hideIosTooltip() {
-    dom.iosFullscreenTooltip!.classList.remove('visible');
-}
-
 dom.fullscreenBtn!.addEventListener('click', () => {
     if (isIOS() && !isStandalone()) {
         // On iOS (not in PWA mode), show the tooltip instead
@@ -861,16 +526,16 @@ dom.iosTooltipClose!.addEventListener('click', () => {
 document.addEventListener('fullscreenchange', () => {
     updateFullscreenIcon();
     // Resize canvas after fullscreen change
-    setTimeout(resizeCanvas, 100);
+    setTimeout(() => resizeCanvas(clampCursorToView), 100);
 });
 
-window.addEventListener('resize', resizeCanvas);
+window.addEventListener('resize', () => resizeCanvas(clampCursorToView));
 
 // ============================================================================
 // STARTUP
 // ============================================================================
 
-resizeCanvas();
+resizeCanvas(clampCursorToView);
 updateDelButton();
 updateFullscreenIcon();
 state.cursorAnchor = screenToCanvas({ x: state.canvas!.width / 2, y: state.canvas!.height / 2 });
