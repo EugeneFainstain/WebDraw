@@ -319,6 +319,9 @@ function deleteStroke(): void {
     // Remove the stroke FIRST (before finding closest, to avoid index shift issues)
     state.strokeHistory.splice(indexToDelete, 1);
 
+    // Clear highlighted strokes - indices are now invalid after deletion
+    state.highlightedStrokes.clear();
+
     // Clear transformation undo state when deleting a stroke
     state.transformSnapshot = null;
     state.hasUndoableTransform = false;
