@@ -96,7 +96,7 @@ button {
 }
 
 .del-btn:hover:not(:disabled) {
-    background: #357abd;
+    background: #4a90d9;
 }
 
 .del-btn:disabled {
@@ -171,7 +171,7 @@ button {
 }
 
 .fit-btn:hover:not(:disabled) {
-    background: #357abd;
+    background: #4a90d9;
 }
 
 .fit-btn:disabled {
@@ -186,7 +186,7 @@ button {
 }
 
 .fit-btn.active:hover {
-    background: #357abd;
+    background: #4a90d9;
 }
 
 .fit-btn svg {
@@ -206,7 +206,7 @@ button {
 }
 
 .dup-btn:hover:not(:disabled) {
-    background: #357abd;
+    background: #4a90d9;
 }
 
 .dup-btn:disabled {
@@ -233,7 +233,7 @@ button {
 }
 
 .group-btn:hover:not(:disabled) {
-    background: #357abd;
+    background: #4a90d9;
 }
 
 .group-btn:disabled {
@@ -260,7 +260,7 @@ button {
 }
 
 .ungroup-btn:hover:not(:disabled) {
-    background: #357abd;
+    background: #4a90d9;
 }
 
 .ungroup-btn:disabled {
@@ -287,7 +287,7 @@ button {
 }
 
 .fit-btn:hover:not(:disabled) {
-    background: #357abd;
+    background: #4a90d9;
 }
 
 .fit-btn:disabled {
@@ -377,7 +377,7 @@ button {
 }
 
 .ios-fullscreen-tooltip .tooltip-close:hover {
-    background: #357abd;
+    background: #4a90d9;
 }
 
 #debugOverlay {
