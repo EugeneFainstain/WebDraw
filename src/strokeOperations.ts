@@ -457,8 +457,9 @@ export function groupHighlightedStrokes(): void {
     // Add the group at the position of the first stroke
     state.strokeHistory.splice(indices[0], 0, groupStroke);
 
-    // Clear highlighted strokes and select the new group
+    // Clear highlighted strokes, select the new group, and highlight it
     state.highlightedStrokes.clear();
+    state.highlightedStrokes.add(indices[0]);
     state.selectedStrokeIdx = indices[0];
     state.isFreshStroke = false;
 
@@ -498,7 +499,14 @@ export function ungroupSelectedStroke(): void {
     state.strokeHistory.splice(state.selectedStrokeIdx, 1);
 
     // Insert all children at the same position
-    state.strokeHistory.splice(state.selectedStrokeIdx, 0, ...children);
+    const insertionIndex = state.selectedStrokeIdx;
+    state.strokeHistory.splice(insertionIndex, 0, ...children);
+
+    // Highlight all the ungrouped strokes
+    state.highlightedStrokes.clear();
+    for (let i = 0; i < children.length; i++) {
+        state.highlightedStrokes.add(insertionIndex + i);
+    }
 
     // Deselect
     state.selectedStrokeIdx = null;
@@ -507,5 +515,6 @@ export function ungroupSelectedStroke(): void {
     state.isFreshStroke = false;
 
     updateDelButton();
+    updateGroupButtons();
     callbacks.redraw();
 }
