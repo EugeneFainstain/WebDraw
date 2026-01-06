@@ -1,7 +1,7 @@
 import '../styles.css';
 import { createCombinedPicker } from './combinedPicker';
 import { createMenuPicker } from './menuPicker';
-import { Event, Action } from './stateMachine';
+import { Event, Action, State } from './stateMachine';
 import { Point } from './eventHandler';
 import {
     state,
@@ -265,6 +265,10 @@ function handleActions(actions: Action[]): void {
                 break;
 
             case Action.ABANDON_STROKE:
+                // Move cursor back to where the stroke started
+                if (state.currentStroke && state.currentStroke.points && state.currentStroke.points.length > 0) {
+                    state.cursorAnchor = { ...state.currentStroke.points[0] };
+                }
                 state.currentStroke = null;
                 state.lastGridPosition = null;
                 break;
@@ -419,8 +423,26 @@ function handleActions(actions: Action[]): void {
 // ============================================================================
 
 state.eventHandler.setEventCallback((event: Event) => {
+    const prevState = state.stateMachine.getState();
+    const wasStrokeSelected = state.stateMachine.isStrokeSelected();
+
+    // Save cursor position when starting to drag with a stroke selected
+    if (event === Event.F1_DOWN && prevState === State.Idle && wasStrokeSelected && state.cursorAnchor) {
+        state.dragStartCursorPos = { ...state.cursorAnchor };
+    }
+
     const result = state.stateMachine.processEvent(event);
     handleActions(result.actions);
+
+    // Restore cursor position if drag was cancelled (finger up without moving far)
+    if (event === Event.FINGER_UP && prevState === State.MovingCursor && wasStrokeSelected) {
+        const flags = state.stateMachine.getFlags();
+        // If we didn't move far, restore cursor to drag start position
+        if (!flags.FINGER_MOVED_FAR_HAPPENED && state.dragStartCursorPos) {
+            state.cursorAnchor = { ...state.dragStartCursorPos };
+        }
+        state.dragStartCursorPos = null;
+    }
 
     // Handle finger promotion discontinuity
     if (event === Event.FINGER_UP) {

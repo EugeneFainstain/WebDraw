@@ -134,6 +134,9 @@ export const state = {
     // Reference position for selected stroke tracking
     selectedStrokeCursorPos: null as Point | null,
 
+    // Cursor position at start of drag gesture (for restoring if drag is cancelled)
+    dragStartCursorPos: null as Point | null,
+
     // Track if we're in "fresh stroke" mode (just drew, not manually selected)
     isFreshStroke: false,
 
@@ -226,6 +229,7 @@ export function resetState() {
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
     state.selectedStrokeCursorPos = null;
+    state.dragStartCursorPos = null;
     state.selectionRectStart = null;
     state.selectionRectEnd = null;
     state.highlightedStrokes.clear();

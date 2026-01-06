@@ -518,6 +518,13 @@ export function updateCursorDiv(): void {
         return;
     }
 
+    // Hide cursor during transform operations
+    const currentState = state.stateMachine.getState();
+    if (currentState === State.Transform) {
+        state.dom.cursorDiv!.style.display = 'none';
+        return;
+    }
+
     const cursorPos = getCursorScreenPos();
     const strokeSize = callbacks.getPickerSize();
     const renderedSize = Math.max(strokeSize * state.viewTransform.scale, 1);
@@ -525,7 +532,7 @@ export function updateCursorDiv(): void {
     const isWhite = drawColor.toUpperCase() === '#FFFFFF';
 
     // Check if we're in Drawing state
-    const isDrawing = state.stateMachine.getState() === State.Drawing;
+    const isDrawing = currentState === State.Drawing;
 
     if (isDrawing) {
         // Drawing state: show circle outline with inverse of selected color

@@ -66,7 +66,7 @@ The state machine responds to **9 events**:
 3. **F3_DOWN** - Third finger touches screen
 4. **FINGER_UP** - Any finger lifts from screen
 5. **TIMEOUT** - 250ms has elapsed since ANY finger down
-6. **FINGER_MOVED_FAR** - Finger moved >8mm from reference point (screen-space)
+6. **FINGER_MOVED_FAR** - Finger moved >2mm from reference point (screen-space)
 7. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (8mm screen-space), indicating zoom/pan/rotate gesture
 8. **DELETE** - Delete button pressed
 9. **CLEAR** - Clear button pressed
@@ -155,7 +155,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F3_DOWN | Transform (keep Normal) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] | Transform (keep Selected) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] |
 | FINGER_UP | MovingCursor (→ Selected) - [SAVE_STROKE, SELECT_STROKE] | MovingCursor (keep Selected) - [SAVE_STROKE] |
 | TIMEOUT | Drawing (keep Normal) - [SET_TIMEOUT_FLAG] | Drawing (keep Selected) - [SET_TIMEOUT_FLAG] |
-| FINGER_MOVED_FAR | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | Drawing (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
+| FINGER_MOVED_FAR | Drawing (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG] | Drawing (keep Selected) - [SET_FINGER_MOVED_FAR_FLAG] |
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
@@ -201,7 +201,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 1. **TIMEOUT_HAPPENED**: Set after 250ms from any finger down. This flag provides timing information for stroke protection.
 
-2. **FINGER_MOVED_FAR_HAPPENED**: Set when any finger moves >30px from its reference point. Used in Drawing state to determine whether to save or abandon a stroke when F3_DOWN occurs.
+2. **FINGER_MOVED_FAR_HAPPENED**: Set when any finger moves >2mm from its reference point. Used in Drawing state to determine whether to save or abandon a stroke when F3_DOWN occurs.
 
 ### Selected Stroke Mode
 
@@ -214,7 +214,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 - Single tap (quick tap without timeout or movement) when a stroke is selected - deselects the stroke
 - DELETE button pressed (removes selected stroke, selects another)
 - CLEAR button pressed
-- Cursor movement >30px from selected stroke position (FINGER_MOVED_FAR in MovingCursor)
+- Cursor movement >2mm from selected stroke position (FINGER_MOVED_FAR in MovingCursor)
 - Too many fingers (F3_DOWN in MovingCursor)
 
 **Behavior:**

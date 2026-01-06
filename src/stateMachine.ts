@@ -481,11 +481,11 @@ export class StateMachine {
                 };
 
             case Event.FINGER_MOVED_FAR:
-                // Deselect stroke (→ Normal)
+                // Keep selection during drawing (might be a zoom gesture)
                 return {
                     newState: State.Drawing,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.DESELECT_STROKE]
+                    newModifier: { isStrokeSelected },  // keep
+                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG]
                 };
 
             case Event.DELETE:
