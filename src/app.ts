@@ -1,5 +1,6 @@
 import '../styles.css';
 import { createCombinedPicker } from './combinedPicker';
+import { createMenuPicker } from './menuPicker';
 import { Event, Action } from './stateMachine';
 import { Point } from './eventHandler';
 import { fitStroke } from './shapeFitting';
@@ -28,7 +29,6 @@ import {
     initCursorMovement,
     updateCursorPosition,
     addPointToStroke,
-    setCursorToDefaultPosition,
     clampCursorToView,
     panToKeepCursorInView,
     isCursorInMenuRegion,
@@ -52,7 +52,6 @@ import {
     updateHighlightedStrokes,
     isIOS,
     isStandalone,
-    updateFullscreenIcon,
     hideIosTooltip,
     resizeCanvas,
 } from './rendering';
@@ -71,6 +70,25 @@ const dom = state.dom;
 // ============================================================================
 // CUSTOM UI COMPONENTS
 // ============================================================================
+
+const menuPicker = createMenuPicker(
+    dom.menuPickerEl!,
+    () => {
+        // Fullscreen toggle
+        if (isIOS() && !isStandalone()) {
+            // On iOS (not in PWA mode), show the tooltip instead
+            dom.iosFullscreenTooltip!.classList.toggle('visible');
+        } else if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            document.documentElement.requestFullscreen();
+        }
+    },
+    () => {
+        // Reset (clear) - use the event handler
+        state.eventHandler.handleClear();
+    }
+);
 
 const combinedPicker = createCombinedPicker(
     dom.combinedPickerEl!,
@@ -483,8 +501,8 @@ initPointerHandlers({
     findClosestStrokeAndPoint,
     updateDelButton,
     updatePickersForSelectedStroke,
-    isPickerOpen: () => combinedPicker.isOpen(),
-    closePicker: () => combinedPicker.close(),
+    isPickerOpen: () => combinedPicker.isOpen() || menuPicker.isOpen(),
+    closePicker: () => { combinedPicker.close(); menuPicker.close(); },
 });
 setupPointerEventListeners();
 
@@ -493,7 +511,6 @@ setupPointerEventListeners();
 // ============================================================================
 
 dom.delBtn!.addEventListener('click', () => state.eventHandler.handleDelete());
-dom.clearBtn!.addEventListener('click', () => state.eventHandler.handleClear());
 
 dom.btnDup!.addEventListener('click', () => {
     duplicateSelectedStroke();
@@ -507,24 +524,11 @@ dom.btnUngroup!.addEventListener('click', () => {
     ungroupSelectedStroke();
 });
 
-// Fullscreen toggle
-dom.fullscreenBtn!.addEventListener('click', () => {
-    if (isIOS() && !isStandalone()) {
-        // On iOS (not in PWA mode), show the tooltip instead
-        dom.iosFullscreenTooltip!.classList.toggle('visible');
-    } else if (document.fullscreenElement) {
-        document.exitFullscreen();
-    } else {
-        document.documentElement.requestFullscreen();
-    }
-});
-
 dom.iosTooltipClose!.addEventListener('click', () => {
     hideIosTooltip();
 });
 
 document.addEventListener('fullscreenchange', () => {
-    updateFullscreenIcon();
     // Resize canvas after fullscreen change
     setTimeout(() => resizeCanvas(clampCursorToView), 100);
 });
@@ -537,6 +541,5 @@ window.addEventListener('resize', () => resizeCanvas(clampCursorToView));
 
 resizeCanvas(clampCursorToView);
 updateDelButton();
-updateFullscreenIcon();
 state.cursorAnchor = screenToCanvas({ x: state.canvas!.width / 2, y: state.canvas!.height / 2 });
 redraw();

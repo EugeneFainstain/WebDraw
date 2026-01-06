@@ -394,18 +394,6 @@ export function isStandalone(): boolean {
         window.matchMedia('(display-mode: standalone)').matches;
 }
 
-export function updateFullscreenIcon(): void {
-    const dom = state.dom;
-    const isFullscreen = !!document.fullscreenElement || isStandalone();
-    dom.enterFullscreenIcon!.style.display = isFullscreen ? 'none' : 'block';
-    dom.exitFullscreenIcon!.style.display = isFullscreen ? 'block' : 'none';
-
-    // Disable button when running as standalone PWA on iOS (already fullscreen, can't exit)
-    if (isIOS() && isStandalone()) {
-        dom.fullscreenBtn!.disabled = true;
-    }
-}
-
 export function hideIosTooltip(): void {
     state.dom.iosFullscreenTooltip!.classList.remove('visible');
 }

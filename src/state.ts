@@ -98,16 +98,13 @@ export const state = {
     // DOM Elements (initialized in initState())
     dom: {
         combinedPickerEl: null as HTMLElement | null,
+        menuPickerEl: null as HTMLElement | null,
         delBtn: null as HTMLButtonElement | null,
         undoIcon: null as SVGElement | null,
         deleteIcon: null as SVGElement | null,
-        clearBtn: null as HTMLButtonElement | null,
         btnDup: null as HTMLButtonElement | null,
         btnGroup: null as HTMLButtonElement | null,
         btnUngroup: null as HTMLButtonElement | null,
-        fullscreenBtn: null as HTMLButtonElement | null,
-        enterFullscreenIcon: null as SVGElement | null,
-        exitFullscreenIcon: null as SVGElement | null,
         iosFullscreenTooltip: null as HTMLElement | null,
         iosTooltipClose: null as HTMLButtonElement | null,
         debugOverlay: null as HTMLElement | null,
@@ -198,16 +195,13 @@ export function initState(canvas: HTMLCanvasElement) {
 
     // Initialize DOM references
     state.dom.combinedPickerEl = document.getElementById('combinedPicker') as HTMLElement;
+    state.dom.menuPickerEl = document.getElementById('menuPicker') as HTMLElement;
     state.dom.delBtn = document.getElementById('delBtn') as HTMLButtonElement;
     state.dom.undoIcon = document.getElementById('undoIcon') as unknown as SVGElement;
     state.dom.deleteIcon = document.getElementById('deleteIcon') as unknown as SVGElement;
-    state.dom.clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
     state.dom.btnDup = document.getElementById('btnDup') as HTMLButtonElement;
     state.dom.btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
     state.dom.btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
-    state.dom.fullscreenBtn = document.getElementById('fullscreenBtn') as HTMLButtonElement;
-    state.dom.enterFullscreenIcon = document.getElementById('enterFullscreenIcon') as unknown as SVGElement;
-    state.dom.exitFullscreenIcon = document.getElementById('exitFullscreenIcon') as unknown as SVGElement;
     state.dom.iosFullscreenTooltip = document.getElementById('iosFullscreenTooltip') as HTMLElement;
     state.dom.iosTooltipClose = document.getElementById('iosTooltipClose') as HTMLButtonElement;
     state.dom.debugOverlay = document.getElementById('debugOverlay') as HTMLElement;

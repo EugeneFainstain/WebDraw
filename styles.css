@@ -58,6 +58,11 @@ html, body {
     height: 36px;
 }
 
+#menuPicker {
+    width: 36px;
+    height: 36px;
+}
+
 #strokeSize {
     width: 120px;
     cursor: pointer;
