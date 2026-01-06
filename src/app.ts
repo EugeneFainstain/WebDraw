@@ -3,7 +3,6 @@ import { createCombinedPicker } from './combinedPicker';
 import { createMenuPicker } from './menuPicker';
 import { Event, Action } from './stateMachine';
 import { Point } from './eventHandler';
-import { fitStroke } from './shapeFitting';
 import {
     state,
     initState,
@@ -24,6 +23,7 @@ import {
     duplicateSelectedStroke,
     groupHighlightedStrokes,
     ungroupSelectedStroke,
+    toggleFit,
 } from './strokeOperations';
 import {
     initCursorMovement,
@@ -141,35 +141,6 @@ const combinedPicker = createCombinedPicker(
         if (state.isGridMode && state.cursorAnchor) {
             state.cursorAnchor = snapToGrid(state.cursorAnchor);
         }
-        redraw();
-    },
-    () => {
-        // Fit button
-        // Only work if a stroke is selected
-        if (state.selectedStrokeIdx === null || state.selectedStrokeIdx >= state.strokeHistory.length) {
-            return;
-        }
-
-        const stroke = state.strokeHistory[state.selectedStrokeIdx];
-
-        // Determine if we're toggling ON or OFF
-        const turningOn = !stroke.showingFitted;
-
-        // If turning ON and stroke hasn't been fitted yet, or if it's a polyline/polygon
-        // that was fitted with a different stroke size, fit it now
-        const isSizeDependentFit = stroke.fitType === 'polyline' || stroke.fitType?.startsWith('polygon-');
-        const needsRefit = !stroke.fittedPoints ||
-                          (isSizeDependentFit && stroke.fittedWithSize !== stroke.size!);
-
-        if (turningOn && needsRefit) {
-            fitStroke(stroke);
-        }
-
-        // Toggle display between fitted and original
-        if (stroke.fittedPoints && stroke.originalPoints) {
-            stroke.showingFitted = turningOn;
-        }
-
         redraw();
     },
     () => {
@@ -353,6 +324,11 @@ function handleActions(actions: Action[]): void {
                 state.selectedStrokeCursorPos = null;
                 state.selectedStrokeIdx = null;
                 state.selectedStrokePointIdx = null;
+                // If we're currently drawing, also clear highlighting
+                // (this happens when FINGER_MOVED_FAR during drawing)
+                if (state.currentStroke !== null) {
+                    state.highlightedStrokes.clear();
+                }
                 // Clear transformation undo state on deselection
                 state.transformSnapshot = null;
                 state.hasUndoableTransform = false;
@@ -471,7 +447,6 @@ initRendering({
     getPickerColor: () => combinedPicker.getColor(),
     getPickerSize: () => combinedPicker.getSize(),
     setPickerGridActive: (active: boolean) => combinedPicker.setGridActive(active),
-    setPickerFitState: (enabled: boolean, active: boolean) => combinedPicker.setFitState(enabled, active),
     updateCursorDiv,
 });
 
@@ -537,6 +512,10 @@ dom.btnGroup!.addEventListener('click', () => {
 
 dom.btnUngroup!.addEventListener('click', () => {
     ungroupSelectedStroke();
+});
+
+dom.btnFit!.addEventListener('click', () => {
+    toggleFit();
 });
 
 dom.iosTooltipClose!.addEventListener('click', () => {

@@ -22,15 +22,12 @@ export function createCombinedPicker(
     onColorChange: (color: string) => void,
     onSizeChange: (size: number) => void,
     onGridToggle?: () => void,
-    onFit?: () => void,
     onBeforeOpen?: () => void
 ) {
     let currentColor = COLORS[1]; // Orange
     let currentSize = SIZES[4]; // Default to 6
     let popup: HTMLElement | null = null;
     let isGridActive = false;
-    let isFitEnabled = false;
-    let isFitActive = false;
 
     // Style the trigger element - looks like size picker but with colored dot
     function updateTrigger() {
@@ -215,85 +212,12 @@ export function createCombinedPicker(
             buttonsContainer.appendChild(gridBtn);
         }
 
-        // Fit button
-        let fitBtn: HTMLElement | null = null;
-        if (onFit) {
-            fitBtn = document.createElement('button');
-
-            // Set initial styles
-            fitBtn.style.cssText = `
-                flex: 1;
-                height: 40px;
-                background: #444;
-                color: #666;
-                border: 2px solid #444;
-                border-radius: 4px;
-                cursor: not-allowed;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 6px;
-                font-size: 14px;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                opacity: 0.5;
-            `;
-
-            const updateFitBtnStyle = () => {
-                if (!fitBtn) return;
-                const background = !isFitEnabled ? '#444' : (isFitActive ? '#4a90d9' : '#555');
-                const color = !isFitEnabled ? '#666' : '#fff';
-                const cursor = !isFitEnabled ? 'not-allowed' : 'pointer';
-                const opacity = !isFitEnabled ? '0.5' : '1';
-
-                // Update individual style properties instead of cssText to preserve children
-                fitBtn.style.background = background;
-                fitBtn.style.color = color;
-                fitBtn.style.cursor = cursor;
-                fitBtn.style.opacity = opacity;
-            };
-
-            // Fit icon SVG (star)
-            const fitIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            fitIcon.setAttribute('viewBox', '0 0 24 24');
-            fitIcon.setAttribute('width', '18');
-            fitIcon.setAttribute('height', '18');
-            fitIcon.setAttribute('fill', 'none');
-            fitIcon.setAttribute('stroke', 'currentColor');
-            fitIcon.setAttribute('stroke-width', '2');
-            fitIcon.setAttribute('stroke-linecap', 'round');
-            fitIcon.setAttribute('stroke-linejoin', 'round');
-            const fitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            fitPath.setAttribute('d', 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z');
-            fitIcon.appendChild(fitPath);
-
-            const fitText = document.createElement('span');
-            fitText.textContent = 'Fit';
-
-            fitBtn.appendChild(fitIcon);
-            fitBtn.appendChild(fitText);
-
-            fitBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                // Always call onFit - the callback itself will check if there's a selected stroke
-                onFit();
-                closePopup();
-            });
-
-            // Store the update function on the button for later use
-            (fitBtn as any)._updateStyle = updateFitBtnStyle;
-
-            // Apply current state immediately
-            updateFitBtnStyle();
-
-            buttonsContainer.appendChild(fitBtn);
-        }
-
         container.appendChild(colorGrid);
         container.appendChild(separator);
         container.appendChild(sizeGrid);
 
-        // Only add the second separator and buttons if we have callbacks
-        if (onGridToggle || onFit) {
+        // Only add the second separator and buttons if we have grid toggle callback
+        if (onGridToggle) {
             container.appendChild(separator2);
             container.appendChild(buttonsContainer);
         }
@@ -302,7 +226,6 @@ export function createCombinedPicker(
         (container as any)._colorGrid = colorGrid;
         (container as any)._sizeGrid = sizeGrid;
         (container as any)._gridBtn = gridBtn;
-        (container as any)._fitBtn = fitBtn;
 
         return container;
     }
@@ -394,14 +317,6 @@ export function createCombinedPicker(
         }
     }
 
-    function updateFitButton() {
-        if (!popup) return;
-        const fitBtn = (popup as any)._fitBtn as HTMLElement | null;
-        if (fitBtn && (fitBtn as any)._updateStyle) {
-            (fitBtn as any)._updateStyle();
-        }
-    }
-
     triggerElement.addEventListener('click', (e) => {
         e.stopPropagation();
         if (popup) {
@@ -431,11 +346,6 @@ export function createCombinedPicker(
         setGridActive: (active: boolean) => {
             isGridActive = active;
             updateGridButton();
-        },
-        setFitState: (enabled: boolean, active: boolean) => {
-            isFitEnabled = enabled;
-            isFitActive = active;
-            updateFitButton();
         },
         close: closePopup,
         isOpen: () => popup !== null

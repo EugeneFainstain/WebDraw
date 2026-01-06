@@ -21,6 +21,7 @@
 
 import { Point } from './eventHandler';
 import { state, resetState, showDebug, Stroke } from './state';
+import { fitStroke } from './shapeFitting';
 
 // ============================================================================
 // TYPES
@@ -162,6 +163,9 @@ export function updateUI(): void {
 
     // Update group/ungroup buttons
     updateGroupButtons();
+
+    // Update fit button state
+    updateFitButton();
 }
 
 export function updateGroupButtons(): void {
@@ -191,6 +195,44 @@ export function updateGroupButtons(): void {
         dom.btnUngroup!.style.display = 'none';
         dom.btnGroup!.disabled = !canGroup;
     }
+}
+
+// Helper to get the single stroke index for fit operation
+// Returns the stroke index if exactly one stroke is selected or highlighted (or both pointing to same stroke)
+function getFitTargetStrokeIdx(): number | null {
+    const hasSelection = state.selectedStrokeIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length;
+    const hasOneHighlight = state.highlightedStrokes.size === 1;
+
+    if (hasSelection && hasOneHighlight) {
+        // Both exist - they must point to the same stroke
+        const highlightedIdx = Array.from(state.highlightedStrokes)[0];
+        if (highlightedIdx === state.selectedStrokeIdx) {
+            return state.selectedStrokeIdx;
+        }
+        // Different strokes - ambiguous, don't allow
+        return null;
+    } else if (hasSelection) {
+        return state.selectedStrokeIdx;
+    } else if (hasOneHighlight) {
+        return Array.from(state.highlightedStrokes)[0];
+    }
+    return null;
+}
+
+export function updateFitButton(): void {
+    const dom = state.dom;
+
+    // Fit is enabled when exactly one non-group stroke is selected or highlighted
+    let canFit = false;
+
+    const strokeIdx = getFitTargetStrokeIdx();
+    if (strokeIdx !== null) {
+        const stroke = state.strokeHistory[strokeIdx];
+        // Can only fit non-group strokes
+        canFit = !isGroup(stroke);
+    }
+
+    dom.btnFit!.disabled = !canFit;
 }
 
 // ============================================================================
@@ -509,5 +551,45 @@ export function ungroupSelectedStroke(): void {
 
     updateUI();
     updateGroupButtons();
+    callbacks.redraw();
+}
+
+// ============================================================================
+// FIT STROKE
+// ============================================================================
+
+export function toggleFit(): void {
+    // Get target stroke (selected or highlighted)
+    const strokeIdx = getFitTargetStrokeIdx();
+    if (strokeIdx === null) {
+        return;
+    }
+
+    const stroke = state.strokeHistory[strokeIdx];
+
+    // Can't fit groups
+    if (isGroup(stroke)) {
+        return;
+    }
+
+    // Determine if we're toggling ON or OFF
+    const turningOn = !stroke.showingFitted;
+
+    // If turning ON and stroke hasn't been fitted yet, or if it's a polyline/polygon
+    // that was fitted with a different stroke size, fit it now
+    const isSizeDependentFit = stroke.fitType === 'polyline' || stroke.fitType?.startsWith('polygon-');
+    const needsRefit = !stroke.fittedPoints ||
+                      (isSizeDependentFit && stroke.fittedWithSize !== stroke.size!);
+
+    if (turningOn && needsRefit) {
+        fitStroke(stroke);
+    }
+
+    // Toggle display between fitted and original
+    if (stroke.fittedPoints && stroke.originalPoints) {
+        stroke.showingFitted = turningOn;
+    }
+
+    updateFitButton();
     callbacks.redraw();
 }

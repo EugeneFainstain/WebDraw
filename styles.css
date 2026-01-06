@@ -274,6 +274,33 @@ button {
     display: block;
 }
 
+.fit-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: #4a90d9;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.fit-btn:hover:not(:disabled) {
+    background: #357abd;
+}
+
+.fit-btn:disabled {
+    background: #444;
+    color: #666;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.fit-btn svg {
+    display: block;
+}
+
 .fullscreen-btn {
     width: 36px;
     height: 36px;

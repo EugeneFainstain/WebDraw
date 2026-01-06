@@ -105,6 +105,7 @@ export const state = {
         btnDup: null as HTMLButtonElement | null,
         btnGroup: null as HTMLButtonElement | null,
         btnUngroup: null as HTMLButtonElement | null,
+        btnFit: null as HTMLButtonElement | null,
         iosFullscreenTooltip: null as HTMLElement | null,
         iosTooltipClose: null as HTMLButtonElement | null,
         debugOverlay: null as HTMLElement | null,
@@ -202,6 +203,7 @@ export function initState(canvas: HTMLCanvasElement) {
     state.dom.btnDup = document.getElementById('btnDup') as HTMLButtonElement;
     state.dom.btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
     state.dom.btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
+    state.dom.btnFit = document.getElementById('btnFit') as HTMLButtonElement;
     state.dom.iosFullscreenTooltip = document.getElementById('iosFullscreenTooltip') as HTMLElement;
     state.dom.iosTooltipClose = document.getElementById('iosTooltipClose') as HTMLButtonElement;
     state.dom.debugOverlay = document.getElementById('debugOverlay') as HTMLElement;

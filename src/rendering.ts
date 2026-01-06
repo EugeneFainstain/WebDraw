@@ -30,7 +30,6 @@ export interface RenderingCallbacks {
     getPickerColor: () => string;
     getPickerSize: () => number;
     setPickerGridActive: (active: boolean) => void;
-    setPickerFitState: (enabled: boolean, active: boolean) => void;
     updateCursorDiv: () => void;
 }
 
@@ -306,15 +305,6 @@ export function redraw(): void {
 function updateCombinedPickerButtonStates(): void {
     // Update grid button state
     callbacks.setPickerGridActive(state.isGridMode);
-
-    // Update fit button state
-    if (state.selectedStrokeIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length) {
-        const stroke = state.strokeHistory[state.selectedStrokeIdx];
-        const isFitActive = stroke.showingFitted === true;
-        callbacks.setPickerFitState(true, isFitActive);
-    } else {
-        callbacks.setPickerFitState(false, false);
-    }
 }
 
 // ============================================================================
