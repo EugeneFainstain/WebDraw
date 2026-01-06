@@ -31,6 +31,7 @@ import {
     getStrokeLenThreshold,
     TOOLBAR_HEIGHT,
 } from './state';
+import { State } from './stateMachine';
 
 // ============================================================================
 // TYPES
@@ -522,40 +523,76 @@ export function updateCursorDiv(): void {
     const renderedSize = Math.max(strokeSize * state.viewTransform.scale, 1);
     const drawColor = callbacks.getPickerColor();
     const isWhite = drawColor.toUpperCase() === '#FFFFFF';
-    const outerColor = isWhite ? 'black' : drawColor;
 
-    // Inner ring color: lime if stroke selected, white otherwise
-    const hasSelectedStroke = state.selectedStrokeIdx !== null;
-    const innerColor = hasSelectedStroke ? 'lime' : 'white';
+    // Check if we're in Drawing state
+    const isDrawing = state.stateMachine.getState() === State.Drawing;
 
-    // Scale cursor based on stroke size (base size ~48px, scales with stroke)
-    // 2x larger than before
-    const baseSize = 48;
-    const scale = Math.max(0.5, (renderedSize + 8) / (baseSize / 2));
-    const cursorSize = baseSize * scale;
+    if (isDrawing) {
+        // Drawing state: show circle outline with inverse of selected color
+        // Outline thickness is 2px (screen-space, zoom independent)
+        // Circle radius = half stroke width + outline width (screen-space)
+        const outlineWidth = 2;
+        const radius = renderedSize / 2 + outlineWidth / 2;
 
-    // Windows cursor arrow SVG path - tip starts at (0,0)
-    // Path draws a classic Windows pointer arrow
-    const cursorPath = 'M 0 0 L 0 18 L 4 14 L 8 22 L 11 20 L 7 12 L 13 12 Z';
+        // Calculate inverse color
+        const hex = drawColor.replace('#', '');
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        const inverseColor = `#${(255 - r).toString(16).padStart(2, '0')}${(255 - g).toString(16).padStart(2, '0')}${(255 - b).toString(16).padStart(2, '0')}`;
 
-    // Filled cursor with colored outline:
-    // - Fill: white/lime (inner color)
-    // - Stroke: draw color (outer color)
-    // viewBox starts at -1,-1 to accommodate stroke width around the tip
-    // Stroke width is adjusted inversely to scale so it stays fixed at 2px on screen
-    const svgScale = cursorSize / 17; // How much the SVG is scaled up
-    const strokeWidth = 2 / svgScale; // Counter-scale to keep 2px on screen
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 17 26" width="${cursorSize}" height="${cursorSize * 26/17}">
-        <path d="${cursorPath}" fill="${innerColor}" stroke="${outerColor}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
-    </svg>`;
+        // SVG size needs to accommodate the stroke (which extends outward by half strokeWidth)
+        const totalSize = (radius + outlineWidth) * 2;
+        const center = totalSize / 2;
 
-    // Position accounts for toolbar offset (canvas is 60px from top)
-    // Offset by 1px (scaled) to align the tip precisely with the cursor position
-    const tipOffset = cursorSize / 17; // 1 unit in SVG coords, scaled to actual size
-    state.dom.cursorDiv!.style.display = 'block';
-    state.dom.cursorDiv!.style.left = `${cursorPos.x - tipOffset}px`;
-    state.dom.cursorDiv!.style.top = `${cursorPos.y + 60 - tipOffset}px`; // Add toolbar height
-    state.dom.cursorDiv!.style.width = `${cursorSize}px`;
-    state.dom.cursorDiv!.style.height = `${cursorSize * 26/17}px`;
-    state.dom.cursorDiv!.innerHTML = svg;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalSize}" height="${totalSize}" style="display:block;">
+            <circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="${inverseColor}" stroke-width="${outlineWidth}"/>
+        </svg>`;
+
+        state.dom.cursorDiv!.style.display = 'block';
+        state.dom.cursorDiv!.style.left = `${cursorPos.x - center}px`;
+        state.dom.cursorDiv!.style.top = `${cursorPos.y + TOOLBAR_HEIGHT - center}px`;
+        state.dom.cursorDiv!.style.lineHeight = '0';
+        state.dom.cursorDiv!.style.width = `${totalSize}px`;
+        state.dom.cursorDiv!.style.height = `${totalSize}px`;
+        state.dom.cursorDiv!.innerHTML = svg;
+    } else {
+        // Normal state: show arrow cursor
+        const outerColor = isWhite ? 'black' : drawColor;
+
+        // Inner ring color: lime if stroke selected, white otherwise
+        const hasSelectedStroke = state.selectedStrokeIdx !== null;
+        const innerColor = hasSelectedStroke ? 'lime' : 'white';
+
+        // Scale cursor based on stroke size (base size ~48px, scales with stroke)
+        // 2x larger than before
+        const baseSize = 48;
+        const scale = Math.max(0.5, (renderedSize + 8) / (baseSize / 2));
+        const cursorSize = baseSize * scale;
+
+        // Windows cursor arrow SVG path - tip starts at (0,0)
+        // Path draws a classic Windows pointer arrow
+        const cursorPath = 'M 0 0 L 0 18 L 4 14 L 8 22 L 11 20 L 7 12 L 13 12 Z';
+
+        // Filled cursor with colored outline:
+        // - Fill: white/lime (inner color)
+        // - Stroke: draw color (outer color)
+        // viewBox starts at -1,-1 to accommodate stroke width around the tip
+        // Stroke width is adjusted inversely to scale so it stays fixed at 2px on screen
+        const svgScale = cursorSize / 17; // How much the SVG is scaled up
+        const strokeWidth = 2 / svgScale; // Counter-scale to keep 2px on screen
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 17 26" width="${cursorSize}" height="${cursorSize * 26/17}">
+            <path d="${cursorPath}" fill="${innerColor}" stroke="${outerColor}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
+        </svg>`;
+
+        // Position accounts for toolbar offset (canvas is 60px from top)
+        // Offset by 1px (scaled) to align the tip precisely with the cursor position
+        const tipOffset = cursorSize / 17; // 1 unit in SVG coords, scaled to actual size
+        state.dom.cursorDiv!.style.display = 'block';
+        state.dom.cursorDiv!.style.left = `${cursorPos.x - tipOffset}px`;
+        state.dom.cursorDiv!.style.top = `${cursorPos.y + 60 - tipOffset}px`; // Add toolbar height
+        state.dom.cursorDiv!.style.width = `${cursorSize}px`;
+        state.dom.cursorDiv!.style.height = `${cursorSize * 26/17}px`;
+        state.dom.cursorDiv!.innerHTML = svg;
+    }
 }
