@@ -1,7 +1,7 @@
 import '../styles.css';
 import { createCombinedPicker } from './combinedPicker';
 import { createMenuPicker } from './menuPicker';
-import { Event, Action, State } from './stateMachine';
+import { Event, Action } from './stateMachine';
 import { Point } from './eventHandler';
 import {
     state,
@@ -417,6 +417,30 @@ function handleActions(actions: Action[]): void {
                 state.lastGridPosition = null;
                 break;
 
+            case Action.SAVE_DRAG_START_CURSOR:
+                // Save cursor position when starting drag (for snap-back after transform)
+                if (state.cursorAnchor) {
+                    state.dragStartCursorPos = { ...state.cursorAnchor };
+                }
+                break;
+
+            case Action.RESTORE_DRAG_START_CURSOR:
+                // Restore cursor after canvas transform (2-finger zoom)
+                // Only snap back for 2-finger canvas transforms (no strokeSnapshotsMap)
+                // 3-finger stroke transforms have strokeSnapshotsMap and cursor is already correctly positioned
+                if (state.dragStartCursorPos && !state.transformStart?.strokeSnapshotsMap) {
+                    state.cursorAnchor = { ...state.dragStartCursorPos };
+                }
+                state.dragStartCursorPos = null;
+                break;
+
+            case Action.SNAP_CURSOR_TO_SELECTED_POS:
+                // Snap cursor back to selected stroke position (after drawing without moving far)
+                if (state.selectedStrokeCursorPos) {
+                    state.cursorAnchor = { ...state.selectedStrokeCursorPos };
+                }
+                break;
+
             case Action.DO_NOTHING:
                 // Explicitly do nothing
                 break;
@@ -429,36 +453,9 @@ function handleActions(actions: Action[]): void {
 // ============================================================================
 
 state.eventHandler.setEventCallback((event: Event) => {
-    const prevState = state.stateMachine.getState();
-    const wasStrokeSelected = state.stateMachine.isStrokeSelected();
-
-    // Save cursor position when starting to drag with a stroke selected
-    if (event === Event.F1_DOWN && prevState === State.Idle && wasStrokeSelected && state.cursorAnchor) {
-        state.dragStartCursorPos = { ...state.cursorAnchor };
-    }
-
     const result = state.stateMachine.processEvent(event);
 
     handleActions(result.actions);
-
-    // Post-drawing snap-back: lifting last finger after drawing without moving far
-    if (event === Event.FINGER_UP && prevState === State.MovingCursor && wasStrokeSelected) {
-        const flags = state.stateMachine.getFlags();
-        if (!flags.CURSOR_MOVED_FAR_HAPPENED && state.selectedStrokeCursorPos) {
-            state.cursorAnchor = { ...state.selectedStrokeCursorPos };
-        }
-    }
-
-    // Zoom restoration: lifting finger after 2-finger canvas transform, snap back to where we started
-    // For 3-finger stroke transform, cursor is already positioned at the transformed point (done in transform.ts)
-    if (event === Event.FINGER_UP && prevState === State.Transform && state.dragStartCursorPos) {
-        // Only snap back for 2-finger canvas transforms (no strokeSnapshotsMap)
-        // 3-finger stroke transforms have strokeSnapshotsMap and cursor is already correctly positioned
-        if (!state.transformStart?.strokeSnapshotsMap) {
-            state.cursorAnchor = { ...state.dragStartCursorPos };
-        }
-        state.dragStartCursorPos = null;
-    }
 
     // Handle finger promotion discontinuity
     if (event === Event.FINGER_UP) {

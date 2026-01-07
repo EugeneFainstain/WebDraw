@@ -116,6 +116,11 @@ export enum Action {
     SET_CURSOR_MOVED_FAR_FLAG = 'SET_CURSOR_MOVED_FAR_FLAG',
     SET_LONG_STROKE_DRAWN_FLAG = 'SET_LONG_STROKE_DRAWN_FLAG',
 
+    // Cursor snap-back actions
+    SAVE_DRAG_START_CURSOR = 'SAVE_DRAG_START_CURSOR',           // Save cursor position when starting drag (for snap-back after transform)
+    RESTORE_DRAG_START_CURSOR = 'RESTORE_DRAG_START_CURSOR',     // Restore cursor after canvas transform (2-finger zoom)
+    SNAP_CURSOR_TO_SELECTED_POS = 'SNAP_CURSOR_TO_SELECTED_POS', // Snap cursor back to selected stroke position
+
     // No action
     DO_NOTHING = 'DO_NOTHING'
 }
@@ -264,10 +269,11 @@ export class StateMachine {
         switch (event) {
             case Event.F1_DOWN:
                 // Enter MovingCursor (tap-and-a-half will be handled by app.ts)
+                // Save cursor position when starting drag with stroke selected (for snap-back after transform)
                 return {
                     newState: State.MovingCursor,
                     newModifier: { isStrokeSelected },  // keep
-                    actions: []
+                    actions: isStrokeSelected ? [Action.SAVE_DRAG_START_CURSOR] : []
                 };
 
             case Event.F2_DOWN:
@@ -375,10 +381,12 @@ export class StateMachine {
                     }
                 } else {
                     // Keep modifier unchanged (normal finger up or not a quick tap)
+                    // Snap cursor back to selected stroke position if cursor didn't move far
+                    const shouldSnapBack = isStrokeSelected && !flags.CURSOR_MOVED_FAR_HAPPENED;
                     return {
                         newState: State.Idle,
                         newModifier: { isStrokeSelected },  // keep
-                        actions: []
+                        actions: shouldSnapBack ? [Action.SNAP_CURSOR_TO_SELECTED_POS] : []
                     };
                 }
 
@@ -555,10 +563,11 @@ export class StateMachine {
 
             case Event.FINGER_UP:
                 // Keep modifier unchanged (Normal stays Normal, Fresh stays Fresh)
+                // Restore cursor position after transform (snap-back for canvas zoom)
                 return {
                     newState: State.Idle,
                     newModifier: modifier,  // keep
-                    actions: []
+                    actions: [Action.RESTORE_DRAG_START_CURSOR]
                 };
 
             case Event.TIMEOUT:

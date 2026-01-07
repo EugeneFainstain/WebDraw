@@ -108,6 +108,9 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `SET_TIMEOUT_FLAG` | Set TIMEOUT_HAPPENED flag |
 | `SET_CURSOR_MOVED_FAR_FLAG` | Set CURSOR_MOVED_FAR_HAPPENED flag |
 | `SET_LONG_STROKE_DRAWN_FLAG` | Set LONG_STROKE_DRAWN_HAPPENED flag |
+| `SAVE_DRAG_START_CURSOR` | Save cursor position when starting drag (for snap-back after transform) |
+| `RESTORE_DRAG_START_CURSOR` | Restore cursor after canvas transform (2-finger zoom) |
+| `SNAP_CURSOR_TO_SELECTED_POS` | Snap cursor back to selected stroke position |
 | `DO_NOTHING` | No action required |
 
 ## Transition Tables
@@ -120,7 +123,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 | Event | IF Normal Mode → | IF Stroke Selected → |
 |-------|------------------|------------------------|
-| F1_DOWN | MovingCursor (keep Normal) | MovingCursor (keep Selected) |
+| F1_DOWN | MovingCursor (keep Normal) | MovingCursor (keep Selected) - [SAVE_DRAG_START_CURSOR] |
 | F2_DOWN | Idle (keep Normal) | Idle (keep Selected) |
 | F3_DOWN | Idle (keep Normal) | Idle (keep Selected) |
 | FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
@@ -139,7 +142,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F2_DOWN | Drawing (keep Normal) - [CREATE_STROKE] | Drawing (keep Fresh) - [CREATE_STROKE] |
 | F3_DOWN | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] | Idle (→ Normal) - [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
 | FINGER_UP (if single tap) | Idle (keep Normal) - [CLEAR_HIGHLIGHTING] | Idle (→ Normal) - [CLEAR_HIGHLIGHTING, DESELECT_STROKE] |
-| FINGER_UP (otherwise) | Idle (keep Normal) | Idle (keep Selected) |
+| FINGER_UP (otherwise, cursor moved far) | Idle (keep Normal) | Idle (keep Selected) |
+| FINGER_UP (otherwise, cursor didn't move far) | Idle (keep Normal) | Idle (keep Selected) - [SNAP_CURSOR_TO_SELECTED_POS] |
 | TIMEOUT | MovingCursor (keep Normal) - [SET_TIMEOUT_FLAG] | MovingCursor (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | CURSOR_MOVED_FAR | MovingCursor (keep Normal) | MovingCursor (→ Normal) - [DESELECT_STROKE] |
 | PINCH_DETECTED | MovingCursor (keep Normal) | MovingCursor (keep Selected) |
@@ -180,7 +184,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F1_DOWN | Transform (keep Normal) | Transform (keep Selected) |
 | F2_DOWN | Transform (keep Normal) | Transform (keep Selected) |
 | F3_DOWN | Transform (keep Normal) | Transform (keep Selected) |
-| FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
+| FINGER_UP | Idle (keep Normal) - [RESTORE_DRAG_START_CURSOR] | Idle (keep Selected) - [RESTORE_DRAG_START_CURSOR] |
 | TIMEOUT | Transform (keep Normal) - [SET_TIMEOUT_FLAG] | Transform (keep Fresh) - [SET_TIMEOUT_FLAG] |
 | CURSOR_MOVED_FAR | Transform (keep Normal) - [SET_CURSOR_MOVED_FAR_FLAG] | Transform (keep Selected) - [SET_CURSOR_MOVED_FAR_FLAG] |
 | PINCH_DETECTED | Transform (keep Normal) | Transform (keep Selected) |
