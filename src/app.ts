@@ -18,6 +18,7 @@ import {
     forEachLeafStroke,
     transformStroke,
     updateUI,
+    processUndo,
     processDelete,
     processClear,
     duplicateSelectedStroke,
@@ -369,6 +370,7 @@ function handleActions(actions: Action[]): void {
                 state.selectionRectStart = null;
                 state.selectionRectEnd = null;
                 // Keep highlighted strokes (don't clear them)
+                updateUI();
                 break;
 
             case Action.CANCEL_SELECTION_RECTANGLE:
@@ -522,7 +524,8 @@ setupPointerEventListeners();
 // EVENT LISTENERS
 // ============================================================================
 
-dom.delBtn!.addEventListener('click', () => state.eventHandler.handleDelete());
+dom.undoBtn!.addEventListener('click', () => processUndo());
+dom.delBtn!.addEventListener('click', () => processDelete());
 
 dom.btnDup!.addEventListener('click', () => {
     duplicateSelectedStroke();

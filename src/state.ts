@@ -99,9 +99,8 @@ export const state = {
     dom: {
         combinedPickerEl: null as HTMLElement | null,
         menuPickerEl: null as HTMLElement | null,
+        undoBtn: null as HTMLButtonElement | null,
         delBtn: null as HTMLButtonElement | null,
-        undoIcon: null as SVGElement | null,
-        deleteIcon: null as SVGElement | null,
         btnDup: null as HTMLButtonElement | null,
         btnGroup: null as HTMLButtonElement | null,
         btnUngroup: null as HTMLButtonElement | null,
@@ -200,9 +199,8 @@ export function initState(canvas: HTMLCanvasElement) {
     // Initialize DOM references
     state.dom.combinedPickerEl = document.getElementById('combinedPicker') as HTMLElement;
     state.dom.menuPickerEl = document.getElementById('menuPicker') as HTMLElement;
+    state.dom.undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
     state.dom.delBtn = document.getElementById('delBtn') as HTMLButtonElement;
-    state.dom.undoIcon = document.getElementById('undoIcon') as unknown as SVGElement;
-    state.dom.deleteIcon = document.getElementById('deleteIcon') as unknown as SVGElement;
     state.dom.btnDup = document.getElementById('btnDup') as HTMLButtonElement;
     state.dom.btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
     state.dom.btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;

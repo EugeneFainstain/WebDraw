@@ -115,48 +115,13 @@ export function cloneStroke(stroke: Stroke): Stroke {
 export function updateUI(): void {
     const dom = state.dom;
     const hasStrokes = state.strokeHistory.length > 0;
+    const hasHighlightedStrokes = state.highlightedStrokes.size > 0;
 
-    // Determine button state based on requirements:
-    // a) No strokes → disabled "Undo"
-    // b) Has strokes but no selection → enabled "Undo" (undo last stroke)
-    // c) Fresh stroke (just drew) → enabled "Undo"
-    // d) Transformed stroke → enabled "Undo"
-    // e) Manually selected stroke → enabled "Del"
+    // Undo button: enabled when there are strokes in the drawing
+    dom.undoBtn!.disabled = !hasStrokes;
 
-    let showDeleteIcon = false;
-
-    if (!hasStrokes) {
-        // a) No strokes - disabled "Undo"
-        dom.delBtn!.disabled = true;
-        showDeleteIcon = false;
-    } else if (state.isFreshStroke) {
-        // c) Fresh stroke mode - enabled "Undo"
-        dom.delBtn!.disabled = false;
-        showDeleteIcon = false;
-    } else if (state.hasUndoableTransform && state.selectedStrokeIdx !== null) {
-        // d) Transformed stroke - enabled "Undo"
-        dom.delBtn!.disabled = false;
-        showDeleteIcon = false;
-    } else if (state.selectedStrokeIdx !== null) {
-        // e) Manually selected stroke - enabled "Del"
-        dom.delBtn!.disabled = false;
-        showDeleteIcon = true;
-    } else {
-        // b) Has strokes but no selection - enabled "Undo" (undo last stroke)
-        dom.delBtn!.disabled = false;
-        showDeleteIcon = false;
-    }
-
-    // Toggle icon visibility
-    if (showDeleteIcon) {
-        dom.undoIcon!.style.display = 'none';
-        dom.deleteIcon!.style.display = 'block';
-        dom.delBtn!.setAttribute('aria-label', 'Delete');
-    } else {
-        dom.undoIcon!.style.display = 'block';
-        dom.deleteIcon!.style.display = 'none';
-        dom.delBtn!.setAttribute('aria-label', 'Undo');
-    }
+    // Del button: enabled when there are highlighted strokes
+    dom.delBtn!.disabled = !hasHighlightedStrokes;
 
     // Update duplicate button state - enabled when exactly one stroke is highlighted
     dom.btnDup!.disabled = state.highlightedStrokes.size !== 1;
@@ -239,68 +204,14 @@ export function updateFitButton(): void {
 // DELETE / UNDO
 // ============================================================================
 
-export function processDelete(): void {
+// Undo: removes the last stroke from history (simple undo)
+export function processUndo(): void {
     if (state.strokeHistory.length === 0) return;
 
-    // Check if we should undo transformation instead of deleting
-    if (state.hasUndoableTransform && state.transformSnapshot && state.selectedStrokeIdx !== null) {
-        undoTransformation();
-        return;
-    }
+    // Remove the last stroke from history
+    const deletedStroke = state.strokeHistory.pop()!;
 
-    deleteStroke();
-}
-
-function undoTransformation(): void {
-    // Restore the stroke to its pre-transformation state (works for groups too)
-    const selectedStroke = state.strokeHistory[state.selectedStrokeIdx!];
-    const snapshot = state.transformSnapshot!;
-
-    // Restore all points using the snapshot
-    let pointIndex = 0;
-    transformStroke(selectedStroke, (leafStroke: Stroke) => {
-        const restoredPoints: Point[] = [];
-        for (let i = 0; i < leafStroke.points!.length; i++) {
-            restoredPoints.push({ ...snapshot[pointIndex++] });
-        }
-        leafStroke.points = restoredPoints;
-    });
-
-    // Update cursor position to follow the stroke back to its original position
-    if (state.selectedStrokePointIdx !== null && state.selectedStrokePointIdx < state.transformSnapshot!.length) {
-        state.cursorAnchor = { ...state.transformSnapshot![state.selectedStrokePointIdx] };
-        state.selectedStrokeCursorPos = { ...state.cursorAnchor };
-        callbacks.panToKeepCursorInView();
-    }
-
-    // Clear the transformation undo state
-    state.transformSnapshot = null;
-    state.hasUndoableTransform = false;
-
-    // Update button to show "Del" now
-    updateUI();
-    callbacks.redraw();
-}
-
-function deleteStroke(): void {
-    // Determine which stroke to delete
-    let indexToDelete: number;
-    const wasManualSelection = !state.isFreshStroke && state.selectedStrokeIdx !== null;
-
-    if (state.isFreshStroke || state.selectedStrokeIdx === null) {
-        // Fresh stroke mode or no selection - delete (undo) the last stroke
-        indexToDelete = state.strokeHistory.length - 1;
-    } else {
-        // Delete the selected stroke
-        indexToDelete = state.selectedStrokeIdx;
-    }
-
-    const deletedStroke = state.strokeHistory[indexToDelete];
-
-    // Save cursor position before deletion (for finding closest stroke after)
-    const cursorPosBeforeDeletion = state.cursorAnchor ? { ...state.cursorAnchor } : null;
-
-    // Move cursor to the beginning of the first stroke being removed
+    // Move cursor to the beginning of the deleted stroke
     let firstPointX = 0;
     let firstPointY = 0;
     let foundPoint = false;
@@ -316,49 +227,54 @@ function deleteStroke(): void {
         callbacks.panToKeepCursorInView();
     }
 
-    // Remove the stroke FIRST (before finding closest, to avoid index shift issues)
-    state.strokeHistory.splice(indexToDelete, 1);
-
-    // Clear highlighted strokes - indices are now invalid after deletion
-    state.highlightedStrokes.clear();
-
-    // Clear transformation undo state when deleting a stroke
+    // Clear selection state
+    state.selectedStrokeIdx = null;
+    state.selectedStrokePointIdx = null;
+    state.selectedStrokeCursorPos = null;
+    state.isFreshStroke = false;
     state.transformSnapshot = null;
     state.hasUndoableTransform = false;
 
-    // After deletion, always exit fresh stroke mode
-    state.isFreshStroke = false;
-
-    // Determine the new selection state
-    if (state.strokeHistory.length > 0) {
-        if (wasManualSelection && cursorPosBeforeDeletion) {
-            // Manual selection (Del button) - restore cursor position and find closest stroke
-            state.cursorAnchor = cursorPosBeforeDeletion;
-            const result = callbacks.findClosestStrokeAndPoint();
-            if (result) {
-                state.selectedStrokeIdx = result.strokeIdx;
-                state.selectedStrokePointIdx = result.pointIdx;
-                state.cursorAnchor = { ...result.point };
-                state.selectedStrokeCursorPos = { ...state.cursorAnchor };
-                callbacks.panToKeepCursorInView();
-                // Update pickers to match the newly selected stroke
-                callbacks.updatePickersForSelectedStroke();
-            }
-        } else {
-            // Fresh stroke mode (Undo button) - DON'T select any stroke
-            // The cursor is already at the beginning of the deleted stroke
-            state.selectedStrokeIdx = null;
-            state.selectedStrokePointIdx = null;
-            state.selectedStrokeCursorPos = null;
+    // Update highlighted strokes - remove any that are now invalid
+    const newHighlighted = new Set<number>();
+    for (const idx of state.highlightedStrokes) {
+        if (idx < state.strokeHistory.length) {
+            newHighlighted.add(idx);
         }
-    } else {
-        // No more strokes - deselect
-        state.selectedStrokeIdx = null;
-        state.selectedStrokePointIdx = null;
-        state.selectedStrokeCursorPos = null;
     }
+    state.highlightedStrokes = newHighlighted;
 
     updateUI();
+    callbacks.redraw();
+}
+
+// Delete: removes all highlighted strokes
+export function processDelete(): void {
+    if (state.highlightedStrokes.size === 0) return;
+
+    // Get sorted indices in descending order (to remove from end first)
+    const indicesToDelete = Array.from(state.highlightedStrokes).sort((a, b) => b - a);
+
+    // Remove strokes from history (in reverse order to maintain valid indices)
+    for (const idx of indicesToDelete) {
+        if (idx < state.strokeHistory.length) {
+            state.strokeHistory.splice(idx, 1);
+        }
+    }
+
+    // Clear highlighted strokes
+    state.highlightedStrokes.clear();
+
+    // Clear selection state
+    state.selectedStrokeIdx = null;
+    state.selectedStrokePointIdx = null;
+    state.selectedStrokeCursorPos = null;
+    state.isFreshStroke = false;
+    state.transformSnapshot = null;
+    state.hasUndoableTransform = false;
+
+    updateUI();
+    callbacks.redraw();
 }
 
 // ============================================================================
