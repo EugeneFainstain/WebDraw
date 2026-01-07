@@ -18,7 +18,7 @@
  * - Cursor rendering: updateCursorDiv
  *
  * Design: Uses a callback pattern for coordinate transforms and grid functions.
- * Reads/writes state.cursorAnchor, state.currentStroke, and position tracking state.
+ * Reads/writes state.cursorPos, state.currentStroke, and position tracking state.
  *
  * NOTE: If this file's responsibilities drift, update this description!
  */
@@ -66,7 +66,7 @@ export function initCursorMovement(cb: CursorMovementCallbacks): void {
 // Handles finger promotion and mode transitions with batched deltas
 function updateCursorPositionWithBatching(): void {
     const positions = state.eventHandler.getFingerPositions();
-    if (!state.cursorAnchor) return;
+    if (!state.cursorPos) return;
 
     // Determine which finger moved
     let movedPointerId: number | null = null;
@@ -109,12 +109,12 @@ function updateCursorPositionWithBatching(): void {
         // Process batched delta first
         if (state.batchedDelta !== null) {
             const canvasDelta = callbacks.screenDeltaToCanvasDelta(state.batchedDelta);
-            state.cursorAnchor.x += canvasDelta.x;
-            state.cursorAnchor.y += canvasDelta.y;
+            state.cursorPos.x += canvasDelta.x;
+            state.cursorPos.y += canvasDelta.y;
             panToKeepCursorInView();
 
             if (state.currentStroke && !state.isGridMode) {
-                state.currentStroke.points!.push({ ...state.cursorAnchor });
+                state.currentStroke.points!.push({ ...state.cursorPos });
             }
 
             state.batchedDelta = null;
@@ -128,12 +128,12 @@ function updateCursorPositionWithBatching(): void {
                 if (sameFingerTwice) {
                     // Same finger moved twice - process first delta immediately
                     const canvasDelta = callbacks.screenDeltaToCanvasDelta(state.lastDelta);
-                    state.cursorAnchor.x += canvasDelta.x;
-                    state.cursorAnchor.y += canvasDelta.y;
+                    state.cursorPos.x += canvasDelta.x;
+                    state.cursorPos.y += canvasDelta.y;
                     panToKeepCursorInView();
 
                     if (state.currentStroke && !state.isGridMode) {
-                        state.currentStroke.points!.push({ ...state.cursorAnchor });
+                        state.currentStroke.points!.push({ ...state.cursorPos });
                     }
 
                     // Store current delta for next iteration
@@ -146,12 +146,12 @@ function updateCursorPositionWithBatching(): void {
                     };
 
                     const canvasDelta = callbacks.screenDeltaToCanvasDelta(avgDelta);
-                    state.cursorAnchor.x += canvasDelta.x;
-                    state.cursorAnchor.y += canvasDelta.y;
+                    state.cursorPos.x += canvasDelta.x;
+                    state.cursorPos.y += canvasDelta.y;
                     panToKeepCursorInView();
 
                     if (state.currentStroke && !state.isGridMode) {
-                        state.currentStroke.points!.push({ ...state.cursorAnchor });
+                        state.currentStroke.points!.push({ ...state.cursorPos });
                     }
 
                     // Clear the buffer
@@ -169,7 +169,7 @@ function updateCursorPositionWithBatching(): void {
 // Every delta produces movement - averaged with last delta from OTHER finger, or halved if same finger
 function updateCursorPositionSimple(): void {
     const positions = state.eventHandler.getFingerPositions();
-    if (!state.cursorAnchor) return;
+    if (!state.cursorPos) return;
 
     if (!positions.primary || !positions.secondary) return;
 
@@ -244,12 +244,12 @@ function updateCursorPositionSimple(): void {
 
     // Process finalDelta
     const canvasDelta = callbacks.screenDeltaToCanvasDelta(finalDelta);
-    state.cursorAnchor.x += canvasDelta.x;
-    state.cursorAnchor.y += canvasDelta.y;
+    state.cursorPos.x += canvasDelta.x;
+    state.cursorPos.y += canvasDelta.y;
     panToKeepCursorInView();
 
     if (state.currentStroke && !state.isGridMode) {
-        state.currentStroke.points!.push({ ...state.cursorAnchor });
+        state.currentStroke.points!.push({ ...state.cursorPos });
     }
 }
 
@@ -259,7 +259,7 @@ function updateCursorPositionSimple(): void {
 
 export function updateCursorPosition(): void {
     const positions = state.eventHandler.getFingerPositions();
-    if (!state.cursorAnchor) return;
+    if (!state.cursorPos) return;
 
     // Single finger mode - handle directly without algorithm complexity
     if (!positions.secondary) {
@@ -279,8 +279,8 @@ export function updateCursorPosition(): void {
         // Process delta immediately
         if (deltaX !== 0 || deltaY !== 0) {
             const canvasDelta = callbacks.screenDeltaToCanvasDelta({ x: deltaX, y: deltaY });
-            state.cursorAnchor.x += canvasDelta.x;
-            state.cursorAnchor.y += canvasDelta.y;
+            state.cursorPos.x += canvasDelta.x;
+            state.cursorPos.y += canvasDelta.y;
             panToKeepCursorInView();
         }
 
@@ -301,7 +301,7 @@ export function updateCursorPosition(): void {
 // ============================================================================
 
 export function addPointToStroke(): void {
-    if (!state.currentStroke || !state.cursorAnchor) return;
+    if (!state.currentStroke || !state.cursorPos) return;
 
     // In grid mode, only add points when moving a full cell size away
     if (state.isGridMode) {
@@ -310,11 +310,11 @@ export function addPointToStroke(): void {
         const cellSize = callbacks.getGridCellSize();
         const threshold = cellSize * 0.9;
 
-        const deltaFromLastX = Math.abs(state.cursorAnchor.x - state.lastGridPosition.x);
-        const deltaFromLastY = Math.abs(state.cursorAnchor.y - state.lastGridPosition.y);
+        const deltaFromLastX = Math.abs(state.cursorPos.x - state.lastGridPosition.x);
+        const deltaFromLastY = Math.abs(state.cursorPos.y - state.lastGridPosition.y);
 
         if (deltaFromLastX >= threshold || deltaFromLastY >= threshold) {
-            const gridPoint = callbacks.snapToGrid(state.cursorAnchor);
+            const gridPoint = callbacks.snapToGrid(state.cursorPos);
 
             // Add 9 interpolated points between last grid position and new grid point
             const numInterpolated = 9;
@@ -331,15 +331,15 @@ export function addPointToStroke(): void {
             state.currentStroke.points!.push(gridPoint);
             state.lastGridPosition = gridPoint;
             // Snap the cursor to the grid point while drawing
-            state.cursorAnchor = { ...gridPoint };
+            state.cursorPos = { ...gridPoint };
             // Update anchor for deselection distance check
             state.selectedStrokeCursorPos = { ...gridPoint };
         }
     } else {
         // Normal mode: add every point
-        state.currentStroke.points!.push({ ...state.cursorAnchor });
+        state.currentStroke.points!.push({ ...state.cursorPos });
         // Update anchor for deselection distance check
-        state.selectedStrokeCursorPos = { ...state.cursorAnchor };
+        state.selectedStrokeCursorPos = { ...state.cursorPos };
     }
 
     // Check if stroke is long enough to lock the gesture as drawing
@@ -386,12 +386,12 @@ export function setCursorToDefaultPosition(screenPos: Point): void {
     // Allow cursor to go into toolbar area (negative Y in canvas space)
     const clampedY = Math.max(-TOOLBAR_HEIGHT + margin, Math.min(state.canvas!.height - margin, targetScreenPos.y));
 
-    state.cursorAnchor = callbacks.screenToCanvas({ x: clampedX, y: clampedY });
+    state.cursorPos = callbacks.screenToCanvas({ x: clampedX, y: clampedY });
 }
 
 export function clampCursorToView(): void {
-    if (!state.cursorAnchor) return;
-    const screenPos = callbacks.canvasToScreen(state.cursorAnchor);
+    if (!state.cursorPos) return;
+    const screenPos = callbacks.canvasToScreen(state.cursorPos);
 
     const margin = 10;
     const clampedX = Math.max(margin, Math.min(state.canvas!.width - margin, screenPos.x));
@@ -399,13 +399,13 @@ export function clampCursorToView(): void {
     const clampedY = Math.max(-TOOLBAR_HEIGHT + margin, Math.min(state.canvas!.height - margin, screenPos.y));
 
     if (clampedX !== screenPos.x || clampedY !== screenPos.y) {
-        state.cursorAnchor = callbacks.screenToCanvas({ x: clampedX, y: clampedY });
+        state.cursorPos = callbacks.screenToCanvas({ x: clampedX, y: clampedY });
     }
 }
 
 export function panToKeepCursorInView(): void {
-    if (!state.cursorAnchor) return;
-    const screenPos = callbacks.canvasToScreen(state.cursorAnchor);
+    if (!state.cursorPos) return;
+    const screenPos = callbacks.canvasToScreen(state.cursorPos);
 
     const margin = 10;
     const minY = -TOOLBAR_HEIGHT + margin; // Allow cursor into toolbar area
@@ -435,17 +435,17 @@ export function panToKeepCursorInView(): void {
 // ============================================================================
 
 export function getCursorScreenPos(): Point {
-    if (!state.cursorAnchor) {
+    if (!state.cursorPos) {
         return { x: state.canvas!.width / 2, y: state.canvas!.height / 4 };
     }
-    return callbacks.canvasToScreen(state.cursorAnchor);
+    return callbacks.canvasToScreen(state.cursorPos);
 }
 
 /**
  * Get the page coordinates of the cursor tip.
  */
 export function getCursorPagePos(): { x: number, y: number } | null {
-    if (!state.cursorAnchor) return null;
+    if (!state.cursorPos) return null;
     const cursorScreenPos = getCursorScreenPos();
     return {
         x: cursorScreenPos.x,
@@ -462,7 +462,7 @@ export function getCursorPagePos(): { x: number, y: number } | null {
  * or over a UI element like an open popup.
  */
 export function isCursorInMenuRegion(): boolean {
-    if (!state.cursorAnchor) return false;
+    if (!state.cursorPos) return false;
     const cursorScreenPos = getCursorScreenPos();
 
     // Cursor is in menu region if Y is negative (above the canvas)
@@ -521,7 +521,7 @@ export function simulateTapAtCursor(): boolean {
 // ============================================================================
 
 export function updateCursorDiv(): void {
-    if (!state.cursorAnchor) {
+    if (!state.cursorPos) {
         state.dom.cursorDiv!.style.display = 'none';
         return;
     }
@@ -533,7 +533,7 @@ export function updateCursorDiv(): void {
         return;
     }
 
-    const cursorPos = getCursorScreenPos();
+    const cursorScreenPos = getCursorScreenPos();
     const strokeSize = callbacks.getPickerSize();
     const renderedSize = Math.max(strokeSize * state.viewTransform.scale, 1);
     const drawColor = callbacks.getPickerColor();
@@ -565,8 +565,8 @@ export function updateCursorDiv(): void {
         </svg>`;
 
         state.dom.cursorDiv!.style.display = 'block';
-        state.dom.cursorDiv!.style.left = `${cursorPos.x - center}px`;
-        state.dom.cursorDiv!.style.top = `${cursorPos.y + TOOLBAR_HEIGHT - center}px`;
+        state.dom.cursorDiv!.style.left = `${cursorScreenPos.x - center}px`;
+        state.dom.cursorDiv!.style.top = `${cursorScreenPos.y + TOOLBAR_HEIGHT - center}px`;
         state.dom.cursorDiv!.style.lineHeight = '0';
         state.dom.cursorDiv!.style.width = `${totalSize}px`;
         state.dom.cursorDiv!.style.height = `${totalSize}px`;
@@ -604,8 +604,8 @@ export function updateCursorDiv(): void {
         // Offset by 1px (scaled) to align the tip precisely with the cursor position
         const tipOffset = cursorSize / 17; // 1 unit in SVG coords, scaled to actual size
         state.dom.cursorDiv!.style.display = 'block';
-        state.dom.cursorDiv!.style.left = `${cursorPos.x - tipOffset}px`;
-        state.dom.cursorDiv!.style.top = `${cursorPos.y + 60 - tipOffset}px`; // Add toolbar height
+        state.dom.cursorDiv!.style.left = `${cursorScreenPos.x - tipOffset}px`;
+        state.dom.cursorDiv!.style.top = `${cursorScreenPos.y + 60 - tipOffset}px`; // Add toolbar height
         state.dom.cursorDiv!.style.width = `${cursorSize}px`;
         state.dom.cursorDiv!.style.height = `${cursorSize * 26/17}px`;
         state.dom.cursorDiv!.innerHTML = svg;

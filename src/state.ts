@@ -125,7 +125,7 @@ export const state = {
     currentStroke: null as Stroke | null,
 
     // Cursor anchor point (in canvas coordinates)
-    cursorAnchor: null as Point | null,
+    cursorPos: null as Point | null,
 
     // Selected stroke index (null = no selection, number = index in strokeHistory)
     selectedStrokeIdx: null as number | null,

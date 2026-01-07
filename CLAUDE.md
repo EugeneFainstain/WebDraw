@@ -42,7 +42,7 @@ The app uses a formal state machine architecture (see [STATE_MACHINE.md](STATE_M
 
 - `strokeHistory` (Array) - Stores completed strokes for undo functionality
 - `currentStroke` - Stroke currently being drawn
-- `cursorAnchor` - Position of the drawing cursor in canvas coordinates
+- `cursorPos` - Position of the drawing cursor in canvas coordinates
 - `selectedStrokeIdx` - Index of the selected stroke (null = no selection)
 - `selectedStrokeCursorPos` - Anchor point for deselection (updated while drawing, set on manual selection)
 - `viewTransform` - Canvas transformation (scale, rotation, pan)

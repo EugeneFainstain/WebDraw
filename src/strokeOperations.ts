@@ -223,7 +223,7 @@ export function processUndo(): void {
         }
     });
     if (foundPoint) {
-        state.cursorAnchor = { x: firstPointX, y: firstPointY };
+        state.cursorPos = { x: firstPointX, y: firstPointY };
         callbacks.panToKeepCursorInView();
     }
 
@@ -283,7 +283,7 @@ export function processDelete(): void {
 
 export function processClear(): void {
     resetState();
-    state.cursorAnchor = callbacks.screenToCanvas({ x: state.canvas!.width / 2, y: state.canvas!.height / 2 });
+    state.cursorPos = callbacks.screenToCanvas({ x: state.canvas!.width / 2, y: state.canvas!.height / 2 });
     updateUI();
 }
 

@@ -139,8 +139,8 @@ const combinedPicker = createCombinedPicker(
         // Grid toggle
         state.isGridMode = !state.isGridMode;
 
-        if (state.isGridMode && state.cursorAnchor) {
-            state.cursorAnchor = snapToGrid(state.cursorAnchor);
+        if (state.isGridMode && state.cursorPos) {
+            state.cursorPos = snapToGrid(state.cursorPos);
         }
         redraw();
     },
@@ -186,7 +186,7 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
     }
 
     // Use provided search position, or fall back to cursor anchor
-    const referencePos = searchPos || state.cursorAnchor;
+    const referencePos = searchPos || state.cursorPos;
     if (!referencePos) {
         return null;
     }
@@ -239,15 +239,15 @@ function handleActions(actions: Action[]): void {
     for (const action of actions) {
         switch (action) {
             case Action.CREATE_STROKE:
-                if (state.cursorAnchor) {
-                    const startPoint = state.isGridMode ? snapToGrid(state.cursorAnchor) : state.cursorAnchor;
+                if (state.cursorPos) {
+                    const startPoint = state.isGridMode ? snapToGrid(state.cursorPos) : state.cursorPos;
                     state.currentStroke = {
                         color: combinedPicker.getColor(),
                         size: combinedPicker.getSize(),
                         points: [{ ...startPoint }]
                     };
                     // In grid mode, initialize lastGridPosition to the start point
-                    // but don't snap cursorAnchor - let it move freely
+                    // but don't snap cursorPos - let it move freely
                     if (state.isGridMode) {
                         state.lastGridPosition = { ...startPoint };
                     } else {
@@ -271,7 +271,7 @@ function handleActions(actions: Action[]): void {
             case Action.ABANDON_STROKE:
                 // Move cursor back to where the stroke started
                 if (state.currentStroke && state.currentStroke.points && state.currentStroke.points.length > 0) {
-                    state.cursorAnchor = { ...state.currentStroke.points[0] };
+                    state.cursorPos = { ...state.currentStroke.points[0] };
                 }
                 state.currentStroke = null;
                 state.lastGridPosition = null;
@@ -312,7 +312,7 @@ function handleActions(actions: Action[]): void {
                 const closestResult = findClosestStrokeAndPoint();
                 if (closestResult) {
                     // Move cursor to the closest point
-                    state.cursorAnchor = closestResult.point;
+                    state.cursorPos = closestResult.point;
                     // Select the stroke and store the point index
                     state.selectedStrokeIdx = closestResult.strokeIdx;
                     state.selectedStrokePointIdx = closestResult.pointIdx;
@@ -348,9 +348,9 @@ function handleActions(actions: Action[]): void {
 
             case Action.START_SELECTION_RECTANGLE:
                 // Start selection rectangle at current cursor position
-                if (state.cursorAnchor) {
-                    state.selectionRectStart = { ...state.cursorAnchor };
-                    state.selectionRectEnd = { ...state.cursorAnchor };
+                if (state.cursorPos) {
+                    state.selectionRectStart = { ...state.cursorPos };
+                    state.selectionRectEnd = { ...state.cursorPos };
                     // Initialize position tracking for cursor movement
                     const positions = state.eventHandler.getFingerPositions();
                     state.lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
@@ -362,8 +362,8 @@ function handleActions(actions: Action[]): void {
 
             case Action.UPDATE_SELECTION_RECTANGLE:
                 // Update selection rectangle end point to current cursor position
-                if (state.cursorAnchor && state.selectionRectStart) {
-                    state.selectionRectEnd = { ...state.cursorAnchor };
+                if (state.cursorPos && state.selectionRectStart) {
+                    state.selectionRectEnd = { ...state.cursorPos };
                     // Update highlighted strokes in real-time
                     updateHighlightedStrokes();
                 }
@@ -419,8 +419,8 @@ function handleActions(actions: Action[]): void {
 
             case Action.SAVE_DRAG_START_CURSOR:
                 // Save cursor position when starting drag (for snap-back after transform)
-                if (state.cursorAnchor) {
-                    state.dragStartCursorPos = { ...state.cursorAnchor };
+                if (state.cursorPos) {
+                    state.dragStartCursorPos = { ...state.cursorPos };
                 }
                 break;
 
@@ -429,7 +429,7 @@ function handleActions(actions: Action[]): void {
                 // Only snap back for 2-finger canvas transforms (no strokeSnapshotsMap)
                 // 3-finger stroke transforms have strokeSnapshotsMap and cursor is already correctly positioned
                 if (state.dragStartCursorPos && !state.transformStart?.strokeSnapshotsMap) {
-                    state.cursorAnchor = { ...state.dragStartCursorPos };
+                    state.cursorPos = { ...state.dragStartCursorPos };
                 }
                 state.dragStartCursorPos = null;
                 break;
@@ -437,7 +437,7 @@ function handleActions(actions: Action[]): void {
             case Action.SNAP_CURSOR_TO_SELECTED_POS:
                 // Snap cursor back to selected stroke position (after drawing without moving far)
                 if (state.selectedStrokeCursorPos) {
-                    state.cursorAnchor = { ...state.selectedStrokeCursorPos };
+                    state.cursorPos = { ...state.selectedStrokeCursorPos };
                 }
                 break;
 
@@ -572,5 +572,5 @@ window.addEventListener('resize', () => resizeCanvas(clampCursorToView));
 
 resizeCanvas(clampCursorToView);
 updateUI();
-state.cursorAnchor = screenToCanvas({ x: state.canvas!.width / 2, y: state.canvas!.height / 2 });
+state.cursorPos = screenToCanvas({ x: state.canvas!.width / 2, y: state.canvas!.height / 2 });
 redraw();

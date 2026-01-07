@@ -81,12 +81,12 @@ function getPointerPos(e: PointerEvent): Point {
  * Distance is measured in screen space for scale-independent behavior.
  */
 function isCursorFarFromAnchor(): boolean {
-    if (!state.cursorAnchor || !state.selectedStrokeCursorPos) {
+    if (!state.cursorPos || !state.selectedStrokeCursorPos) {
         return false;
     }
 
     // Convert both points to screen space for scale-independent distance check
-    const cursorScreen = callbacks.canvasToScreen(state.cursorAnchor);
+    const cursorScreen = callbacks.canvasToScreen(state.cursorPos);
     const anchorScreen = callbacks.canvasToScreen(state.selectedStrokeCursorPos);
 
     const distance = callbacks.getDistance(cursorScreen, anchorScreen);
@@ -214,8 +214,8 @@ export function handlePointerMove(e: PointerEvent): void {
 
         // Update cursor position and selection rectangle
         callbacks.updateCursorPosition();
-        if (state.cursorAnchor && state.selectionRectStart) {
-            state.selectionRectEnd = { ...state.cursorAnchor };
+        if (state.cursorPos && state.selectionRectStart) {
+            state.selectionRectEnd = { ...state.cursorPos };
             // Update highlighted strokes in real-time as the rectangle changes
             callbacks.updateHighlightedStrokes();
         }
@@ -267,10 +267,10 @@ export function handlePointerUp(e: PointerEvent): void {
             now - state.secondTapDownTime < DOUBLE_TAP_MAX_DURATION) {  // Second tap must be quick
             // Valid double-tap completed!
             // DOUBLE-TAP SELECTION: Select stroke closest to the cursor position
-            const result = state.cursorAnchor ? callbacks.findClosestStrokeAndPoint(state.cursorAnchor) : null;
+            const result = state.cursorPos ? callbacks.findClosestStrokeAndPoint(state.cursorPos) : null;
             if (result) {
                 // Move cursor to the closest point
-                state.cursorAnchor = result.point;
+                state.cursorPos = result.point;
                 // Select the stroke and store the point index
                 state.selectedStrokeIdx = result.strokeIdx;
                 state.selectedStrokePointIdx = result.pointIdx;
@@ -323,8 +323,8 @@ export function handlePointerUp(e: PointerEvent): void {
         callbacks.clampCursorToView();
 
         // Snap to grid in grid mode
-        if (state.isGridMode && state.cursorAnchor) {
-            state.cursorAnchor = callbacks.snapToGrid(state.cursorAnchor);
+        if (state.isGridMode && state.cursorPos) {
+            state.cursorPos = callbacks.snapToGrid(state.cursorPos);
         }
 
         callbacks.redraw();

@@ -383,7 +383,7 @@ export function applyThreeFingerTransform(): void {
             const transformedPoints = getAllPointsForTransform(state.strokeHistory[state.selectedStrokeIdx]);
             if (state.selectedStrokePointIdx < transformedPoints.length) {
                 const newPos = { ...transformedPoints[state.selectedStrokePointIdx] };
-                state.cursorAnchor = newPos;
+                state.cursorPos = newPos;
                 state.selectedStrokeCursorPos = { ...newPos };
             }
         }
