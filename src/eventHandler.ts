@@ -16,8 +16,11 @@ export interface Point {
 const TIMEOUT_DELAY = 250; // ms - timeout after any finger down
 
 // Physical thresholds in millimeters (scale-invariant)
-const MOVEMENT_THRESHOLD_MM = 2; // mm - threshold for FINGER_MOVED_FAR event
-const PINCH_THRESHOLD_MM = 4; // mm - threshold for detecting pinch/zoom gesture
+const FINGER_MOVED_FAR_THRESHOLD_MM = 3; // mm - threshold for FINGER_MOVED_FAR event
+const PINCH_THRESHOLD_MM            = 4; // mm - threshold for detecting pinch/zoom gesture
+
+const FINGER_MOVED_FAR_THRESHOLD_PX = mmToPixels(FINGER_MOVED_FAR_THRESHOLD_MM); // in pixels
+const PINCH_THRESHOLD_PX            = mmToPixels(PINCH_THRESHOLD_MM); // in pixels
 
 // Convert millimeters to screen pixels based on device DPI
 // Assumes 96 DPI as default (standard for web), adjusted by devicePixelRatio
@@ -27,9 +30,6 @@ function mmToPixels(mm: number): number {
     const pixelRatio = window.devicePixelRatio || 1;
     return (mm / 25.4) * dpi * pixelRatio;
 }
-
-const MOVEMENT_THRESHOLD = mmToPixels(MOVEMENT_THRESHOLD_MM); // pixels
-const PINCH_THRESHOLD = mmToPixels(PINCH_THRESHOLD_MM); // pixels
 
 /**
  * Tracks finger positions and generates state machine events
@@ -128,7 +128,7 @@ export class EventHandler {
         const dx = current.x - reference.x;
         const dy = current.y - reference.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        return distance > MOVEMENT_THRESHOLD;
+        return distance > FINGER_MOVED_FAR_THRESHOLD_PX;
     }
 
     /**
@@ -230,7 +230,7 @@ export class EventHandler {
             const currentDistance = this.getDistance(this.primaryPos, this.secondaryPos);
             const distanceChange = Math.abs(currentDistance - this.initialTwoFingerDistance);
 
-            if (distanceChange > PINCH_THRESHOLD) {
+            if (distanceChange > PINCH_THRESHOLD_PX) {
                 // Pinch detected - this is a zoom gesture, not a drawing gesture
                 this.emitEvent(Event.PINCH_DETECTED);
                 this.gestureLockedAsDrawing = false;
