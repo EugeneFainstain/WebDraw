@@ -54,7 +54,8 @@ export enum Event {
     F3_DOWN = 'F3_DOWN',              // Third finger touches screen
     FINGER_UP = 'FINGER_UP',          // Any finger lifts from screen
     TIMEOUT = 'TIMEOUT',              // 250ms has elapsed since ANY finger down
-    FINGER_MOVED_FAR = 'FINGER_MOVED_FAR', // Finger moved >30px from reference point
+    CURSOR_MOVED_FAR = 'CURSOR_MOVED_FAR', // Cursor moved >3mm from selectedStrokeCursorPos (deselection/snap)
+    LONG_STROKE_DRAWN = 'LONG_STROKE_DRAWN', // Stroke path length exceeded threshold (gesture lock)
     PINCH_DETECTED = 'PINCH_DETECTED', // Two-finger distance changed beyond threshold
     DELETE = 'DELETE',                // Delete button pressed
     CLEAR = 'CLEAR'                   // Clear button pressed
@@ -69,7 +70,8 @@ export enum Event {
  */
 export type EventFlags = {
     TIMEOUT_HAPPENED: boolean;
-    FINGER_MOVED_FAR_HAPPENED: boolean;
+    CURSOR_MOVED_FAR_HAPPENED: boolean;
+    LONG_STROKE_DRAWN_HAPPENED: boolean;
 };
 
 // ============================================================================
@@ -111,7 +113,8 @@ export enum Action {
 
     // Flag actions
     SET_TIMEOUT_FLAG = 'SET_TIMEOUT_FLAG',
-    SET_FINGER_MOVED_FAR_FLAG = 'SET_FINGER_MOVED_FAR_FLAG',
+    SET_CURSOR_MOVED_FAR_FLAG = 'SET_CURSOR_MOVED_FAR_FLAG',
+    SET_LONG_STROKE_DRAWN_FLAG = 'SET_LONG_STROKE_DRAWN_FLAG',
 
     // No action
     DO_NOTHING = 'DO_NOTHING'
@@ -141,7 +144,8 @@ export class StateMachine {
         this.modifier = { isStrokeSelected: false };
         this.flags = {
             TIMEOUT_HAPPENED: false,
-            FINGER_MOVED_FAR_HAPPENED: false
+            CURSOR_MOVED_FAR_HAPPENED: false,
+            LONG_STROKE_DRAWN_HAPPENED: false
         };
     }
 
@@ -185,15 +189,19 @@ export class StateMachine {
         if (result.actions.includes(Action.SET_TIMEOUT_FLAG)) {
             this.flags.TIMEOUT_HAPPENED = true;
         }
-        if (result.actions.includes(Action.SET_FINGER_MOVED_FAR_FLAG)) {
-            this.flags.FINGER_MOVED_FAR_HAPPENED = true;
+        if (result.actions.includes(Action.SET_CURSOR_MOVED_FAR_FLAG)) {
+            this.flags.CURSOR_MOVED_FAR_HAPPENED = true;
+        }
+        if (result.actions.includes(Action.SET_LONG_STROKE_DRAWN_FLAG)) {
+            this.flags.LONG_STROKE_DRAWN_HAPPENED = true;
         }
 
         // Clear flags on every finger down event
         if (event === Event.F1_DOWN || event === Event.F2_DOWN || event === Event.F3_DOWN) {
             // Reset flags when any finger touches down
             this.flags.TIMEOUT_HAPPENED = false;
-            this.flags.FINGER_MOVED_FAR_HAPPENED = false;
+            this.flags.CURSOR_MOVED_FAR_HAPPENED = false;
+            this.flags.LONG_STROKE_DRAWN_HAPPENED = false;
         }
 
         return result;
@@ -205,7 +213,8 @@ export class StateMachine {
         this.modifier = { isStrokeSelected: false };
         this.flags = {
             TIMEOUT_HAPPENED: false,
-            FINGER_MOVED_FAR_HAPPENED: false
+            CURSOR_MOVED_FAR_HAPPENED: false,
+            LONG_STROKE_DRAWN_HAPPENED: false
         };
     }
 
@@ -264,13 +273,20 @@ export class StateMachine {
             case Event.F2_DOWN:
             case Event.F3_DOWN:
             case Event.FINGER_UP:
-            case Event.FINGER_MOVED_FAR:
             case Event.PINCH_DETECTED:
                 // Keep modifier unchanged
                 return {
                     newState: State.Idle,
                     newModifier: { isStrokeSelected },  // keep
                     actions: [Action.DO_NOTHING]
+                };
+
+            case Event.CURSOR_MOVED_FAR:
+                // Cursor moved far - set flag for later checks
+                return {
+                    newState: State.Idle,
+                    newModifier: { isStrokeSelected },  // keep
+                    actions: [Action.SET_CURSOR_MOVED_FAR_FLAG]
                 };
 
             case Event.TIMEOUT:
@@ -340,7 +356,7 @@ export class StateMachine {
 
             case Event.FINGER_UP:
                 // Single tap detection: deselect stroke if no timeout and no movement
-                const isSingleTap = !flags.TIMEOUT_HAPPENED && !flags.FINGER_MOVED_FAR_HAPPENED;
+                const isSingleTap = !flags.TIMEOUT_HAPPENED && !flags.CURSOR_MOVED_FAR_HAPPENED;
 
                 if (isSingleTap) {
                     // Quick tap: clear highlighting and deselect stroke
@@ -374,12 +390,12 @@ export class StateMachine {
                     actions: [Action.SET_TIMEOUT_FLAG]
                 };
 
-            case Event.FINGER_MOVED_FAR:
-                // Deselect stroke (→ Normal)
+            case Event.CURSOR_MOVED_FAR:
+                // Cursor moved far from anchor - deselect stroke
                 return {
                     newState: State.MovingCursor,
                     newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG, Action.DESELECT_STROKE, Action.MOVE_CURSOR]
+                    actions: [Action.DESELECT_STROKE]
                 };
 
             case Event.PINCH_DETECTED:
@@ -446,8 +462,8 @@ export class StateMachine {
 
             case Event.F3_DOWN:
                 // Keep modifier unchanged, but action depends on flag
-                // Save stroke only if FINGER_MOVED_FAR_HAPPENED, else abandon
-                if (flags.FINGER_MOVED_FAR_HAPPENED) {
+                // Save stroke only if LONG_STROKE_DRAWN_HAPPENED (stroke is long enough), else abandon
+                if (flags.LONG_STROKE_DRAWN_HAPPENED) {
                     return {
                         newState: State.Transform,
                         newModifier: { isStrokeSelected },  // keep
@@ -480,12 +496,20 @@ export class StateMachine {
                     actions: [Action.SET_TIMEOUT_FLAG]
                 };
 
-            case Event.FINGER_MOVED_FAR:
-                // Keep selection during drawing (might be a zoom gesture)
+            case Event.CURSOR_MOVED_FAR:
+                // Cursor moved far - set flag (not used in Drawing, but keep consistent)
                 return {
                     newState: State.Drawing,
                     newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG]
+                    actions: [Action.SET_CURSOR_MOVED_FAR_FLAG]
+                };
+
+            case Event.LONG_STROKE_DRAWN:
+                // Stroke path length exceeded threshold - set flag for stroke protection
+                return {
+                    newState: State.Drawing,
+                    newModifier: { isStrokeSelected },  // keep
+                    actions: [Action.SET_LONG_STROKE_DRAWN_FLAG]
                 };
 
             case Event.DELETE:
@@ -545,12 +569,12 @@ export class StateMachine {
                     actions: [Action.SET_TIMEOUT_FLAG]
                 };
 
-            case Event.FINGER_MOVED_FAR:
-                // Keep modifier unchanged
+            case Event.CURSOR_MOVED_FAR:
+                // Cursor moved far - set flag
                 return {
                     newState: State.Transform,
                     newModifier: modifier,  // keep
-                    actions: [Action.SET_FINGER_MOVED_FAR_FLAG]
+                    actions: [Action.SET_CURSOR_MOVED_FAR_FLAG]
                 };
 
             case Event.PINCH_DETECTED:
@@ -618,14 +642,19 @@ export class StateMachine {
                 };
 
             case Event.TIMEOUT:
-            case Event.FINGER_MOVED_FAR:
                 // Keep in selection rectangle mode, update selection
                 return {
                     newState: State.SelectionRectangle,
                     newModifier: modifier,  // keep
-                    actions: event === Event.TIMEOUT ?
-                        [Action.SET_TIMEOUT_FLAG, Action.UPDATE_SELECTION_RECTANGLE] :
-                        [Action.SET_FINGER_MOVED_FAR_FLAG, Action.UPDATE_SELECTION_RECTANGLE]
+                    actions: [Action.SET_TIMEOUT_FLAG, Action.UPDATE_SELECTION_RECTANGLE]
+                };
+
+            case Event.CURSOR_MOVED_FAR:
+                // Cursor moved far - set flag and update selection
+                return {
+                    newState: State.SelectionRectangle,
+                    newModifier: modifier,  // keep
+                    actions: [Action.SET_CURSOR_MOVED_FAR_FLAG, Action.UPDATE_SELECTION_RECTANGLE]
                 };
 
             case Event.PINCH_DETECTED:
@@ -670,7 +699,8 @@ export class StateMachine {
         for (const event of Object.values(Event)) {
             const normalMode = this.transition(state, { isStrokeSelected: false }, event, {
                 TIMEOUT_HAPPENED: false,
-                FINGER_MOVED_FAR_HAPPENED: false
+                CURSOR_MOVED_FAR_HAPPENED: false,
+                LONG_STROKE_DRAWN_HAPPENED: false
             });
             transitions.set(event, normalMode);
         }

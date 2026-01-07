@@ -75,6 +75,9 @@ export const USE_BATCHED_DELTA_MECHANISM = false;
 // Stroke length threshold for locking two-finger gesture as drawing (in millimeters)
 export const STROKE_LEN_THRESHOLD_MM = 4;
 
+// Distance threshold for deselecting a stroke (cursor distance from anchor, in millimeters)
+export const DESELECT_DISTANCE_THRESHOLD_MM = 3;
+
 // Double-tap detection constants
 export const DOUBLE_TAP_DELAY = 300; // ms - max time between first lift and second down
 export const DOUBLE_TAP_MAX_DURATION = 200; // ms - max time the second tap can be held
@@ -130,7 +133,8 @@ export const state = {
     // Index of the point within the selected stroke where the cursor is positioned
     selectedStrokePointIdx: null as number | null,
 
-    // Reference position for selected stroke tracking
+    // Anchor point on the selected stroke (used to determine when to deselect)
+    // Updated continuously while drawing, or set to closest point when selecting via double-click
     selectedStrokeCursorPos: null as Point | null,
 
     // Cursor position at start of drag gesture (for restoring if drag is cancelled)
@@ -282,4 +286,9 @@ export function mmToPixels(mm: number): number {
 // Computed constant (depends on mmToPixels)
 export function getStrokeLenThreshold(): number {
     return mmToPixels(STROKE_LEN_THRESHOLD_MM);
+}
+
+// Get deselect distance threshold in pixels
+export function getDeselectDistanceThreshold(): number {
+    return mmToPixels(DESELECT_DISTANCE_THRESHOLD_MM);
 }

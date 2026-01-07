@@ -280,12 +280,12 @@ function handleActions(actions: Action[]): void {
                 // Behavior: Selects the last stroke in history (the one just completed)
                 //           Cursor stays at its current position
                 //           Marks as "fresh stroke" (Undo button will delete it)
-                state.selectedStrokeCursorPos = state.cursorAnchor ? { ...state.cursorAnchor } : null;
+                // Note: selectedStrokeCursorPos is already set during drawing via addPointToStroke()
                 // Set selected stroke to the last stroke in history
                 if (state.strokeHistory.length > 0) {
                     state.selectedStrokeIdx = state.strokeHistory.length - 1;
                     const selectedStroke = state.strokeHistory[state.selectedStrokeIdx];
-                    // Set cursor to the last point of the stroke
+                    // Set point index to the last point of the stroke
                     if (selectedStroke.points!.length > 0) {
                         state.selectedStrokePointIdx = selectedStroke.points!.length - 1;
                     }
@@ -313,6 +313,7 @@ function handleActions(actions: Action[]): void {
                     // Select the stroke and store the point index
                     state.selectedStrokeIdx = closestResult.strokeIdx;
                     state.selectedStrokePointIdx = closestResult.pointIdx;
+                    // Set anchor for deselection distance check
                     state.selectedStrokeCursorPos = { ...closestResult.point };
                     // Manual selection exits fresh stroke mode
                     state.isFreshStroke = false;
@@ -436,11 +437,11 @@ state.eventHandler.setEventCallback((event: Event) => {
     const result = state.stateMachine.processEvent(event);
 
     // Restore cursor position if starting to draw while stroke was selected (and didn't move far)
-    // This ensures consistent behavior: cursor snaps back both on finger up AND on start drawing
+    // This handles zoom restoration: user selected stroke, moved cursor, zoomed, now drawing again
     if (event === Event.F2_DOWN && prevState === State.MovingCursor && wasStrokeSelected) {
         const flags = state.stateMachine.getFlags();
-        // If we didn't move far, restore cursor to drag start position before creating stroke
-        if (!flags.FINGER_MOVED_FAR_HAPPENED && state.dragStartCursorPos) {
+        // dragStartCursorPos is only set when starting drag from Idle (for zoom restoration)
+        if (!flags.CURSOR_MOVED_FAR_HAPPENED && state.dragStartCursorPos) {
             state.cursorAnchor = { ...state.dragStartCursorPos };
         }
         state.dragStartCursorPos = null;
@@ -448,13 +449,17 @@ state.eventHandler.setEventCallback((event: Event) => {
 
     handleActions(result.actions);
 
-    // Restore cursor position if drag was cancelled (finger up without moving far)
+    // Post-drawing snap-back: lifting last finger after drawing without moving far
     if (event === Event.FINGER_UP && prevState === State.MovingCursor && wasStrokeSelected) {
         const flags = state.stateMachine.getFlags();
-        // If we didn't move far, restore cursor to drag start position
-        if (!flags.FINGER_MOVED_FAR_HAPPENED && state.dragStartCursorPos) {
-            state.cursorAnchor = { ...state.dragStartCursorPos };
+        if (!flags.CURSOR_MOVED_FAR_HAPPENED && state.selectedStrokeCursorPos) {
+            state.cursorAnchor = { ...state.selectedStrokeCursorPos };
         }
+    }
+
+    // Zoom restoration: lifting finger after transform, snap back to where we started
+    if (event === Event.FINGER_UP && prevState === State.Transform && state.dragStartCursorPos) {
+        state.cursorAnchor = { ...state.dragStartCursorPos };
         state.dragStartCursorPos = null;
     }
 
@@ -529,6 +534,7 @@ initPointerHandlers({
     updatePickersForSelectedStroke,
     isPickerOpen: () => combinedPicker.isOpen() || menuPicker.isOpen(),
     closePicker: () => { combinedPicker.close(); menuPicker.close(); },
+    canvasToScreen,
 });
 setupPointerEventListeners();
 

@@ -59,24 +59,26 @@ This separation allows users to:
 
 ## Events
 
-The state machine responds to **9 events**:
+The state machine responds to **10 events**:
 
 1. **F1_DOWN** - First finger touches screen
 2. **F2_DOWN** - Second finger touches screen
 3. **F3_DOWN** - Third finger touches screen
 4. **FINGER_UP** - Any finger lifts from screen
 5. **TIMEOUT** - 250ms has elapsed since ANY finger down
-6. **FINGER_MOVED_FAR** - Finger moved >2mm from reference point (screen-space)
-7. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (8mm screen-space), indicating zoom/pan/rotate gesture
-8. **DELETE** - Delete button pressed
-9. **CLEAR** - Clear button pressed
+6. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `selectedStrokeCursorPos` (screen-space). Used for deselection and snap-back.
+7. **LONG_STROKE_DRAWN** - Stroke path length exceeded threshold (~4mm). Used for gesture disambiguation (pinch vs draw) and stroke protection.
+8. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (8mm screen-space), indicating zoom/pan/rotate gesture
+9. **DELETE** - Delete button pressed
+10. **CLEAR** - Clear button pressed
 
 ## Event Flags
 
-The state machine maintains **2 persistent flags** that are set by events and checked by later transitions:
+The state machine maintains **3 persistent flags** that are set by events and checked by later transitions:
 
 1. **TIMEOUT_HAPPENED** - Set when TIMEOUT event fires
-2. **FINGER_MOVED_FAR_HAPPENED** - Set when FINGER_MOVED_FAR event fires
+2. **CURSOR_MOVED_FAR_HAPPENED** - Set when CURSOR_MOVED_FAR event fires
+3. **LONG_STROKE_DRAWN_HAPPENED** - Set when LONG_STROKE_DRAWN event fires
 
 These flags are reset on every finger down event (F1_DOWN, F2_DOWN, or F3_DOWN).
 
@@ -104,7 +106,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `PROCESS_CLEAR` | Execute clear operation |
 | `ABORT_TOO_MANY_FINGERS` | Abort gesture (too many fingers) |
 | `SET_TIMEOUT_FLAG` | Set TIMEOUT_HAPPENED flag |
-| `SET_FINGER_MOVED_FAR_FLAG` | Set FINGER_MOVED_FAR_HAPPENED flag |
+| `SET_CURSOR_MOVED_FAR_FLAG` | Set CURSOR_MOVED_FAR_HAPPENED flag |
+| `SET_LONG_STROKE_DRAWN_FLAG` | Set LONG_STROKE_DRAWN_HAPPENED flag |
 | `DO_NOTHING` | No action required |
 
 ## Transition Tables
@@ -122,7 +125,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F3_DOWN | Idle (keep Normal) | Idle (keep Selected) |
 | FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | Idle (keep Normal) - [SET_TIMEOUT_FLAG] | Idle (keep Fresh) - [SET_TIMEOUT_FLAG] |
-| FINGER_MOVED_FAR | Idle (keep Normal) | Idle (keep Selected) |
+| CURSOR_MOVED_FAR | Idle (keep Normal) - [SET_CURSOR_MOVED_FAR_FLAG] | Idle (keep Selected) - [SET_CURSOR_MOVED_FAR_FLAG] |
 | PINCH_DETECTED | Idle (keep Normal) | Idle (keep Selected) |
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
@@ -138,7 +141,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | FINGER_UP (if single tap) | Idle (keep Normal) - [CLEAR_HIGHLIGHTING] | Idle (→ Normal) - [CLEAR_HIGHLIGHTING, DESELECT_STROKE] |
 | FINGER_UP (otherwise) | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | MovingCursor (keep Normal) - [SET_TIMEOUT_FLAG] | MovingCursor (keep Fresh) - [SET_TIMEOUT_FLAG] |
-| FINGER_MOVED_FAR | MovingCursor (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] | MovingCursor (→ Normal) - [SET_FINGER_MOVED_FAR_FLAG, DESELECT_STROKE] |
+| CURSOR_MOVED_FAR | MovingCursor (keep Normal) | MovingCursor (→ Normal) - [DESELECT_STROKE] |
 | PINCH_DETECTED | MovingCursor (keep Normal) | MovingCursor (keep Selected) |
 | DELETE | MovingCursor (keep) - [PROCESS_DELETE] | MovingCursor (keep) - [PROCESS_DELETE] |
 | CLEAR | MovingCursor (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | MovingCursor (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
@@ -155,17 +158,18 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F3_DOWN | Transform (keep Normal) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] | Transform (keep Selected) - [SAVE if flag, else ABANDON, INIT_TRANSFORM] |
 | FINGER_UP | MovingCursor (→ Selected) - [SAVE_STROKE, SELECT_STROKE] | MovingCursor (keep Selected) - [SAVE_STROKE] |
 | TIMEOUT | Drawing (keep Normal) - [SET_TIMEOUT_FLAG] | Drawing (keep Selected) - [SET_TIMEOUT_FLAG] |
-| FINGER_MOVED_FAR | Drawing (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG] | Drawing (keep Selected) - [SET_FINGER_MOVED_FAR_FLAG] |
+| CURSOR_MOVED_FAR | Drawing (keep Normal) - [SET_CURSOR_MOVED_FAR_FLAG] | Drawing (keep Selected) - [SET_CURSOR_MOVED_FAR_FLAG] |
+| LONG_STROKE_DRAWN | Drawing (keep Normal) - [SET_LONG_STROKE_DRAWN_FLAG] | Drawing (keep Selected) - [SET_LONG_STROKE_DRAWN_FLAG] |
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
 
-**Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >8mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached STROKE_LEN_THRESHOLD_MM (8mm path length in screen-space), the gesture is locked as drawing and PINCH_DETECTED won't fire.
+**Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >8mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached the length threshold (LONG_STROKE_DRAWN fired), the gesture is locked as drawing and PINCH_DETECTED won't fire.
 
 **Note on Drawing Lock and Highlighting:** When in Drawing state, one of two mutually exclusive events will occur first:
 1. **PINCH_DETECTED fires first** - Gesture becomes zoom/pan. Stroke is abandoned, highlighting is preserved (user can continue to transform highlighted strokes).
-2. **Stroke length threshold reached first** - Gesture is locked as drawing. Highlighting is cleared (user is committed to drawing a new stroke). This happens in `cursorMovement.ts` when `lockGestureAsDrawing()` is called.
+2. **LONG_STROKE_DRAWN fires first** - Gesture is locked as drawing. Highlighting is cleared (user is committed to drawing a new stroke). This happens in `cursorMovement.ts` when `lockGestureAsDrawing()` is called.
 
-**Note on F3_DOWN:** Actions depend on FINGER_MOVED_FAR_HAPPENED flag:
+**Note on F3_DOWN:** Actions depend on LONG_STROKE_DRAWN_HAPPENED flag:
 - If flag is true: [SAVE_STROKE, INIT_TRANSFORM]
 - If flag is false: [ABANDON_STROKE, INIT_TRANSFORM]
 
@@ -178,7 +182,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F3_DOWN | Transform (keep Normal) | Transform (keep Selected) |
 | FINGER_UP | Idle (keep Normal) | Idle (keep Selected) |
 | TIMEOUT | Transform (keep Normal) - [SET_TIMEOUT_FLAG] | Transform (keep Fresh) - [SET_TIMEOUT_FLAG] |
-| FINGER_MOVED_FAR | Transform (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG] | Transform (keep Fresh) - [SET_FINGER_MOVED_FAR_FLAG] |
+| CURSOR_MOVED_FAR | Transform (keep Normal) - [SET_CURSOR_MOVED_FAR_FLAG] | Transform (keep Selected) - [SET_CURSOR_MOVED_FAR_FLAG] |
 | PINCH_DETECTED | Transform (keep Normal) | Transform (keep Selected) |
 | DELETE | Idle (keep) - [PROCESS_DELETE] | Idle (keep) - [PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] | Idle (→ Normal) - [PROCESS_CLEAR, DESELECT_STROKE] |
@@ -193,7 +197,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | F3_DOWN | Idle (→ Normal) - [CANCEL_SELECTION_RECTANGLE, DESELECT_STROKE] |
 | FINGER_UP | Idle (→ Normal) - [APPLY_SELECTION_RECTANGLE, DESELECT_STROKE] |
 | TIMEOUT | SelectionRectangle (keep Normal) - [SET_TIMEOUT_FLAG, UPDATE_SELECTION_RECTANGLE] |
-| FINGER_MOVED_FAR | SelectionRectangle (keep Normal) - [SET_FINGER_MOVED_FAR_FLAG, UPDATE_SELECTION_RECTANGLE] |
+| CURSOR_MOVED_FAR | SelectionRectangle (keep Normal) - [SET_CURSOR_MOVED_FAR_FLAG, UPDATE_SELECTION_RECTANGLE] |
 | DELETE | Idle (→ Normal) - [CANCEL_SELECTION_RECTANGLE, PROCESS_DELETE] |
 | CLEAR | Idle (→ Normal) - [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DESELECT_STROKE] |
 
@@ -203,9 +207,15 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 ### Event Flags Usage
 
-1. **TIMEOUT_HAPPENED**: Set after 250ms from any finger down. This flag provides timing information for stroke protection.
+1. **TIMEOUT_HAPPENED**: Set after 250ms from any finger down. Used for single tap detection (deselection requires no timeout).
 
-2. **FINGER_MOVED_FAR_HAPPENED**: Set when any finger moves >2mm from its reference point. Used in Drawing state to determine whether to save or abandon a stroke when F3_DOWN occurs.
+2. **CURSOR_MOVED_FAR_HAPPENED**: Set when the cursor moves >3mm from `selectedStrokeCursorPos` (the anchor point on the selected stroke). Used for:
+   - Single tap detection (deselection requires no cursor movement)
+   - Cursor drag restoration when finger is lifted without significant movement
+
+3. **LONG_STROKE_DRAWN_HAPPENED**: Set when the stroke being drawn exceeds the path length threshold (~4mm). Used for:
+   - Stroke protection: if F3_DOWN occurs while drawing, save the stroke only if this flag is true
+   - Gesture disambiguation: locks the gesture as drawing, preventing PINCH_DETECTED from firing
 
 ### Selected Stroke Mode
 
@@ -218,8 +228,13 @@ When a state transition occurs, the state machine returns a list of **actions** 
 - Single tap (quick tap without timeout or movement) when a stroke is selected - deselects the stroke
 - DELETE button pressed (removes selected stroke, selects another)
 - CLEAR button pressed
-- Cursor movement >2mm from selected stroke position (FINGER_MOVED_FAR in MovingCursor)
+- Cursor movement >3mm from `selectedStrokeCursorPos` (CURSOR_MOVED_FAR event)
 - Too many fingers (F3_DOWN in MovingCursor)
+
+**Note on Deselection Distance:** The deselection distance is measured from `selectedStrokeCursorPos`, which is:
+- Updated continuously while drawing (tracks the last point added to the stroke)
+- Set to the closest point on the stroke when manually selecting via double-tap
+This anchor-based approach provides more intuitive deselection behavior compared to using finger movement thresholds.
 
 **Behavior:**
 - 2-finger transform always affects the entire canvas (regardless of selection/highlighting)
@@ -231,8 +246,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 ### Stroke Protection
 
 When in Drawing state and F3_DOWN event occurs:
-- If `FINGER_MOVED_FAR_HAPPENED` flag is true: stroke is saved before entering Transform
-- If `FINGER_MOVED_FAR_HAPPENED` flag is false: stroke is abandoned (assumed accidental)
+- If `LONG_STROKE_DRAWN_HAPPENED` flag is true: stroke is saved before entering Transform
+- If `LONG_STROKE_DRAWN_HAPPENED` flag is false: stroke is abandoned (assumed accidental)
 
 ### Selection Rectangle Mode
 

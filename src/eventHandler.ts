@@ -16,11 +16,8 @@ export interface Point {
 const TIMEOUT_DELAY = 250; // ms - timeout after any finger down
 
 // Physical thresholds in millimeters (scale-invariant)
-const FINGER_MOVED_FAR_THRESHOLD_MM = 3; // mm - threshold for FINGER_MOVED_FAR event
-const PINCH_THRESHOLD_MM            = 4; // mm - threshold for detecting pinch/zoom gesture
-
-const FINGER_MOVED_FAR_THRESHOLD_PX = mmToPixels(FINGER_MOVED_FAR_THRESHOLD_MM); // in pixels
-const PINCH_THRESHOLD_PX            = mmToPixels(PINCH_THRESHOLD_MM); // in pixels
+const PINCH_THRESHOLD_MM = 4; // mm - threshold for detecting pinch/zoom gesture
+const PINCH_THRESHOLD_PX = mmToPixels(PINCH_THRESHOLD_MM); // in pixels
 
 // Convert millimeters to screen pixels based on device DPI
 // Assumes 96 DPI as default (standard for web), adjusted by devicePixelRatio
@@ -43,10 +40,6 @@ export class EventHandler {
     private primaryPos: Point | null = null;
     private secondaryPos: Point | null = null;
     private tertiaryPos: Point | null = null;
-
-    // Reference points for movement detection
-    private primaryReferencePos: Point | null = null;
-    private secondaryReferencePos: Point | null = null;
 
     // Timeout tracking
     private timeoutHandle: number | null = null;
@@ -122,16 +115,6 @@ export class EventHandler {
     }
 
     /**
-     * Check if finger has moved far from reference point
-     */
-    private checkMovementThreshold(current: Point, reference: Point): boolean {
-        const dx = current.x - reference.x;
-        const dy = current.y - reference.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        return distance > FINGER_MOVED_FAR_THRESHOLD_PX;
-    }
-
-    /**
      * Calculate distance between two points
      */
     private getDistance(p1: Point, p2: Point): number {
@@ -148,7 +131,6 @@ export class EventHandler {
         if (this.primaryPointerId === null) {
             this.primaryPointerId = pointerId;
             this.primaryPos = { ...pos };
-            this.primaryReferencePos = { ...pos };
 
             // Start timeout on any finger down
             this.startTimeout();
@@ -161,7 +143,6 @@ export class EventHandler {
         if (this.secondaryPointerId === null) {
             this.secondaryPointerId = pointerId;
             this.secondaryPos = { ...pos };
-            this.secondaryReferencePos = { ...pos };
 
             // Record initial distance between two fingers for gesture disambiguation
             if (this.primaryPos) {
@@ -195,34 +176,13 @@ export class EventHandler {
      * Handle pointer move event
      */
     public handlePointerMove(pointerId: number, pos: Point): void {
-        let updated = false;
-
         // Update position
         if (pointerId === this.primaryPointerId) {
             this.primaryPos = { ...pos };
-            updated = true;
-
-            // Check movement threshold
-            if (this.primaryReferencePos &&
-                this.checkMovementThreshold(pos, this.primaryReferencePos)) {
-                this.emitEvent(Event.FINGER_MOVED_FAR);
-                // Update reference point so we don't keep firing
-                this.primaryReferencePos = { ...pos };
-            }
         } else if (pointerId === this.secondaryPointerId) {
             this.secondaryPos = { ...pos };
-            updated = true;
-
-            // Check movement threshold for secondary finger too
-            if (this.secondaryReferencePos &&
-                this.checkMovementThreshold(pos, this.secondaryReferencePos)) {
-                this.emitEvent(Event.FINGER_MOVED_FAR);
-                // Update reference point so we don't keep firing
-                this.secondaryReferencePos = { ...pos };
-            }
         } else if (pointerId === this.tertiaryPointerId) {
             this.tertiaryPos = { ...pos };
-            updated = true;
         }
 
         // Check for pinch gesture (two-finger distance change)
@@ -236,8 +196,6 @@ export class EventHandler {
                 this.gestureLockedAsDrawing = false;
             }
         }
-
-        // No specific state machine event for move (handled by the drawing/transform logic)
     }
 
     /**
@@ -255,11 +213,9 @@ export class EventHandler {
             // Primary finger lifted - promote secondary to primary, tertiary to secondary
             this.primaryPointerId = this.secondaryPointerId;
             this.primaryPos = this.secondaryPos;
-            this.primaryReferencePos = this.secondaryReferencePos;
 
             this.secondaryPointerId = this.tertiaryPointerId;
             this.secondaryPos = this.tertiaryPos;
-            this.secondaryReferencePos = null; // tertiary doesn't have a reference pos
 
             this.tertiaryPointerId = null;
             this.tertiaryPos = null;
@@ -281,7 +237,6 @@ export class EventHandler {
             // Secondary finger lifted - promote tertiary to secondary
             this.secondaryPointerId = this.tertiaryPointerId;
             this.secondaryPos = this.tertiaryPos;
-            this.secondaryReferencePos = null; // tertiary doesn't have a reference pos
 
             this.tertiaryPointerId = null;
             this.tertiaryPos = null;
@@ -360,8 +315,6 @@ export class EventHandler {
         this.primaryPos = null;
         this.secondaryPos = null;
         this.tertiaryPos = null;
-        this.primaryReferencePos = null;
-        this.secondaryReferencePos = null;
         this.initialTwoFingerDistance = null;
         this.gestureLockedAsDrawing = false;
 

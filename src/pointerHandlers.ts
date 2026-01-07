@@ -19,13 +19,14 @@
  */
 
 import { Point } from './eventHandler';
-import { State, Action } from './stateMachine';
+import { State, Action, Event as SMEvent } from './stateMachine';
 import {
     state,
     DOUBLE_TAP_DELAY,
     DOUBLE_TAP_MAX_DURATION,
     DOUBLE_TAP_DISTANCE,
     UI_DRAG_THRESHOLD,
+    getDeselectDistanceThreshold,
 } from './state';
 
 // ============================================================================
@@ -48,6 +49,7 @@ export interface PointerHandlerCallbacks {
     updatePickersForSelectedStroke: () => void;
     isPickerOpen: () => boolean;
     closePicker: () => void;
+    canvasToScreen: (canvasPos: Point) => Point;
 }
 
 // Store callbacks - will be set during initialization
@@ -71,6 +73,24 @@ function getPointerPos(e: PointerEvent): Point {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
     };
+}
+
+/**
+ * Check if cursor is far from the selected stroke anchor point.
+ * Returns true if cursor should trigger stroke deselection.
+ * Distance is measured in screen space for scale-independent behavior.
+ */
+function isCursorFarFromAnchor(): boolean {
+    if (!state.cursorAnchor || !state.selectedStrokeCursorPos) {
+        return false;
+    }
+
+    // Convert both points to screen space for scale-independent distance check
+    const cursorScreen = callbacks.canvasToScreen(state.cursorAnchor);
+    const anchorScreen = callbacks.canvasToScreen(state.selectedStrokeCursorPos);
+
+    const distance = callbacks.getDistance(cursorScreen, anchorScreen);
+    return distance > getDeselectDistanceThreshold();
 }
 
 // ============================================================================
@@ -168,6 +188,15 @@ export function handlePointerMove(e: PointerEvent): void {
     // Handle state-specific continuous updates
     if (currentState === State.MovingCursor || currentState === State.Drawing) {
         callbacks.updateCursorPosition();
+
+        // Check if cursor moved far from anchor - emit CURSOR_MOVED_FAR event
+        if (currentState === State.MovingCursor && state.stateMachine.isStrokeSelected()) {
+            if (isCursorFarFromAnchor()) {
+                // Emit event - state machine will handle deselection
+                const result = state.stateMachine.processEvent(SMEvent.CURSOR_MOVED_FAR);
+                callbacks.handleActions(result.actions);
+            }
+        }
 
         if (currentState === State.Drawing && state.currentStroke) {
             callbacks.addPointToStroke();

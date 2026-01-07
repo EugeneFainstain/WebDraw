@@ -31,7 +31,7 @@ import {
     getStrokeLenThreshold,
     TOOLBAR_HEIGHT,
 } from './state';
-import { State } from './stateMachine';
+import { State, Event } from './stateMachine';
 
 // ============================================================================
 // TYPES
@@ -332,10 +332,14 @@ export function addPointToStroke(): void {
             state.lastGridPosition = gridPoint;
             // Snap the cursor to the grid point while drawing
             state.cursorAnchor = { ...gridPoint };
+            // Update anchor for deselection distance check
+            state.selectedStrokeCursorPos = { ...gridPoint };
         }
     } else {
         // Normal mode: add every point
         state.currentStroke.points!.push({ ...state.cursorAnchor });
+        // Update anchor for deselection distance check
+        state.selectedStrokeCursorPos = { ...state.cursorAnchor };
     }
 
     // Check if stroke is long enough to lock the gesture as drawing
@@ -348,6 +352,8 @@ export function addPointToStroke(): void {
         const canvasSpaceThreshold = getStrokeLenThreshold() / state.viewTransform.scale;
         if (strokeLength >= canvasSpaceThreshold) {
             state.eventHandler.lockGestureAsDrawing();
+            // Emit LONG_STROKE_DRAWN event to set the flag for stroke protection
+            state.stateMachine.processEvent(Event.LONG_STROKE_DRAWN);
             // Clear highlighting - we're now committed to drawing, not zooming
             state.highlightedStrokes.clear();
         }
