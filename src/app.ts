@@ -434,6 +434,18 @@ state.eventHandler.setEventCallback((event: Event) => {
     }
 
     const result = state.stateMachine.processEvent(event);
+
+    // Restore cursor position if starting to draw while stroke was selected (and didn't move far)
+    // This ensures consistent behavior: cursor snaps back both on finger up AND on start drawing
+    if (event === Event.F2_DOWN && prevState === State.MovingCursor && wasStrokeSelected) {
+        const flags = state.stateMachine.getFlags();
+        // If we didn't move far, restore cursor to drag start position before creating stroke
+        if (!flags.FINGER_MOVED_FAR_HAPPENED && state.dragStartCursorPos) {
+            state.cursorAnchor = { ...state.dragStartCursorPos };
+        }
+        state.dragStartCursorPos = null;
+    }
+
     handleActions(result.actions);
 
     // Restore cursor position if drag was cancelled (finger up without moving far)
