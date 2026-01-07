@@ -562,7 +562,6 @@ export class StateMachine {
                 };
 
             case Event.FINGER_UP:
-                // Keep modifier unchanged (Normal stays Normal, Fresh stays Fresh)
                 // Restore cursor position after transform (snap-back for canvas zoom)
                 return {
                     newState: State.Idle,
