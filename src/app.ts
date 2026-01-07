@@ -263,6 +263,9 @@ function handleActions(actions: Action[]): void {
                 }
                 state.currentStroke = null;
                 state.lastGridPosition = null;
+                // Clear dragStartCursorPos - we completed a new stroke, so zoom restoration
+                // should not snap back to the old stroke's position
+                state.dragStartCursorPos = null;
                 break;
 
             case Action.ABANDON_STROKE:
@@ -436,17 +439,6 @@ state.eventHandler.setEventCallback((event: Event) => {
 
     const result = state.stateMachine.processEvent(event);
 
-    // Restore cursor position if starting to draw while stroke was selected (and didn't move far)
-    // This handles zoom restoration: user selected stroke, moved cursor, zoomed, now drawing again
-    if (event === Event.F2_DOWN && prevState === State.MovingCursor && wasStrokeSelected) {
-        const flags = state.stateMachine.getFlags();
-        // dragStartCursorPos is only set when starting drag from Idle (for zoom restoration)
-        if (!flags.CURSOR_MOVED_FAR_HAPPENED && state.dragStartCursorPos) {
-            state.cursorAnchor = { ...state.dragStartCursorPos };
-        }
-        state.dragStartCursorPos = null;
-    }
-
     handleActions(result.actions);
 
     // Post-drawing snap-back: lifting last finger after drawing without moving far
@@ -457,9 +449,14 @@ state.eventHandler.setEventCallback((event: Event) => {
         }
     }
 
-    // Zoom restoration: lifting finger after transform, snap back to where we started
+    // Zoom restoration: lifting finger after 2-finger canvas transform, snap back to where we started
+    // For 3-finger stroke transform, cursor is already positioned at the transformed point (done in transform.ts)
     if (event === Event.FINGER_UP && prevState === State.Transform && state.dragStartCursorPos) {
-        state.cursorAnchor = { ...state.dragStartCursorPos };
+        // Only snap back for 2-finger canvas transforms (no strokeSnapshotsMap)
+        // 3-finger stroke transforms have strokeSnapshotsMap and cursor is already correctly positioned
+        if (!state.transformStart?.strokeSnapshotsMap) {
+            state.cursorAnchor = { ...state.dragStartCursorPos };
+        }
         state.dragStartCursorPos = null;
     }
 
