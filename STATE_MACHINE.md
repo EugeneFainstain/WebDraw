@@ -39,7 +39,6 @@ The application has **5 distinct states**:
 - When `true`: A stroke is selected (cursor shows green)
 - When `false`: No selection (normal mode)
 - The actual selected stroke index is tracked separately in `app.ts` as `selectedStrokeIdx`
-- Note: `app.ts` also tracks `isFreshStroke` to distinguish between freshly-drawn selections vs manual selections
 
 ## Gesture Separation: 2-Finger vs 3-Finger Transform
 
@@ -245,7 +244,6 @@ This anchor-based approach provides more intuitive deselection behavior compared
 - 3-finger transform affects the selected stroke AND all highlighted strokes together (does nothing if none)
 - Visual indicator: cursor shows green when a stroke is selected, white otherwise
 - The selected stroke index is tracked in `app.ts` as `selectedStrokeIdx` (null = no selection)
-- The `isFreshStroke` flag in `app.ts` distinguishes freshly-drawn vs manually-selected strokes (for button behavior)
 
 ### Stroke Protection
 

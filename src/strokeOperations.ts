@@ -231,7 +231,6 @@ export function processUndo(): void {
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
     state.selectedStrokeCursorPos = null;
-    state.isFreshStroke = false;
     state.transformSnapshot = null;
     state.hasUndoableTransform = false;
 
@@ -269,7 +268,6 @@ export function processDelete(): void {
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
     state.selectedStrokeCursorPos = null;
-    state.isFreshStroke = false;
     state.transformSnapshot = null;
     state.hasUndoableTransform = false;
 
@@ -374,7 +372,6 @@ export function duplicateSelectedStroke(): void {
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
     state.selectedStrokeCursorPos = null;
-    state.isFreshStroke = false;
 
     // Clear transformation undo state
     state.transformSnapshot = null;
@@ -419,7 +416,6 @@ export function groupHighlightedStrokes(): void {
     state.highlightedStrokes.clear();
     state.highlightedStrokes.add(indices[0]);
     state.selectedStrokeIdx = indices[0];
-    state.isFreshStroke = false;
 
     updateUI();
     callbacks.updatePickersForSelectedStroke();
@@ -466,7 +462,6 @@ export function ungroupSelectedStroke(): void {
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
     state.selectedStrokeCursorPos = null;
-    state.isFreshStroke = false;
 
     updateUI();
     updateGroupButtons();

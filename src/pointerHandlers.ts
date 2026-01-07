@@ -275,8 +275,6 @@ export function handlePointerUp(e: PointerEvent): void {
                 state.selectedStrokeIdx = result.strokeIdx;
                 state.selectedStrokePointIdx = result.pointIdx;
                 state.selectedStrokeCursorPos = { ...result.point };
-                // Manual selection exits fresh stroke mode
-                state.isFreshStroke = false;
                 // Clear transformation undo state when manually selecting a stroke
                 state.transformSnapshot = null;
                 state.hasUndoableTransform = false;

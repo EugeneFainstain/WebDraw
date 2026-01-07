@@ -107,8 +107,6 @@ export function handleActions(actions: Action[]): void {
                 // Clear transformation undo state when selecting new stroke
                 state.transformSnapshot = null;
                 state.hasUndoableTransform = false;
-                // Mark as fresh stroke (just drew)
-                state.isFreshStroke = true;
                 updateUI();
                 break;
 
@@ -129,8 +127,6 @@ export function handleActions(actions: Action[]): void {
                     state.selectedStrokePointIdx = closestResult.pointIdx;
                     // Set anchor for deselection distance check
                     state.selectedStrokeCursorPos = { ...closestResult.point };
-                    // Manual selection exits fresh stroke mode
-                    state.isFreshStroke = false;
                     // Clear transformation undo state when manually selecting a stroke
                     state.transformSnapshot = null;
                     state.hasUndoableTransform = false;
@@ -152,7 +148,6 @@ export function handleActions(actions: Action[]): void {
                 // Clear transformation undo state on deselection
                 state.transformSnapshot = null;
                 state.hasUndoableTransform = false;
-                // Don't change isFreshStroke - it persists through deselection
                 // NOTE: Don't clearDebug() here - debug messages should persist
                 updateUI();
                 break;

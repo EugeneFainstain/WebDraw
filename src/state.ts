@@ -140,9 +140,6 @@ export const state = {
     // Cursor position at start of drag gesture (for restoring if drag is cancelled)
     dragStartCursorPos: null as Point | null,
 
-    // Track if we're in "fresh stroke" mode (just drew, not manually selected)
-    isFreshStroke: false,
-
     // Track transformation undo state
     transformSnapshot: null as Point[] | null,  // Original points before transformation
     hasUndoableTransform: false,     // True if selected stroke has been transformed
@@ -227,7 +224,6 @@ export function resetState() {
     state.transformSnapshot = null;
     state.hasUndoableTransform = false;
     state.viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
-    state.isFreshStroke = false;
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
     state.selectedStrokeCursorPos = null;
