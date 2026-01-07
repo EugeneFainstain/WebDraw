@@ -161,6 +161,10 @@ When a state transition occurs, the state machine returns a list of **actions** 
 
 **Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >8mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached STROKE_LEN_THRESHOLD_MM (8mm path length in screen-space), the gesture is locked as drawing and PINCH_DETECTED won't fire.
 
+**Note on Drawing Lock and Highlighting:** When in Drawing state, one of two mutually exclusive events will occur first:
+1. **PINCH_DETECTED fires first** - Gesture becomes zoom/pan. Stroke is abandoned, highlighting is preserved (user can continue to transform highlighted strokes).
+2. **Stroke length threshold reached first** - Gesture is locked as drawing. Highlighting is cleared (user is committed to drawing a new stroke). This happens in `cursorMovement.ts` when `lockGestureAsDrawing()` is called.
+
 **Note on F3_DOWN:** Actions depend on FINGER_MOVED_FAR_HAPPENED flag:
 - If flag is true: [SAVE_STROKE, INIT_TRANSFORM]
 - If flag is false: [ABANDON_STROKE, INIT_TRANSFORM]

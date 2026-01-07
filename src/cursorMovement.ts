@@ -348,6 +348,8 @@ export function addPointToStroke(): void {
         const canvasSpaceThreshold = getStrokeLenThreshold() / state.viewTransform.scale;
         if (strokeLength >= canvasSpaceThreshold) {
             state.eventHandler.lockGestureAsDrawing();
+            // Clear highlighting - we're now committed to drawing, not zooming
+            state.highlightedStrokes.clear();
         }
     }
 }
