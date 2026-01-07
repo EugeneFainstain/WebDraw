@@ -378,11 +378,13 @@ export function applyThreeFingerTransform(): void {
             }
         }
 
-        // Update cursor to the transformed position of the same point on the selected stroke
+        // Update cursor and selectedStrokeCursorPos to the transformed position of the same point
         if (state.selectedStrokeIdx !== null && state.selectedStrokePointIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length) {
             const transformedPoints = getAllPointsForTransform(state.strokeHistory[state.selectedStrokeIdx]);
             if (state.selectedStrokePointIdx < transformedPoints.length) {
-                state.cursorAnchor = { ...transformedPoints[state.selectedStrokePointIdx] };
+                const newPos = { ...transformedPoints[state.selectedStrokePointIdx] };
+                state.cursorAnchor = newPos;
+                state.selectedStrokeCursorPos = { ...newPos };
             }
         }
     } else {
