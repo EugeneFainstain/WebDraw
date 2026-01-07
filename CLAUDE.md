@@ -24,8 +24,9 @@ The application uses a state machine architecture with the following main files:
 
 - **index.html** - Entry point with toolbar UI (color picker, stroke size slider, undo/clear buttons, X+ mode checkbox) and canvas element
 - **styles.css** - Styling with dark toolbar, responsive canvas, and touch-action prevention
-- **src/app.ts** - Main application logic and rendering
+- **src/app.ts** - Main application logic, initialization, and rendering
 - **src/stateMachine.ts** - State machine controlling application behavior
+- **src/actions.ts** - Action handlers executed in response to state machine transitions
 - **src/eventHandler.ts** - Pointer event tracking and state machine event generation
 - **src/colorPicker.ts** - Color picker UI component
 - **src/sizePicker.ts** - Stroke size picker UI component
@@ -35,7 +36,7 @@ The application uses a state machine architecture with the following main files:
 The app uses a formal state machine architecture (see [STATE_MACHINE.md](STATE_MACHINE.md) for complete documentation):
 - **4 states**: Idle, MovingCursor, Drawing, Transform
 - **Events**: Finger down/up, timeouts, movement thresholds, undo/clear
-- **Actions**: Returned by state transitions, executed by app.ts
+- **Actions**: Returned by state transitions, executed by actions.ts
 - **Selected Stroke Mode**: After drawing, the stroke is selected (green cursor) and can be transformed independently
 
 ### Core State (src/app.ts)

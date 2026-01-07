@@ -290,14 +290,18 @@ When in Drawing state and F3_DOWN event occurs:
    - `EventFlags` type - Persistent event flags
    - `StateMachine` class - Main state machine logic
 
-2. **[src/eventHandler.ts](src/eventHandler.ts)** - Event generation
+2. **[src/actions.ts](src/actions.ts)** - Action handlers
+   - `handleActions()` - Executes actions returned by state machine transitions
+   - Handles stroke creation, selection, deselection, transforms, etc.
+
+3. **[src/eventHandler.ts](src/eventHandler.ts)** - Event generation
    - Tracks pointer positions
    - Generates state machine events based on pointer interactions
    - Manages timeout and movement threshold detection
 
-3. **[src/app.ts](src/app.ts)** - Application integration
+4. **[src/app.ts](src/app.ts)** - Application integration
    - Creates `StateMachine` and `EventHandler` instances
-   - Implements action handlers
+   - Wires up event callback to process events and execute actions
    - Manages rendering and canvas state
 
 ### Usage Example
