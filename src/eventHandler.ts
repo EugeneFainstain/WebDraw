@@ -109,7 +109,6 @@ export class EventHandler {
             this.primaryPos = { ...pos };
 
             this.emitEvent(Event.F1_DOWN);
-            this.emitEvent(Event.FINGER_DOWN);
             return;
         }
 
@@ -125,7 +124,6 @@ export class EventHandler {
             }
 
             this.emitEvent(Event.F2_DOWN);
-            this.emitEvent(Event.FINGER_DOWN);
             return;
         }
 
@@ -135,7 +133,6 @@ export class EventHandler {
             this.tertiaryPos = { ...pos };
 
             this.emitEvent(Event.F3_DOWN);
-            this.emitEvent(Event.FINGER_DOWN);
             return;
         }
 
@@ -175,7 +172,6 @@ export class EventHandler {
      * - F1_UP: Was 1 finger, now 0 (last finger lifted)
      * - F2_UP: Was 2 fingers, now 1
      * - F3_UP: Was 3 fingers, now 2
-     * Also emits FINGER_UP after the specific event.
      */
     public handlePointerUp(pointerId: number): void {
         // Determine which finger is being lifted and the finger count before lift
@@ -245,9 +241,6 @@ export class EventHandler {
             } else if (fingerCountBefore === 3) {
                 this.emitEvent(Event.F3_UP);
             }
-
-            // Always emit generic FINGER_UP after the specific event
-            this.emitEvent(Event.FINGER_UP);
 
             // Reset two-finger gesture tracking when we no longer have two fingers
             if (this.secondaryPointerId === null) {

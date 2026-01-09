@@ -30,11 +30,9 @@ export enum Event {
     F1_DOWN = 'F1_DOWN',              // First finger touches screen
     F2_DOWN = 'F2_DOWN',              // Second finger touches screen
     F3_DOWN = 'F3_DOWN',              // Third finger touches screen
-    FINGER_DOWN = 'FINGER_DOWN',      // Any finger touches screen (fires along with F1/F2/F3_DOWN)
     F1_UP = 'F1_UP',                  // Last finger lifted (was 1 finger, now 0)
     F2_UP = 'F2_UP',                  // One of two fingers lifted (was 2 fingers, now 1)
     F3_UP = 'F3_UP',                  // One of three fingers lifted (was 3 fingers, now 2)
-    FINGER_UP = 'FINGER_UP',          // Any finger lifts from screen (fires along with F1/F2/F3_UP)
     CURSOR_MOVED_FAR = 'CURSOR_MOVED_FAR', // Cursor moved >3mm from selectedStrokeCursorPos (deselection/snap)
     LONG_STROKE_DRAWN = 'LONG_STROKE_DRAWN', // Stroke path length exceeded threshold (gesture lock)
     PINCH_DETECTED = 'PINCH_DETECTED', // Two-finger distance changed beyond threshold
@@ -224,6 +222,15 @@ export class StateMachine {
     }
 
     /**
+     * Returns true if tapAndAHalfHappenedTimestamp is set and within singleTapTimeout
+     * (ensures the second tap of a double-tap is quick)
+     */
+    public tapAndAHalfHappenedRecently(now: number): boolean {
+        return this.timestamps.tapAndAHalfHappenedTimestamp !== 0 &&
+               (now - this.timestamps.tapAndAHalfHappenedTimestamp) < SINGLE_TAP_TIMEOUT;
+    }
+
+    /**
      * Returns true if F1_DOWN was the most recent finger-down event
      */
     public firstFingerWasTheLastFingerToGoDown(): boolean {
@@ -295,8 +302,8 @@ export class StateMachine {
                                    this.firstFingerWasTheLastFingerToGoDown() &&
                                    this.firstFingerWentDownRecently(now);
                 if (isQuickTap) {
-                    if (this.singleTapHappenedRecently(now)) {
-                        // Second quick tap -> double tap
+                    if (this.tapAndAHalfHappenedRecently(now)) {
+                        // Second quick tap (tapAndAHalf was set on F1_DOWN) -> double tap
                         this.timestamps.doubleTapHappenedTimestamp = now;
                     } else {
                         // First quick tap -> single tap
@@ -330,16 +337,20 @@ export class StateMachine {
      */
     private processAfterAll(event: Event): void {
         switch (event) {
-            case Event.FINGER_DOWN:
-                // Reset timestamps and flags
+            case Event.F1_DOWN:
+            case Event.F2_DOWN:
+            case Event.F3_DOWN:
+                // FINGER_DOWN_COMMON: Reset timestamps and flags
                 this.timestamps.singleTapHappenedTimestamp = 0;
                 this.timestamps.doubleTapHappenedTimestamp = 0;
                 this.flags.cursorMovedFarHappened = false;
                 this.flags.longStrokeDrawnHappened = false;
                 break;
 
-            case Event.FINGER_UP:
-                // Reset tapAndAHalfHappenedTimestamp
+            case Event.F1_UP:
+            case Event.F2_UP:
+            case Event.F3_UP:
+                // FINGER_UP_COMMON: Reset tapAndAHalfHappenedTimestamp
                 this.timestamps.tapAndAHalfHappenedTimestamp = 0;
                 break;
         }
@@ -421,8 +432,9 @@ export class StateMachine {
 
             case Event.F2_DOWN:
             case Event.F3_DOWN:
-            case Event.FINGER_UP:
             case Event.F1_UP:
+            case Event.F2_UP:
+            case Event.F3_UP:
             case Event.PINCH_DETECTED:
                 return { newState: State.Idle, actions: [] };
 
@@ -533,7 +545,6 @@ export class StateMachine {
                     };
                 }
 
-            case Event.FINGER_UP:
             case Event.F2_UP:
                 // Go to MovingCursor, do [SAVE_STROKE]. If not isStrokeSelected() -> do [SELECT_STROKE]
                 const actions: Action[] = [Action.SAVE_STROKE];
@@ -567,7 +578,7 @@ export class StateMachine {
             case Event.PINCH_DETECTED:
                 return { newState: State.Transform, actions: [] };
 
-            case Event.FINGER_UP:
+            case Event.F1_UP:
             case Event.F2_UP:
             case Event.F3_UP:
                 // Go to Idle, do [RESTORE_DRAG_START_CURSOR]
@@ -598,9 +609,10 @@ export class StateMachine {
                     actions: [Action.CANCEL_SELECTION_RECTANGLE]
                 };
 
-            case Event.FINGER_UP:
             case Event.F1_UP:
-                // Go to Idle, do [APPLY_SELECTION_RECTANGLE]
+            case Event.F2_UP:
+            case Event.F3_UP:
+                // FINGER_UP: Go to Idle, do [APPLY_SELECTION_RECTANGLE]
                 return {
                     newState: State.Idle,
                     actions: [Action.APPLY_SELECTION_RECTANGLE]

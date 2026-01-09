@@ -1,6 +1,8 @@
 # WebDraw State Machine Documentation
 
-This document describes the state machine implementation for the WebDraw application.
+**⚠️ THIS DOCUMENT IS THE GOLDEN REFERENCE ⚠️**
+
+This document is the authoritative specification for the state machine. When there is a discrepancy between this documentation and the code, **the code is wrong** and must be fixed to match this document. Never modify this document to match buggy code.
 
 ## Overview
 
@@ -59,30 +61,32 @@ This separation allows users to:
 
 ## Events
 
-The state machine responds to **13 events**:
+The state machine responds to **11 events**:
 
 1. **F1_DOWN** - First finger touches screen
 2. **F2_DOWN** - Second finger touches screen
 3. **F3_DOWN** - Third finger touches screen
-4. **FINGER_DOWN** - Any finger touches screen (fires along with F1/F2/F3_DOWN)
-5. **F1_UP** - Last finger lifted (was 1 finger, now 0)
-6. **F2_UP** - One of two fingers lifted (was 2 fingers, now 1)
-7. **F3_UP** - One of three fingers lifted (was 3 fingers, now 2)
-8. **FINGER_UP** - Any finger lifts from screen (fires along with F1/F2/F3_UP)
-9. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `selectedStrokeCursorPos` (screen-space). Used for deselection and snap-back.
-10. **LONG_STROKE_DRAWN** - Stroke path length exceeded threshold (4mm). Used for gesture disambiguation (pinch vs draw) and stroke protection.
-11. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (4mm screen-space), indicating zoom/pan/rotate gesture
-12. **DELETE** - Delete button pressed
-13. **CLEAR** - Clear button pressed
+4. **F1_UP** - Last finger lifted (was 1 finger, now 0)
+5. **F2_UP** - One of two fingers lifted (was 2 fingers, now 1)
+6. **F3_UP** - One of three fingers lifted (was 3 fingers, now 2)
+7. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `selectedStrokeCursorPos` (screen-space). Used for deselection and snap-back.
+8. **LONG_STROKE_DRAWN** - Stroke path length exceeded threshold (4mm). Used for gesture disambiguation (pinch vs draw) and stroke protection.
+9. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (4mm screen-space), indicating zoom/pan/rotate gesture
+10. **DELETE** - Delete button pressed
+11. **CLEAR** - Clear button pressed
+
+**Documentation Aliases** (not separate events, just shorthand for common logic):
+- **FINGER_DOWN_COMMON** - Refers to logic executed for ALL finger-down events (F1_DOWN, F2_DOWN, F3_DOWN)
+- **FINGER_UP_COMMON** - Refers to logic executed for ALL finger-up events (F1_UP, F2_UP, F3_UP)
 
 ## Event Flags
 
 The state machine maintains **2 flags** and **3 timestamps**:
 
 **Timestamps:**
-- **singleTapHappenedTimestamp** - Set to current time on F1_UP if quick single-finger tap. Reset to 0 on FINGER_DOWN.
-- **doubleTapHappenedTimestamp** - Set to current time on F1_UP if quick single-finger tap AND singleTapHappenedRecently(). Reset to 0 on FINGER_DOWN.
-- **tapAndAHalfHappenedTimestamp** - Set to current time on F1_DOWN if singleTapHappenedRecently(). Reset to 0 on FINGER_UP.
+- **singleTapHappenedTimestamp** - Set to current time on F1_UP if quick single-finger tap. Reset to 0 on any finger down (FINGER_DOWN_COMMON).
+- **doubleTapHappenedTimestamp** - Set to current time on F1_UP if quick single-finger tap AND tapAndAHalfHappenedRecently(). Reset to 0 on any finger down (FINGER_DOWN_COMMON).
+- **tapAndAHalfHappenedTimestamp** - Set to current time on F1_DOWN if singleTapHappenedRecently(). Reset to 0 on any finger up (FINGER_UP_COMMON).
 
 **Calculated functions:**
 - **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null`. Managed by [SELECT_STROKE], [SELECT_CLOSEST_STROKE], [DESELECT_STROKE] actions.
@@ -90,10 +94,11 @@ The state machine maintains **2 flags** and **3 timestamps**:
 - **singleTapJustHappened()** - Returns true if singleTapHappenedTimestamp == now. Used to detect if a single tap was set in this same state machine pass.
 - **doubleTapJustHappened()** - Returns true if doubleTapHappenedTimestamp == now. Used to detect if a double tap was set in this same state machine pass.
 - **tapAndAHalfHappened()** - Returns true if tapAndAHalfHappenedTimestamp != 0.
+- **tapAndAHalfHappenedRecently()** - Returns true if tapAndAHalfHappenedTimestamp != 0 AND (now - tapAndAHalfHappenedTimestamp) < singleTapTimeout. Used for double-tap detection (ensures the second tap is quick).
 - **FirstFingerWasTheLastFingerToGoDown()** - Returns true if F1_DOWN was the most recent finger-down event (no F2_DOWN or F3_DOWN after it).
 - **FirstFingerWentDownRecently()** - Returns true if (now - F1_DOWN_TIMESTAMP) < singleTapTimeout. Ensures the tap was quick.
 
-**Set by events** (reset on FINGER_DOWN):
+**Set by events** (reset on any finger down via FINGER_DOWN_COMMON):
 1. **cursorMovedFarHappened** - Set when CURSOR_MOVED_FAR event fires
 2. **longStrokeDrawnHappened** - Set when LONG_STROKE_DRAWN event fires
 
@@ -108,7 +113,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `SAVE_STROKE` | Save current stroke to history |
 | `ABANDON_STROKE` | Discard current stroke |
 | `SELECT_STROKE` | Select a stroke (enter selected stroke mode) |
-| `SELECT_CLOSEST_STROKE` | Select closest stroke to cursor |
+| `SELECT_CLOSEST_STROKE` | Select closest stroke to cursor, snap cursor to that point, update pickers |
 | `DESELECT_STROKE` | Deselect stroke (exit selected stroke mode) |
 | `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
 | `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag (also updates real-time highlighting) |
@@ -141,7 +146,7 @@ These flag updates happen regardless of current state, before state-specific tra
 | Event | Transitions and/or Actions |
 |-------|---------------------------|
 | F1_DOWN | If singleTapHappenedRecently() -> set tapAndAHalfHappenedTimestamp = now. |
-| F1_UP | If quick single-finger tap (i.e. !cursorMovedFarHappened && FirstFingerWasTheLastFingerToGoDown() && FirstFingerWentDownRecently()): if singleTapHappenedRecently() -> set doubleTapHappenedTimestamp = now, else -> set singleTapHappenedTimestamp = now |
+| F1_UP | If quick single-finger tap (i.e. !cursorMovedFarHappened && FirstFingerWasTheLastFingerToGoDown() && FirstFingerWentDownRecently()): if tapAndAHalfHappenedRecently() -> set doubleTapHappenedTimestamp = now, else -> set singleTapHappenedTimestamp = now |
 | CURSOR_MOVED_FAR | Set cursorMovedFarHappened = true |
 | DELETE | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, PROCESS_DELETE] |
 | CLEAR | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DESELECT_STROKE] |
@@ -154,12 +159,12 @@ These updates happen regardless of current state, after state-specific transitio
 
 | Event | Transitions and/or Actions |
 |-------|---------------------------|
-| FINGER_DOWN | Set singleTapHappenedTimestamp = 0, doubleTapHappenedTimestamp = 0. Reset cursorMovedFarHappened, longStrokeDrawnHappened. |
-| FINGER_UP | Set tapAndAHalfHappenedTimestamp = 0. |
+| FINGER_DOWN_COMMON | Set singleTapHappenedTimestamp = 0, doubleTapHappenedTimestamp = 0. Reset cursorMovedFarHappened, longStrokeDrawnHappened. |
+| FINGER_UP_COMMON | Set tapAndAHalfHappenedTimestamp = 0. |
 
 ### Postprocessing
 
-After all tables have been processed, record the timestamp for the current event. For every event X, we maintain X_TIMESTAMP which is set to the current time when event X fires. For example, F1_DOWN sets F1_DOWN_TIMESTAMP = now, FINGER_UP sets FINGER_UP_TIMESTAMP = now, etc.
+After all tables have been processed, record the timestamp for the current event. For every event X, we maintain X_TIMESTAMP which is set to the current time when event X fires. For example, F1_DOWN sets F1_DOWN_TIMESTAMP = now, F2_DOWN sets F2_DOWN_TIMESTAMP = now, etc.
 
 ### FROM Idle State
 
@@ -189,7 +194,7 @@ After all tables have been processed, record the timestamp for the current event
 | F2_DOWN | ----- |
 | PINCH_DETECTED | Go to Transform. do [ABANDON_STROKE, INIT_TRANSFORM] |
 | F3_DOWN | Go to Transform. If longStrokeDrawnHappened -> do [SAVE_STROKE, INIT_TRANSFORM], else do [ABANDON_STROKE, INIT_TRANSFORM] |
-| FINGER_UP | Go to MovingCursor. do [SAVE_STROKE]. If not isStrokeSelected() -> do [SELECT_STROKE] |
+| F2_UP | Go to MovingCursor. do [SAVE_STROKE]. If not isStrokeSelected() -> do [SELECT_STROKE] |
 | LONG_STROKE_DRAWN | Set longStrokeDrawnHappened = true |
 
 **Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >4mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached the length threshold (LONG_STROKE_DRAWN fired), the gesture is locked as drawing and PINCH_DETECTED won't fire.
