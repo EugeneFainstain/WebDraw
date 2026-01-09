@@ -2,7 +2,9 @@
  * STATE.TS - Centralized Application State
  *
  * This module serves as the single source of truth for all mutable application state.
- * It provides a singleton `state` object that all other modules import and use directly.
+ * It provides two separate objects:
+ * - `appState`: Pure data that gets snapshotted for undo functionality
+ * - `appContext`: DOM references and class instances that don't get snapshotted
  *
  * Responsibilities:
  * - Define core data types (Stroke, ViewTransform, etc.)
@@ -11,9 +13,8 @@
  * - Provide state initialization and reset functions
  * - Define configuration constants
  *
- * Design: Other modules import `state` and read/write directly. This avoids circular
- * dependencies since state.ts has no dependencies on other app modules (only eventHandler
- * for the Point type and state machine instances).
+ * Design: Other modules import `appState` and `appContext` and read/write directly.
+ * The undo system snapshots `appState` using structuredClone().
  *
  * NOTE: If this file's responsibilities drift, update this description!
  */
@@ -64,18 +65,111 @@ export interface TransformStart {
 }
 
 // ============================================================================
+// APP STATE INTERFACE - Everything that gets snapshotted for undo
+// ============================================================================
+
+export interface AppState {
+    // History for undo functionality (strokes can be hierarchical/grouped)
+    strokeHistory: Stroke[];
+
+    // Current stroke being drawn
+    currentStroke: Stroke | null;
+
+    // Cursor anchor point (in canvas coordinates)
+    cursorPos: Point | null;
+
+    // Selected stroke index (null = no selection, number = index in strokeHistory)
+    selectedStrokeIdx: number | null;
+
+    // Index of the point within the selected stroke where the cursor is positioned
+    selectedStrokePointIdx: number | null;
+
+    // Anchor point on the selected stroke (used to determine when to deselect)
+    selectedStrokeCursorPos: Point | null;
+
+    // Flag indicating cursor is "ready" to continue a stroke
+    cursorReadyToContinueStroke: boolean;
+
+    // Cursor position at start of drag gesture
+    dragStartCursorPos: Point | null;
+
+    // Track transformation undo state
+    transformSnapshot: Point[] | null;
+    hasUndoableTransform: boolean;
+
+    // Track last grid position for grid mode
+    lastGridPosition: Point | null;
+
+    // Grid mode state
+    isGridMode: boolean;
+
+    // Selection rectangle state
+    selectionRectStart: Point | null;
+    selectionRectEnd: Point | null;
+
+    // Highlighted strokes (indices)
+    highlightedStrokes: Set<number>;
+
+    // View transform (for 2-finger canvas transformation)
+    viewTransform: ViewTransform;
+
+    // Transform state for multi-finger gesture
+    transformStart: TransformStart | null;
+
+    // Movement tracking for continuous updates
+    lastPrimaryPos: Point | null;
+    lastSecondaryPos: Point | null;
+    lastDelta: { x: number; y: number; pointerId: number } | null;
+    batchedDelta: { x: number; y: number } | null;
+
+    // Track pointers that started on UI elements
+    pointersOnUI: Map<number, { startX: number; startY: number }>;
+
+    // Debug messages
+    debugMessages: string[];
+}
+
+// ============================================================================
+// APP CONTEXT INTERFACE - DOM references and class instances (not snapshotted)
+// ============================================================================
+
+export interface AppContext {
+    // Canvas & context
+    canvas: HTMLCanvasElement | null;
+    ctx: CanvasRenderingContext2D | null;
+
+    // DOM Elements
+    dom: {
+        combinedPickerEl: HTMLElement | null;
+        menuPickerEl: HTMLElement | null;
+        undoBtn: HTMLButtonElement | null;
+        delBtn: HTMLButtonElement | null;
+        btnDup: HTMLButtonElement | null;
+        btnGroup: HTMLButtonElement | null;
+        btnUngroup: HTMLButtonElement | null;
+        btnFit: HTMLButtonElement | null;
+        iosFullscreenTooltip: HTMLElement | null;
+        iosTooltipClose: HTMLButtonElement | null;
+        debugOverlay: HTMLElement | null;
+        cursorDiv: HTMLElement | null;
+    };
+
+    // Core state machine and event handler
+    stateMachine: StateMachine;
+    eventHandler: EventHandler;
+}
+
+// ============================================================================
 // CONFIGURATION CONSTANTS
 // ============================================================================
 
 // Two-finger drawing mode: control delta averaging behavior
-// true = Use intricate batching mechanism (handles finger promotion, mode transitions)
-// false = Simple averaging of every 2 consecutive deltas (regardless of finger ID)
 export const USE_BATCHED_DELTA_MECHANISM = false;
 
 // Stroke length threshold for locking two-finger gesture as drawing (in millimeters)
 export const STROKE_LEN_THRESHOLD_MM = 4;
 
-// Distance threshold for deselecting a stroke (cursor distance from anchor, in millimeters)
+// Distance threshold for deselecting a stroke (in millimeters)
 export const DESELECT_DISTANCE_THRESHOLD_MM = 3;
 
 // Toolbar height - cursor can extend into this area
@@ -85,161 +179,175 @@ export const TOOLBAR_HEIGHT = 60;
 export const UI_DRAG_THRESHOLD = 15; // pixels before UI touch becomes canvas drag
 
 // ============================================================================
-// SINGLETON STATE OBJECT
+// DEFAULT APP STATE - Initial values for snapshotted state
 // ============================================================================
 
-export const state = {
-    // Canvas & context (initialized in initState())
-    canvas: null as HTMLCanvasElement | null,
-    ctx: null as CanvasRenderingContext2D | null,
+function createDefaultAppState(): AppState {
+    return {
+        strokeHistory: [],
+        currentStroke: null,
+        cursorPos: null,
+        selectedStrokeIdx: null,
+        selectedStrokePointIdx: null,
+        selectedStrokeCursorPos: null,
+        cursorReadyToContinueStroke: false,
+        dragStartCursorPos: null,
+        transformSnapshot: null,
+        hasUndoableTransform: false,
+        lastGridPosition: null,
+        isGridMode: false,
+        selectionRectStart: null,
+        selectionRectEnd: null,
+        highlightedStrokes: new Set<number>(),
+        viewTransform: { scale: 1, rotation: 0, panX: 0, panY: 0 },
+        transformStart: null,
+        lastPrimaryPos: null,
+        lastSecondaryPos: null,
+        lastDelta: null,
+        batchedDelta: null,
+        pointersOnUI: new Map<number, { startX: number; startY: number }>(),
+        debugMessages: [],
+    };
+}
 
-    // DOM Elements (initialized in initState())
+// ============================================================================
+// SINGLETON STATE OBJECTS
+// ============================================================================
+
+// AppState - pure data, gets snapshotted for undo
+export const appState: AppState = createDefaultAppState();
+
+// AppContext - DOM references and class instances, not snapshotted
+export const appContext: AppContext = {
+    canvas: null,
+    ctx: null,
     dom: {
-        combinedPickerEl: null as HTMLElement | null,
-        menuPickerEl: null as HTMLElement | null,
-        undoBtn: null as HTMLButtonElement | null,
-        delBtn: null as HTMLButtonElement | null,
-        btnDup: null as HTMLButtonElement | null,
-        btnGroup: null as HTMLButtonElement | null,
-        btnUngroup: null as HTMLButtonElement | null,
-        btnFit: null as HTMLButtonElement | null,
-        iosFullscreenTooltip: null as HTMLElement | null,
-        iosTooltipClose: null as HTMLButtonElement | null,
-        debugOverlay: null as HTMLElement | null,
-        cursorDiv: null as HTMLElement | null,
+        combinedPickerEl: null,
+        menuPickerEl: null,
+        undoBtn: null,
+        delBtn: null,
+        btnDup: null,
+        btnGroup: null,
+        btnUngroup: null,
+        btnFit: null,
+        iosFullscreenTooltip: null,
+        iosTooltipClose: null,
+        debugOverlay: null,
+        cursorDiv: null,
     },
-
-    // Core state machine
     stateMachine: new StateMachine(),
     eventHandler: new EventHandler(),
-
-    // History for undo functionality (strokes can be hierarchical/grouped)
-    strokeHistory: [] as Stroke[],
-
-    // Current stroke being drawn
-    currentStroke: null as Stroke | null,
-
-    // Cursor anchor point (in canvas coordinates)
-    cursorPos: null as Point | null,
-
-    // Selected stroke index (null = no selection, number = index in strokeHistory)
-    selectedStrokeIdx: null as number | null,
-
-    // Index of the point within the selected stroke where the cursor is positioned
-    selectedStrokePointIdx: null as number | null,
-
-    // Anchor point on the selected stroke (used to determine when to deselect)
-    // Updated continuously while drawing, or set to closest point when selecting via double-click
-    selectedStrokeCursorPos: null as Point | null,
-
-    // Flag indicating cursor is "ready" to continue a stroke
-    // Set true when: all fingers lifted, or cursor snapped to selected stroke
-    // Set false when: cursor starts moving (entering MovingCursor with finger down)
-    cursorReadyToContinueStroke: false,
-
-    // Cursor position at start of drag gesture (for restoring if drag is cancelled)
-    dragStartCursorPos: null as Point | null,
-
-    // Track transformation undo state
-    transformSnapshot: null as Point[] | null,  // Original points before transformation
-    hasUndoableTransform: false,     // True if selected stroke has been transformed
-
-    // Track last grid position for grid mode
-    lastGridPosition: null as Point | null,
-
-    // Grid mode state
-    isGridMode: false,
-
-    // Selection rectangle state
-    selectionRectStart: null as Point | null,
-    selectionRectEnd: null as Point | null,
-
-    // Highlighted strokes (indices of strokes currently highlighted by selection rectangle)
-    highlightedStrokes: new Set<number>(),
-
-    // View transform (for 2-finger canvas transformation)
-    viewTransform: {
-        scale: 1,
-        rotation: 0,  // in radians
-        panX: 0,
-        panY: 0
-    } as ViewTransform,
-
-    // Transform state for multi-finger gesture
-    transformStart: null as TransformStart | null,
-
-    // Movement tracking for continuous updates
-    lastPrimaryPos: null as Point | null,
-    lastSecondaryPos: null as Point | null,
-    lastDelta: null as { x: number; y: number; pointerId: number } | null,
-    batchedDelta: null as { x: number; y: number } | null,
-
-    // Track pointers that started on UI elements (for drag detection)
-    pointersOnUI: new Map<number, { startX: number; startY: number }>(),
-
-    // Debug messages
-    debugMessages: [] as string[],
 };
+
+// ============================================================================
+// BACKWARDS COMPATIBILITY - Export combined state object
+// This allows gradual migration: existing code using `state.xxx` continues to work
+// ============================================================================
+
+export const state = new Proxy({} as AppState & AppContext, {
+    get(_target, prop: string) {
+        // Check appState first (most common)
+        if (prop in appState) {
+            return (appState as any)[prop];
+        }
+        // Then check appContext
+        if (prop in appContext) {
+            return (appContext as any)[prop];
+        }
+        return undefined;
+    },
+    set(_target, prop: string, value) {
+        // Check appState first
+        if (prop in appState) {
+            (appState as any)[prop] = value;
+            return true;
+        }
+        // Then check appContext
+        if (prop in appContext) {
+            (appContext as any)[prop] = value;
+            return true;
+        }
+        // Unknown property - add to appState by default
+        (appState as any)[prop] = value;
+        return true;
+    }
+});
 
 // ============================================================================
 // STATE INITIALIZATION
 // ============================================================================
 
 export function initState(canvas: HTMLCanvasElement) {
-    state.canvas = canvas;
-    state.ctx = canvas.getContext('2d')!;
+    appContext.canvas = canvas;
+    appContext.ctx = canvas.getContext('2d')!;
 
     // Wire up state machine's selectedStrokeIdx reference
-    // This allows isStrokeSelected() to check the actual state
-    state.stateMachine.setSelectedStrokeIdxRef({
-        get current() { return state.selectedStrokeIdx; }
+    appContext.stateMachine.setSelectedStrokeIdxRef({
+        get current() { return appState.selectedStrokeIdx; }
     });
 
     // Initialize DOM references
-    state.dom.combinedPickerEl = document.getElementById('combinedPicker') as HTMLElement;
-    state.dom.menuPickerEl = document.getElementById('menuPicker') as HTMLElement;
-    state.dom.undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
-    state.dom.delBtn = document.getElementById('delBtn') as HTMLButtonElement;
-    state.dom.btnDup = document.getElementById('btnDup') as HTMLButtonElement;
-    state.dom.btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
-    state.dom.btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
-    state.dom.btnFit = document.getElementById('btnFit') as HTMLButtonElement;
-    state.dom.iosFullscreenTooltip = document.getElementById('iosFullscreenTooltip') as HTMLElement;
-    state.dom.iosTooltipClose = document.getElementById('iosTooltipClose') as HTMLButtonElement;
-    state.dom.debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
-    state.dom.cursorDiv = document.getElementById('cursorDiv') as HTMLElement;
+    appContext.dom.combinedPickerEl = document.getElementById('combinedPicker') as HTMLElement;
+    appContext.dom.menuPickerEl = document.getElementById('menuPicker') as HTMLElement;
+    appContext.dom.undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
+    appContext.dom.delBtn = document.getElementById('delBtn') as HTMLButtonElement;
+    appContext.dom.btnDup = document.getElementById('btnDup') as HTMLButtonElement;
+    appContext.dom.btnGroup = document.getElementById('btnGroup') as HTMLButtonElement;
+    appContext.dom.btnUngroup = document.getElementById('btnUngroup') as HTMLButtonElement;
+    appContext.dom.btnFit = document.getElementById('btnFit') as HTMLButtonElement;
+    appContext.dom.iosFullscreenTooltip = document.getElementById('iosFullscreenTooltip') as HTMLElement;
+    appContext.dom.iosTooltipClose = document.getElementById('iosTooltipClose') as HTMLButtonElement;
+    appContext.dom.debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
+    appContext.dom.cursorDiv = document.getElementById('cursorDiv') as HTMLElement;
 }
 
 // ============================================================================
 // STATE RESET (for clear functionality)
 // ============================================================================
 
+// Import will be added after undoSystem.ts is created
+let clearUndoStackFn: (() => void) | null = null;
+
+export function setClearUndoStackFn(fn: () => void) {
+    clearUndoStackFn = fn;
+}
+
 export function resetState() {
-    state.strokeHistory = [];
-    state.currentStroke = null;
-    state.lastGridPosition = null;
-    state.transformStart = null;
-    state.transformSnapshot = null;
-    state.hasUndoableTransform = false;
-    state.viewTransform = { scale: 1, rotation: 0, panX: 0, panY: 0 };
-    state.selectedStrokeIdx = null;
-    state.selectedStrokePointIdx = null;
-    state.selectedStrokeCursorPos = null;
-    state.cursorReadyToContinueStroke = false;
-    state.dragStartCursorPos = null;
-    state.selectionRectStart = null;
-    state.selectionRectEnd = null;
-    state.highlightedStrokes.clear();
-    state.lastPrimaryPos = null;
-    state.lastSecondaryPos = null;
-    state.lastDelta = null;
-    state.batchedDelta = null;
-    state.pointersOnUI.clear();
-    state.debugMessages = [];
+    // Reset all appState properties to defaults
+    const defaults = createDefaultAppState();
+
+    appState.strokeHistory = defaults.strokeHistory;
+    appState.currentStroke = defaults.currentStroke;
+    appState.cursorPos = defaults.cursorPos;
+    appState.selectedStrokeIdx = defaults.selectedStrokeIdx;
+    appState.selectedStrokePointIdx = defaults.selectedStrokePointIdx;
+    appState.selectedStrokeCursorPos = defaults.selectedStrokeCursorPos;
+    appState.cursorReadyToContinueStroke = defaults.cursorReadyToContinueStroke;
+    appState.dragStartCursorPos = defaults.dragStartCursorPos;
+    appState.transformSnapshot = defaults.transformSnapshot;
+    appState.hasUndoableTransform = defaults.hasUndoableTransform;
+    appState.lastGridPosition = defaults.lastGridPosition;
+    appState.isGridMode = defaults.isGridMode;
+    appState.selectionRectStart = defaults.selectionRectStart;
+    appState.selectionRectEnd = defaults.selectionRectEnd;
+    appState.highlightedStrokes.clear();
+    appState.viewTransform = defaults.viewTransform;
+    appState.transformStart = defaults.transformStart;
+    appState.lastPrimaryPos = defaults.lastPrimaryPos;
+    appState.lastSecondaryPos = defaults.lastSecondaryPos;
+    appState.lastDelta = defaults.lastDelta;
+    appState.batchedDelta = defaults.batchedDelta;
+    appState.pointersOnUI.clear();
+    appState.debugMessages = defaults.debugMessages;
 
     // Reset state machine and event handler
-    state.stateMachine.reset();
-    state.eventHandler.reset();
+    appContext.stateMachine.reset();
+    appContext.eventHandler.reset();
+
+    // Clear undo stack (page reload behavior)
+    if (clearUndoStackFn) {
+        clearUndoStackFn();
+    }
 }
 
 // ============================================================================
@@ -247,18 +355,18 @@ export function resetState() {
 // ============================================================================
 
 export function showDebug(message: string) {
-    state.debugMessages.push(message);
-    if (state.dom.debugOverlay) {
-        state.dom.debugOverlay.textContent = state.debugMessages.join('\n---\n');
-        state.dom.debugOverlay.style.display = 'block';
+    appState.debugMessages.push(message);
+    if (appContext.dom.debugOverlay) {
+        appContext.dom.debugOverlay.textContent = appState.debugMessages.join('\n---\n');
+        appContext.dom.debugOverlay.style.display = 'block';
     }
 }
 
 export function clearDebug() {
-    if (state.dom.debugOverlay) {
-        state.dom.debugOverlay.style.display = 'none';
+    if (appContext.dom.debugOverlay) {
+        appContext.dom.debugOverlay.style.display = 'none';
     }
-    state.debugMessages = [];
+    appState.debugMessages = [];
 }
 
 // ============================================================================

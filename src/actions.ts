@@ -17,6 +17,7 @@ import {
     snapToGrid,
     updateHighlightedStrokes,
 } from './rendering';
+import { pushUndoSnapshot } from './undoSystem';
 
 // ============================================================================
 // TYPES
@@ -114,7 +115,9 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.SAVE_STROKE:
+                // Snapshot BEFORE saving stroke (for undo)
                 if (state.currentStroke && state.currentStroke.points!.length > 0) {
+                    pushUndoSnapshot();
                     // Check if we should merge with a selected stroke (deferred continuation)
                     if (state.selectedStrokeIdx !== null &&
                         state.selectedStrokePointIdx !== null &&
@@ -230,6 +233,8 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.SELECT_CLOSEST_STROKE:
+                // Snapshot BEFORE selecting stroke (for undo)
+                pushUndoSnapshot();
                 // SELECT_CLOSEST_STROKE: Manually select stroke closest to cursor
                 // Triggered by: Single tap (quick tap with no timeout or movement)
                 // Behavior: Finds closest stroke to current cursor position
@@ -261,6 +266,8 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.DESELECT_STROKE:
+                // Snapshot BEFORE deselecting stroke (for undo)
+                pushUndoSnapshot();
                 state.selectedStrokeCursorPos = null;
                 state.selectedStrokeIdx = null;
                 state.selectedStrokePointIdx = null;
@@ -300,6 +307,8 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.APPLY_SELECTION_RECTANGLE:
+                // Snapshot BEFORE applying selection (for undo)
+                pushUndoSnapshot();
                 // Complete selection rectangle - keep strokes highlighted, don't apply colors yet
                 state.selectionRectStart = null;
                 state.selectionRectEnd = null;
@@ -355,6 +364,9 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.RESTORE_DRAG_START_CURSOR:
+                // Snapshot BEFORE restoring cursor (captures transform completion for undo)
+                // This fires when Transform→Idle transition happens
+                pushUndoSnapshot();
                 // Restore cursor after canvas transform (2-finger zoom)
                 // Only snap back for 2-finger canvas transforms (no strokeSnapshotsMap)
                 // 3-finger stroke transforms have strokeSnapshotsMap and cursor is already correctly positioned

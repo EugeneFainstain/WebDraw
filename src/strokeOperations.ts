@@ -22,6 +22,7 @@
 import { Point } from './eventHandler';
 import { state, resetState, showDebug, Stroke } from './state';
 import { fitStroke } from './shapeFitting';
+import { pushUndoSnapshot, performUndo, getUndoStackSize } from './undoSystem';
 
 // ============================================================================
 // TYPES
@@ -114,11 +115,11 @@ export function cloneStroke(stroke: Stroke): Stroke {
 
 export function updateUI(): void {
     const dom = state.dom;
-    const hasStrokes = state.strokeHistory.length > 0;
+    const hasUndoableActions = getUndoStackSize() > 0;
     const hasHighlightedStrokes = state.highlightedStrokes.size > 0;
 
-    // Undo button: enabled when there are strokes in the drawing
-    dom.undoBtn!.disabled = !hasStrokes;
+    // Undo button: enabled when there are items in the undo stack
+    dom.undoBtn!.disabled = !hasUndoableActions;
 
     // Del button: enabled when there are highlighted strokes
     dom.delBtn!.disabled = !hasHighlightedStrokes;
@@ -204,52 +205,22 @@ export function updateFitButton(): void {
 // DELETE / UNDO
 // ============================================================================
 
-// Undo: removes the last stroke from history (simple undo)
+// Undo: restore previous state from undo stack
 export function processUndo(): void {
-    if (state.strokeHistory.length === 0) return;
-
-    // Remove the last stroke from history
-    const deletedStroke = state.strokeHistory.pop()!;
-
-    // Move cursor to the beginning of the deleted stroke
-    let firstPointX = 0;
-    let firstPointY = 0;
-    let foundPoint = false;
-    forEachLeafStroke(deletedStroke, (leafStroke: Stroke) => {
-        if (!foundPoint && leafStroke.points!.length > 0) {
-            firstPointX = leafStroke.points![0].x;
-            firstPointY = leafStroke.points![0].y;
-            foundPoint = true;
-        }
-    });
-    if (foundPoint) {
-        state.cursorPos = { x: firstPointX, y: firstPointY };
+    if (performUndo()) {
+        // State has been restored - update UI and redraw
+        updateUI();
+        callbacks.redraw();
         callbacks.panToKeepCursorInView();
     }
-
-    // Clear selection state
-    state.selectedStrokeIdx = null;
-    state.selectedStrokePointIdx = null;
-    state.selectedStrokeCursorPos = null;
-    state.transformSnapshot = null;
-    state.hasUndoableTransform = false;
-
-    // Update highlighted strokes - remove any that are now invalid
-    const newHighlighted = new Set<number>();
-    for (const idx of state.highlightedStrokes) {
-        if (idx < state.strokeHistory.length) {
-            newHighlighted.add(idx);
-        }
-    }
-    state.highlightedStrokes = newHighlighted;
-
-    updateUI();
-    callbacks.redraw();
 }
 
 // Delete: removes all highlighted strokes
 export function processDelete(): void {
     if (state.highlightedStrokes.size === 0) return;
+
+    // Snapshot BEFORE deleting strokes (for undo)
+    pushUndoSnapshot();
 
     // Get sorted indices in descending order (to remove from end first)
     const indicesToDelete = Array.from(state.highlightedStrokes).sort((a, b) => b - a);
@@ -301,6 +272,9 @@ export function duplicateSelectedStroke(): void {
         showDebug('Invalid highlighted stroke index!');
         return;
     }
+
+    // Snapshot BEFORE duplicating stroke (for undo)
+    pushUndoSnapshot();
 
     const sourceStroke = state.strokeHistory[highlightedIdx];
 
@@ -391,6 +365,9 @@ export function groupHighlightedStrokes(): void {
         return;
     }
 
+    // Snapshot BEFORE grouping strokes (for undo)
+    pushUndoSnapshot();
+
     // Collect the strokes to group (in order of their indices)
     const indices = Array.from(state.highlightedStrokes).sort((a, b) => a - b);
     const strokesToGroup: Stroke[] = [];
@@ -442,6 +419,9 @@ export function ungroupSelectedStroke(): void {
         return;
     }
 
+    // Snapshot BEFORE ungrouping stroke (for undo)
+    pushUndoSnapshot();
+
     // Get the immediate children (one level only)
     const children = stroke.strokes!.map(child => cloneStroke(child));
 
@@ -485,6 +465,9 @@ export function toggleFit(): void {
     if (isGroup(stroke)) {
         return;
     }
+
+    // Snapshot BEFORE toggling fit (for undo)
+    pushUndoSnapshot();
 
     // Determine if we're toggling ON or OFF
     const turningOn = !stroke.showingFitted;
