@@ -7,6 +7,7 @@ import {
     updateUI,
     processDelete,
     processClear,
+    forEachLeafStroke,
 } from './strokeOperations';
 import {
     isCursorInMenuRegion,
@@ -234,7 +235,26 @@ export function handleActions(actions: Action[]): void {
                 // Only snap back for 2-finger canvas transforms (no strokeSnapshotsMap)
                 // 3-finger stroke transforms have strokeSnapshotsMap and cursor is already correctly positioned
                 if (state.dragStartCursorPos && !state.transformStart?.strokeSnapshotsMap) {
-                    state.cursorPos = { ...state.dragStartCursorPos };
+                    // If there's a selected stroke with a selected point, snap to that point
+                    // (the stroke coordinates haven't changed, only the view transform)
+                    if (state.selectedStrokeIdx !== null &&
+                        state.selectedStrokePointIdx !== null &&
+                        state.selectedStrokeIdx < state.strokeHistory.length) {
+                        const stroke = state.strokeHistory[state.selectedStrokeIdx];
+                        const allPoints: { x: number; y: number }[] = [];
+                        forEachLeafStroke(stroke, (leafStroke: Stroke) => {
+                            allPoints.push(...leafStroke.points!);
+                        });
+                        if (state.selectedStrokePointIdx < allPoints.length) {
+                            const snapPoint = allPoints[state.selectedStrokePointIdx];
+                            state.cursorPos = { ...snapPoint };
+                            state.selectedStrokeCursorPos = { ...snapPoint };
+                        } else {
+                            state.cursorPos = { ...state.dragStartCursorPos };
+                        }
+                    } else {
+                        state.cursorPos = { ...state.dragStartCursorPos };
+                    }
                 }
                 state.dragStartCursorPos = null;
                 break;
