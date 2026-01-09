@@ -564,9 +564,22 @@ export function updateCursorDiv(): void {
         // Normal state: show arrow cursor
         const outerColor = isWhite ? 'black' : drawColor;
 
-        // Inner ring color: lime if stroke selected, white otherwise
-        const hasSelectedStroke = state.selectedStrokeIdx !== null;
-        const innerColor = hasSelectedStroke ? 'lime' : 'white';
+        // Inner ring color based on selection state:
+        // - lime (green): cursor at endpoint of selected stroke (can continue)
+        // - lightskyblue: cursor at middle point of selected stroke (can't continue)
+        // - white: no stroke selected
+        let innerColor = 'white';
+        if (state.selectedStrokeIdx !== null && state.selectedStrokePointIdx !== null) {
+            const selectedStroke = state.strokeHistory[state.selectedStrokeIdx];
+            if (selectedStroke && selectedStroke.points && !selectedStroke.strokes) {
+                const lastPointIdx = selectedStroke.points.length - 1;
+                const isAtEndpoint = state.selectedStrokePointIdx === 0 || state.selectedStrokePointIdx === lastPointIdx;
+                innerColor = isAtEndpoint ? 'lime' : 'lightskyblue';
+            } else {
+                // Group stroke - show as selected but can't continue
+                innerColor = 'lightskyblue';
+            }
+        }
 
         // Scale cursor based on stroke size (base size ~48px, scales with stroke)
         // 2x larger than before

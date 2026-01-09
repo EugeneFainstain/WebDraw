@@ -8,6 +8,7 @@ import {
     initState,
     Stroke,
     showDebug,
+    mmToPixels,
 } from './state';
 import { initActions, handleActions } from './actions';
 import {
@@ -198,6 +199,7 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
     let closestPointX = 0;
     let closestPointY = 0;
     let minDistanceSquared = Infinity;
+    let strokePointCount = 0;
 
     // Iterate through all strokes in history
     for (let i = 0; i < state.strokeHistory.length; i++) {
@@ -217,6 +219,7 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
                     closestPointIdx = j;
                     closestPointX = point.x;
                     closestPointY = point.y;
+                    strokePointCount = leafStroke.points!.length;
                 }
             }
         });
@@ -224,6 +227,52 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
 
     if (closestStrokeIdx === -1) {
         return null;
+    }
+
+    // Endpoint snapping: if an endpoint is within 1mm (screen space) of the closest point, snap to it
+    const ENDPOINT_DISTANCE_THRESHOLD_MM = 1;
+    // Convert screen-space mm to canvas-space by dividing by zoom scale
+    const endpointDistanceThreshold = mmToPixels(ENDPOINT_DISTANCE_THRESHOLD_MM) / state.viewTransform.scale;
+    const endpointDistanceThresholdSquared = endpointDistanceThreshold * endpointDistanceThreshold;
+
+    if (strokePointCount > 1) {
+        const stroke = state.strokeHistory[closestStrokeIdx];
+
+        // Get all points from the stroke (handles both regular strokes and groups)
+        const allPoints: Point[] = [];
+        forEachLeafStroke(stroke, (leafStroke: Stroke) => {
+            if (leafStroke.points) {
+                allPoints.push(...leafStroke.points);
+            }
+        });
+
+        if (allPoints.length > 1) {
+            const firstPoint = allPoints[0];
+            const lastPoint = allPoints[allPoints.length - 1];
+
+            // Check distance to first point
+            const dxFirst = firstPoint.x - closestPointX;
+            const dyFirst = firstPoint.y - closestPointY;
+            const distToFirstSquared = dxFirst * dxFirst + dyFirst * dyFirst;
+
+            // Check distance to last point
+            const dxLast = lastPoint.x - closestPointX;
+            const dyLast = lastPoint.y - closestPointY;
+            const distToLastSquared = dxLast * dxLast + dyLast * dyLast;
+
+            // Snap to whichever endpoint is closer, if within threshold
+            if (distToFirstSquared <= endpointDistanceThresholdSquared && distToFirstSquared <= distToLastSquared) {
+                // Snap to first point
+                closestPointIdx = 0;
+                closestPointX = firstPoint.x;
+                closestPointY = firstPoint.y;
+            } else if (distToLastSquared <= endpointDistanceThresholdSquared) {
+                // Snap to last point
+                closestPointIdx = allPoints.length - 1;
+                closestPointX = lastPoint.x;
+                closestPointY = lastPoint.y;
+            }
+        }
     }
 
     return {
