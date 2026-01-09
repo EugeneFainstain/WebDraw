@@ -239,6 +239,14 @@ export function handleActions(actions: Action[]): void {
                 state.dragStartCursorPos = null;
                 break;
 
+            case Action.SNAP_CURSOR_TO_SELECTED_STROKE:
+                // Snap cursor back to the anchor point on the selected stroke
+                // This happens when lifting finger after small cursor movement (< 3mm)
+                if (state.selectedStrokeCursorPos) {
+                    state.cursorPos = { ...state.selectedStrokeCursorPos };
+                }
+                break;
+
             case Action.DO_NOTHING:
                 // Explicitly do nothing
                 break;

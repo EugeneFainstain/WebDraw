@@ -122,6 +122,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `ABORT_TOO_MANY_FINGERS` | Abort gesture (too many fingers) |
 | `SAVE_DRAG_START_CURSOR` | Save cursor position when starting drag (for snap-back after transform) |
 | `RESTORE_DRAG_START_CURSOR` | Restore cursor after canvas transform (2-finger zoom) |
+| `SNAP_CURSOR_TO_SELECTED_STROKE` | Snap cursor back to `selectedStrokeCursorPos` when lifting finger with stroke selected |
 | `DO_NOTHING` | No action required |
 
 ## Transition Tables
@@ -176,7 +177,7 @@ After all tables have been processed, record the timestamp for the current event
 |-------|---------------------------|
 | F2_DOWN | Go to Drawing. do [CREATE_STROKE] |
 | F3_DOWN | Go to Idle. do [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
-| F1_UP | If doubleTapJustHappened() -> do [SELECT_CLOSEST_STROKE]. Else if singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]. Finally: Go to Idle. |
+| F1_UP | If doubleTapJustHappened() -> do [SELECT_CLOSEST_STROKE]. Else if singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]. Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
 | CURSOR_MOVED_FAR | If isStrokeSelected() -> do [DESELECT_STROKE] |
 | PINCH_DETECTED | ----- |
 

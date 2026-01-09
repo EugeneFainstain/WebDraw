@@ -107,6 +107,7 @@ export enum Action {
     // Cursor snap-back actions
     SAVE_DRAG_START_CURSOR = 'SAVE_DRAG_START_CURSOR',           // Save cursor position when starting drag
     RESTORE_DRAG_START_CURSOR = 'RESTORE_DRAG_START_CURSOR',     // Restore cursor after canvas transform
+    SNAP_CURSOR_TO_SELECTED_STROKE = 'SNAP_CURSOR_TO_SELECTED_STROKE', // Snap cursor back to selectedStrokeCursorPos
 
     // No action
     DO_NOTHING = 'DO_NOTHING'
@@ -453,6 +454,7 @@ export class StateMachine {
             case Event.F1_UP:
                 // If doubleTapJustHappened() -> do [SELECT_CLOSEST_STROKE]
                 // Else if singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]
+                // Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE] (snap back after small movement)
                 // Finally: Go to Idle
                 if (this.doubleTapJustHappened(now)) {
                     return {
@@ -467,6 +469,12 @@ export class StateMachine {
                     return {
                         newState: State.Idle,
                         actions
+                    };
+                } else if (this.isStrokeSelected()) {
+                    // Not a tap, but stroke is selected - snap cursor back to anchor
+                    return {
+                        newState: State.Idle,
+                        actions: [Action.SNAP_CURSOR_TO_SELECTED_STROKE]
                     };
                 } else {
                     return {
