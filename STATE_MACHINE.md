@@ -275,12 +275,14 @@ When starting to draw (F2_DOWN in MovingCursor state), the `CREATE_STROKE` actio
 3. The cursor is at the last point of that stroke (`selectedStrokePointIdx == stroke.points.length - 1`)
 4. The stroke is not a group (has `points` array, no `strokes` array)
 
-Then instead of creating a new stroke, the selected stroke is removed from history and continued. New points will be appended to its existing points. When the stroke is saved, it will be added back to history as a single extended stroke.
+Then a new stroke is created (using the same color/size as the selected stroke) but the selection is kept intact. The actual merge happens later in `SAVE_STROKE`: the new stroke's points are appended to the selected stroke, and the new stroke is discarded.
 
-If any condition is not met, a new stroke is created as normal.
+This deferred approach ensures that if the gesture is abandoned (e.g., pinch detected, or 3-finger transform initiated), the original selected stroke remains intact in history.
+
+If any condition is not met, a new stroke is created as normal (and the selection is cleared).
 
 **The `cursorReadyToContinueStroke` flag:**
-- Set to `true` when: stroke is selected via double-tap ([SELECT_CLOSEST_STROKE]), or cursor snaps back to selected stroke ([SNAP_CURSOR_TO_SELECTED_STROKE])
+- Set to `true` when: stroke is selected via double-tap ([SELECT_CLOSEST_STROKE]), cursor snaps back to selected stroke ([SNAP_CURSOR_TO_SELECTED_STROKE]), or transform completes with a selected stroke ([RESTORE_DRAG_START_CURSOR])
 - Set to `false` when: [CREATE_STROKE] is executed (starting to draw)
 - NOT set by [FINISH_STROKE] - this ensures continuation only works after all fingers are lifted, not when just the drawing finger is lifted while the anchor finger remains down.
 
