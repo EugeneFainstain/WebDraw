@@ -269,13 +269,15 @@ This anchor-based approach provides more intuitive deselection behavior compared
 
 ### Stroke Continuation
 
-When starting to draw (F2_DOWN in MovingCursor state), the `CREATE_STROKE` action checks if the cursor is positioned at the end of a selected stroke. If all conditions are met:
+When starting to draw (F2_DOWN in MovingCursor state), the `CREATE_STROKE` action checks if the cursor is positioned at either endpoint of a selected stroke. If all conditions are met:
 1. `cursorReadyToContinueStroke` flag is true
 2. A stroke is selected (`selectedStrokeIdx != null`)
-3. The cursor is at the last point of that stroke (`selectedStrokePointIdx == stroke.points.length - 1`)
+3. The cursor is at an endpoint of that stroke (`selectedStrokePointIdx == 0` OR `selectedStrokePointIdx == stroke.points.length - 1`)
 4. The stroke is not a group (has `points` array, no `strokes` array)
 
-Then a new stroke is created (using the same color/size as the selected stroke) but the selection is kept intact. The actual merge happens later in `SAVE_STROKE`: the new stroke's points are appended to the selected stroke, and the new stroke is discarded.
+Then a new stroke is created (using the same color/size as the selected stroke) but the selection is kept intact. The actual merge happens later in `SAVE_STROKE`:
+- **Append (cursor at last point)**: New stroke's points are appended to the selected stroke
+- **Prepend (cursor at first point)**: New stroke's points are reversed and prepended to the selected stroke
 
 This deferred approach ensures that if the gesture is abandoned (e.g., pinch detected, or 3-finger transform initiated), the original selected stroke remains intact in history.
 

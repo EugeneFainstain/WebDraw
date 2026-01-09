@@ -55,6 +55,7 @@ export function handleActions(actions: Action[]): void {
                     // Check if we MIGHT continue an existing selected stroke
                     // Don't actually continue yet - just mark it for potential continuation
                     // The actual merge happens in SAVE_STROKE if conditions are still met
+                    // Continuation can happen at either end: first point (prepend) or last point (append)
                     let mightContinue = false;
                     if (state.cursorReadyToContinueStroke &&
                         state.selectedStrokeIdx !== null &&
@@ -64,7 +65,8 @@ export function handleActions(actions: Action[]): void {
                         // Only continue non-group strokes
                         if (selectedStroke.points && !selectedStroke.strokes) {
                             const lastPointIdx = selectedStroke.points.length - 1;
-                            if (state.selectedStrokePointIdx === lastPointIdx) {
+                            // Can continue from either first point (prepend) or last point (append)
+                            if (state.selectedStrokePointIdx === 0 || state.selectedStrokePointIdx === lastPointIdx) {
                                 mightContinue = true;
                             }
                         }
@@ -117,19 +119,50 @@ export function handleActions(actions: Action[]): void {
                 if (state.currentStroke && state.currentStroke.points!.length > 0) {
                     // Check if we should merge with a selected stroke (deferred continuation)
                     if (state.selectedStrokeIdx !== null &&
+                        state.selectedStrokePointIdx !== null &&
                         state.selectedStrokeIdx < state.strokeHistory.length) {
                         const selectedStroke = state.strokeHistory[state.selectedStrokeIdx];
                         // Only merge with non-group strokes that have points
                         if (selectedStroke.points && !selectedStroke.strokes) {
-                            // Append new stroke's points to the selected stroke
-                            // Skip the first point if it's the same as the last point of selected stroke
                             const newPoints = state.currentStroke.points!;
-                            const lastSelectedPoint = selectedStroke.points[selectedStroke.points.length - 1];
-                            const firstNewPoint = newPoints[0];
-                            const startIdx = (lastSelectedPoint.x === firstNewPoint.x &&
-                                            lastSelectedPoint.y === firstNewPoint.y) ? 1 : 0;
-                            for (let i = startIdx; i < newPoints.length; i++) {
-                                selectedStroke.points.push({ ...newPoints[i] });
+                            const lastPointIdx = selectedStroke.points.length - 1;
+
+                            if (state.selectedStrokePointIdx === 0) {
+                                // PREPEND: cursor was at first point, prepend new points (reversed)
+                                // New stroke goes: [start] -> [end], we want: [end] -> [start] -> [existing...]
+                                // So reverse the new points and prepend them
+                                const firstSelectedPoint = selectedStroke.points[0];
+                                const lastNewPoint = newPoints[newPoints.length - 1];
+                                // Skip the last new point if it's the same as the first selected point
+                                const endIdx = (firstSelectedPoint.x === lastNewPoint.x &&
+                                              firstSelectedPoint.y === lastNewPoint.y) ? newPoints.length - 1 : newPoints.length;
+                                // Prepend new points in reverse order
+                                const pointsToPrepend: { x: number; y: number }[] = [];
+                                for (let i = endIdx - 1; i >= 0; i--) {
+                                    pointsToPrepend.push({ ...newPoints[i] });
+                                }
+                                selectedStroke.points.unshift(...pointsToPrepend);
+                                // Update selectedStrokePointIdx to still point to first point (now at index 0)
+                                state.selectedStrokePointIdx = 0;
+                                // Update anchor position to the new first point
+                                state.selectedStrokeCursorPos = { ...selectedStroke.points[0] };
+                            } else if (state.selectedStrokePointIdx === lastPointIdx) {
+                                // APPEND: cursor was at last point, append new points
+                                const lastSelectedPoint = selectedStroke.points[lastPointIdx];
+                                const firstNewPoint = newPoints[0];
+                                // Skip the first new point if it's the same as the last selected point
+                                const startIdx = (lastSelectedPoint.x === firstNewPoint.x &&
+                                                lastSelectedPoint.y === firstNewPoint.y) ? 1 : 0;
+                                for (let i = startIdx; i < newPoints.length; i++) {
+                                    selectedStroke.points.push({ ...newPoints[i] });
+                                }
+                                // Update selectedStrokePointIdx to the new last point
+                                state.selectedStrokePointIdx = selectedStroke.points.length - 1;
+                                // Update anchor position to the new last point
+                                state.selectedStrokeCursorPos = { ...selectedStroke.points[state.selectedStrokePointIdx] };
+                            } else {
+                                // Not at an endpoint, can't merge - save as new stroke
+                                state.strokeHistory.push(state.currentStroke);
                             }
                             // Clear any fitted data since the stroke changed
                             selectedStroke.fittedPoints = undefined;
@@ -137,11 +170,6 @@ export function handleActions(actions: Action[]): void {
                             selectedStroke.fitType = undefined;
                             selectedStroke.showingFitted = undefined;
                             selectedStroke.fittedWithSize = undefined;
-                            // Don't push currentStroke - we merged into existing
-                            // Update selectedStrokePointIdx to the new last point
-                            state.selectedStrokePointIdx = selectedStroke.points.length - 1;
-                            // Update anchor position to the new last point
-                            state.selectedStrokeCursorPos = { ...selectedStroke.points[state.selectedStrokePointIdx] };
                         } else {
                             // Can't merge (it's a group), just save as new stroke
                             state.strokeHistory.push(state.currentStroke);
