@@ -93,10 +93,8 @@ export function handleActions(actions: Action[]): void {
                         }
                     } else {
                         // Create a new stroke as normal
-                        // Deselect any previously selected stroke - we're not continuing it
-                        state.selectedStrokeIdx = null;
-                        state.selectedStrokePointIdx = null;
-                        state.selectedStrokeCursorPos = null;
+                        // DON'T deselect yet - keep selection intact so 3-finger transform can still work
+                        // Selection will be cleared in SAVE_STROKE if we commit to drawing a new stroke
 
                         const startPoint = state.isGridMode ? snapToGrid(state.cursorPos) : state.cursorPos;
                         state.currentStroke = {
@@ -161,8 +159,12 @@ export function handleActions(actions: Action[]): void {
                                 // Update anchor position to the new last point
                                 state.selectedStrokeCursorPos = { ...selectedStroke.points[state.selectedStrokePointIdx] };
                             } else {
-                                // Not at an endpoint, can't merge - save as new stroke
+                                // Not at an endpoint, can't merge - save as new stroke and clear selection
                                 state.strokeHistory.push(state.currentStroke);
+                                state.selectedStrokeIdx = null;
+                                state.selectedStrokePointIdx = null;
+                                state.selectedStrokeCursorPos = null;
+                                state.highlightedStrokes.clear();
                             }
                             // Clear any fitted data since the stroke changed
                             selectedStroke.fittedPoints = undefined;
@@ -171,8 +173,12 @@ export function handleActions(actions: Action[]): void {
                             selectedStroke.showingFitted = undefined;
                             selectedStroke.fittedWithSize = undefined;
                         } else {
-                            // Can't merge (it's a group), just save as new stroke
+                            // Can't merge (it's a group), just save as new stroke and clear selection
                             state.strokeHistory.push(state.currentStroke);
+                            state.selectedStrokeIdx = null;
+                            state.selectedStrokePointIdx = null;
+                            state.selectedStrokeCursorPos = null;
+                            state.highlightedStrokes.clear();
                         }
                     } else {
                         // No selection, just save as new stroke
@@ -247,6 +253,9 @@ export function handleActions(actions: Action[]): void {
                     deps.updatePickersForSelectedStroke();
                     // Cursor is ready to continue this stroke (if at last point)
                     state.cursorReadyToContinueStroke = true;
+                    // Also highlight the selected stroke
+                    state.highlightedStrokes.clear();
+                    state.highlightedStrokes.add(closestResult.strokeIdx);
                 }
                 updateUI();
                 break;
