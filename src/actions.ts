@@ -1,5 +1,5 @@
 import { Action } from './stateMachine';
-import { state, Stroke } from './state';
+import { state, Stroke, showDebug } from './state';
 import {
     initThreeFingerTransform,
 } from './transform';
@@ -52,18 +52,54 @@ export function handleActions(actions: Action[]): void {
         switch (action) {
             case Action.CREATE_STROKE:
                 if (state.cursorPos) {
-                    const startPoint = state.isGridMode ? snapToGrid(state.cursorPos) : state.cursorPos;
-                    state.currentStroke = {
-                        color: deps.getPickerColor(),
-                        size: deps.getPickerSize(),
-                        points: [{ ...startPoint }]
-                    };
-                    // In grid mode, initialize lastGridPosition to the start point
-                    // but don't snap cursorPos - let it move freely
-                    if (state.isGridMode) {
-                        state.lastGridPosition = { ...startPoint };
+                    // Check if we should continue an existing selected stroke
+                    // Conditions: stroke is selected, cursor is at its last point, and it's not a group
+                    let shouldContinue = false;
+                    if (state.selectedStrokeIdx !== null &&
+                        state.selectedStrokePointIdx !== null &&
+                        state.selectedStrokeIdx < state.strokeHistory.length) {
+                        const selectedStroke = state.strokeHistory[state.selectedStrokeIdx];
+                        // Only continue non-group strokes
+                        if (selectedStroke.points && !selectedStroke.strokes) {
+                            const lastPointIdx = selectedStroke.points.length - 1;
+                            showDebug(`pointIdx=${state.selectedStrokePointIdx}, lastIdx=${lastPointIdx}`);
+                            if (state.selectedStrokePointIdx === lastPointIdx) {
+                                shouldContinue = true;
+                            }
+                        }
+                    }
+
+                    if (shouldContinue) {
+                        // Continue the selected stroke: remove it from history and set as current
+                        const selectedStroke = state.strokeHistory[state.selectedStrokeIdx!];
+                        state.strokeHistory.splice(state.selectedStrokeIdx!, 1);
+                        state.currentStroke = selectedStroke;
+                        // Clear selection since we're now editing this stroke
+                        state.selectedStrokeIdx = null;
+                        state.selectedStrokePointIdx = null;
+                        // Keep selectedStrokeCursorPos for deselection tracking
+                        // In grid mode, set lastGridPosition to the last point
+                        if (state.isGridMode && state.currentStroke.points && state.currentStroke.points.length > 0) {
+                            const lastPoint = state.currentStroke.points[state.currentStroke.points.length - 1];
+                            state.lastGridPosition = { ...lastPoint };
+                        } else {
+                            state.lastGridPosition = null;
+                        }
                     } else {
-                        state.lastGridPosition = null;
+                        // Create a new stroke as normal
+                        const startPoint = state.isGridMode ? snapToGrid(state.cursorPos) : state.cursorPos;
+                        state.currentStroke = {
+                            color: deps.getPickerColor(),
+                            size: deps.getPickerSize(),
+                            points: [{ ...startPoint }]
+                        };
+                        // In grid mode, initialize lastGridPosition to the start point
+                        // but don't snap cursorPos - let it move freely
+                        if (state.isGridMode) {
+                            state.lastGridPosition = { ...startPoint };
+                        } else {
+                            state.lastGridPosition = null;
+                        }
                     }
                 }
                 break;

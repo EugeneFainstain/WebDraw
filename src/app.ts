@@ -211,7 +211,7 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
                 const dy = point.y - referencePos.y;
                 const distanceSquared = dx * dx + dy * dy;
 
-                if (distanceSquared < minDistanceSquared) {
+                if (distanceSquared <= minDistanceSquared) {
                     minDistanceSquared = distanceSquared;
                     closestStrokeIdx = i;
                     closestPointIdx = j;
