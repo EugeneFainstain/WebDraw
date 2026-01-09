@@ -41,7 +41,7 @@ The application has **5 distinct states**:
 - **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null` (i.e., a stroke is selected)
 - When true: A stroke is selected (cursor shows green)
 - When false: No selection (normal mode)
-- The underlying `selectedStrokeIdx` is managed by actions like [SELECT_STROKE], [SELECT_CLOSEST_STROKE], and [DESELECT_STROKE]
+- The underlying `selectedStrokeIdx` is managed by actions like [FINISH_STROKE], [SELECT_CLOSEST_STROKE], and [DESELECT_STROKE]
 
 ## Gesture Separation: 2-Finger vs 3-Finger Transform
 
@@ -89,7 +89,7 @@ The state machine maintains **2 flags** and **3 timestamps**:
 - **tapAndAHalfHappenedTimestamp** - Set to current time on F1_DOWN if singleTapHappenedRecently(). Reset to 0 on any finger up (FINGER_UP_COMMON).
 
 **Calculated functions:**
-- **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null`. Managed by [SELECT_STROKE], [SELECT_CLOSEST_STROKE], [DESELECT_STROKE] actions.
+- **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null`. Managed by [FINISH_STROKE], [SELECT_CLOSEST_STROKE], [DESELECT_STROKE] actions.
 - **singleTapHappenedRecently()** - Returns true if singleTapHappenedTimestamp != 0 AND (now - singleTapHappenedTimestamp) < doubleTapTimeout.
 - **singleTapJustHappened()** - Returns true if singleTapHappenedTimestamp == now. Used to detect if a single tap was set in this same state machine pass.
 - **doubleTapJustHappened()** - Returns true if doubleTapHappenedTimestamp == now. Used to detect if a double tap was set in this same state machine pass.
@@ -112,7 +112,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `CREATE_STROKE` | Create a new stroke, or continue an existing selected stroke if cursor is at its last point |
 | `SAVE_STROKE` | Save current stroke to history |
 | `ABANDON_STROKE` | Discard current stroke |
-| `SELECT_STROKE` | Select a stroke (enter selected stroke mode) |
+| `FINISH_STROKE` | Finish drawing stroke (save and select it) |
 | `SELECT_CLOSEST_STROKE` | Select closest stroke to cursor, snap cursor to that point, update pickers |
 | `DESELECT_STROKE` | Deselect stroke (exit selected stroke mode) |
 | `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
@@ -194,7 +194,7 @@ After all tables have been processed, record the timestamp for the current event
 | F2_DOWN | ----- |
 | PINCH_DETECTED | Go to Transform. do [ABANDON_STROKE, INIT_TRANSFORM] |
 | F3_DOWN | Go to Transform. If longStrokeDrawnHappened -> do [SAVE_STROKE, INIT_TRANSFORM], else do [ABANDON_STROKE, INIT_TRANSFORM] |
-| F2_UP | Go to MovingCursor. do [SAVE_STROKE]. If not isStrokeSelected() -> do [SELECT_STROKE] |
+| F2_UP | Go to MovingCursor. do [SAVE_STROKE]. If not isStrokeSelected() -> do [FINISH_STROKE] |
 | LONG_STROKE_DRAWN | Set longStrokeDrawnHappened = true |
 
 **Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >4mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached the length threshold (LONG_STROKE_DRAWN fired), the gesture is locked as drawing and PINCH_DETECTED won't fire.
@@ -244,7 +244,7 @@ After all tables have been processed, record the timestamp for the current event
 **isStrokeSelected()** returns true when `selectedStrokeIdx != null`.
 
 **Entry Conditions** (actions that set `selectedStrokeIdx`):
-- [SELECT_STROKE] - Automatically when completing a stroke (FINGER_UP_COMMON in Drawing state)
+- [FINISH_STROKE] - Automatically when completing a stroke (F2_UP in Drawing state)
 - [SELECT_CLOSEST_STROKE] - On double-tap, selects the closest stroke to the cursor
 
 **Exit Conditions** (actions that clear `selectedStrokeIdx`):
@@ -270,13 +270,19 @@ This anchor-based approach provides more intuitive deselection behavior compared
 ### Stroke Continuation
 
 When starting to draw (F2_DOWN in MovingCursor state), the `CREATE_STROKE` action checks if the cursor is positioned at the end of a selected stroke. If all conditions are met:
-1. A stroke is selected (`selectedStrokeIdx != null`)
-2. The cursor is at the last point of that stroke (`selectedStrokePointIdx == stroke.points.length - 1`)
-3. The stroke is not a group (has `points` array, no `strokes` array)
+1. `cursorReadyToContinueStroke` flag is true
+2. A stroke is selected (`selectedStrokeIdx != null`)
+3. The cursor is at the last point of that stroke (`selectedStrokePointIdx == stroke.points.length - 1`)
+4. The stroke is not a group (has `points` array, no `strokes` array)
 
 Then instead of creating a new stroke, the selected stroke is removed from history and continued. New points will be appended to its existing points. When the stroke is saved, it will be added back to history as a single extended stroke.
 
 If any condition is not met, a new stroke is created as normal.
+
+**The `cursorReadyToContinueStroke` flag:**
+- Set to `true` when: stroke is selected via double-tap ([SELECT_CLOSEST_STROKE]), or cursor snaps back to selected stroke ([SNAP_CURSOR_TO_SELECTED_STROKE])
+- Set to `false` when: [CREATE_STROKE] is executed (starting to draw)
+- NOT set by [FINISH_STROKE] - this ensures continuation only works after all fingers are lifted, not when just the drawing finger is lifted while the anchor finger remains down.
 
 ### Stroke Protection
 

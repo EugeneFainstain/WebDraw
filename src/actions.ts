@@ -53,9 +53,10 @@ export function handleActions(actions: Action[]): void {
             case Action.CREATE_STROKE:
                 if (state.cursorPos) {
                     // Check if we should continue an existing selected stroke
-                    // Conditions: stroke is selected, cursor is at its last point, and it's not a group
+                    // Conditions: cursor is ready, stroke is selected, cursor is at its last point, not a group
                     let shouldContinue = false;
-                    if (state.selectedStrokeIdx !== null &&
+                    if (state.cursorReadyToContinueStroke &&
+                        state.selectedStrokeIdx !== null &&
                         state.selectedStrokePointIdx !== null &&
                         state.selectedStrokeIdx < state.strokeHistory.length) {
                         const selectedStroke = state.strokeHistory[state.selectedStrokeIdx];
@@ -67,6 +68,8 @@ export function handleActions(actions: Action[]): void {
                             }
                         }
                     }
+                    // Clear the ready flag - we're starting to draw
+                    state.cursorReadyToContinueStroke = false;
 
                     if (shouldContinue) {
                         // Continue the selected stroke: remove it from history and set as current
@@ -86,6 +89,11 @@ export function handleActions(actions: Action[]): void {
                         }
                     } else {
                         // Create a new stroke as normal
+                        // Deselect any previously selected stroke - we're not continuing it
+                        state.selectedStrokeIdx = null;
+                        state.selectedStrokePointIdx = null;
+                        state.selectedStrokeCursorPos = null;
+
                         const startPoint = state.isGridMode ? snapToGrid(state.cursorPos) : state.cursorPos;
                         state.currentStroke = {
                             color: deps.getPickerColor(),
@@ -124,12 +132,14 @@ export function handleActions(actions: Action[]): void {
                 state.lastGridPosition = null;
                 break;
 
-            case Action.SELECT_STROKE:
-                // SELECT_STROKE: Automatically select the stroke that was just drawn
+            case Action.FINISH_STROKE:
+                // FINISH_STROKE: Automatically select the stroke that was just drawn
                 // Triggered after: Finishing a drawing (lifting second finger)
                 // Behavior: Selects the last stroke in history (the one just completed)
                 //           Cursor stays at its current position
                 // Note: selectedStrokeCursorPos is already set during drawing via addPointToStroke()
+                // Note: cursorReadyToContinueStroke is NOT set here - it will be set when
+                //       all fingers are lifted (via SNAP_CURSOR_TO_SELECTED_STROKE on F1_UP)
                 // Set selected stroke to the last stroke in history
                 if (state.strokeHistory.length > 0) {
                     state.selectedStrokeIdx = state.strokeHistory.length - 1;
@@ -167,6 +177,8 @@ export function handleActions(actions: Action[]): void {
                     state.hasUndoableTransform = false;
                     // Update color and size pickers to match selected stroke
                     deps.updatePickersForSelectedStroke();
+                    // Cursor is ready to continue this stroke (if at last point)
+                    state.cursorReadyToContinueStroke = true;
                 }
                 updateUI();
                 break;
@@ -299,6 +311,8 @@ export function handleActions(actions: Action[]): void {
                 // This happens when lifting finger after small cursor movement (< 3mm)
                 if (state.selectedStrokeCursorPos) {
                     state.cursorPos = { ...state.selectedStrokeCursorPos };
+                    // Cursor snapped back - ready to continue stroke
+                    state.cursorReadyToContinueStroke = true;
                 }
                 break;
 

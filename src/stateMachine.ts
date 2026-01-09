@@ -95,7 +95,7 @@ export enum Action {
     ABANDON_STROKE = 'ABANDON_STROKE',
 
     // Selected stroke actions
-    SELECT_STROKE = 'SELECT_STROKE',                     // Select last drawn stroke (after drawing)
+    FINISH_STROKE = 'FINISH_STROKE',                     // Finish drawing stroke (save and select it)
     SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to cursor (double-tap)
     DESELECT_STROKE = 'DESELECT_STROKE',
 
@@ -554,10 +554,10 @@ export class StateMachine {
                 }
 
             case Event.F2_UP:
-                // Go to MovingCursor, do [SAVE_STROKE]. If not isStrokeSelected() -> do [SELECT_STROKE]
+                // Go to MovingCursor, do [SAVE_STROKE]. If not isStrokeSelected() -> do [FINISH_STROKE]
                 const actions: Action[] = [Action.SAVE_STROKE];
                 if (!this.isStrokeSelected()) {
-                    actions.push(Action.SELECT_STROKE);
+                    actions.push(Action.FINISH_STROKE);
                 }
                 return {
                     newState: State.MovingCursor,

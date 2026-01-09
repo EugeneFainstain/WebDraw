@@ -132,6 +132,11 @@ export const state = {
     // Updated continuously while drawing, or set to closest point when selecting via double-click
     selectedStrokeCursorPos: null as Point | null,
 
+    // Flag indicating cursor is "ready" to continue a stroke
+    // Set true when: all fingers lifted, or cursor snapped to selected stroke
+    // Set false when: cursor starts moving (entering MovingCursor with finger down)
+    cursorReadyToContinueStroke: false,
+
     // Cursor position at start of drag gesture (for restoring if drag is cancelled)
     dragStartCursorPos: null as Point | null,
 
@@ -220,6 +225,7 @@ export function resetState() {
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
     state.selectedStrokeCursorPos = null;
+    state.cursorReadyToContinueStroke = false;
     state.dragStartCursorPos = null;
     state.selectionRectStart = null;
     state.selectionRectEnd = null;
