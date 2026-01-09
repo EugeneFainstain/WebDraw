@@ -113,10 +113,6 @@ function updateCursorPositionWithBatching(): void {
             state.cursorPos.y += canvasDelta.y;
             panToKeepCursorInView();
 
-            if (state.currentStroke && !state.isGridMode) {
-                state.currentStroke.points!.push({ ...state.cursorPos });
-            }
-
             state.batchedDelta = null;
         }
 
@@ -132,10 +128,6 @@ function updateCursorPositionWithBatching(): void {
                     state.cursorPos.y += canvasDelta.y;
                     panToKeepCursorInView();
 
-                    if (state.currentStroke && !state.isGridMode) {
-                        state.currentStroke.points!.push({ ...state.cursorPos });
-                    }
-
                     // Store current delta for next iteration
                     state.lastDelta = { x: deltaX, y: deltaY, pointerId: movedPointerId! };
                 } else {
@@ -149,10 +141,6 @@ function updateCursorPositionWithBatching(): void {
                     state.cursorPos.x += canvasDelta.x;
                     state.cursorPos.y += canvasDelta.y;
                     panToKeepCursorInView();
-
-                    if (state.currentStroke && !state.isGridMode) {
-                        state.currentStroke.points!.push({ ...state.cursorPos });
-                    }
 
                     // Clear the buffer
                     state.lastDelta = null;
@@ -247,10 +235,6 @@ function updateCursorPositionSimple(): void {
     state.cursorPos.x += canvasDelta.x;
     state.cursorPos.y += canvasDelta.y;
     panToKeepCursorInView();
-
-    if (state.currentStroke && !state.isGridMode) {
-        state.currentStroke.points!.push({ ...state.cursorPos });
-    }
 }
 
 // ============================================================================
@@ -336,10 +320,15 @@ export function addPointToStroke(): void {
             state.selectedStrokeCursorPos = { ...gridPoint };
         }
     } else {
-        // Normal mode: add every point
-        state.currentStroke.points!.push({ ...state.cursorPos });
-        // Update anchor for deselection distance check
-        state.selectedStrokeCursorPos = { ...state.cursorPos };
+        // Normal mode: add every point, but skip duplicates
+        const points = state.currentStroke.points!;
+        const lastPoint = points[points.length - 1];
+        // Only add if different from last point
+        if (lastPoint.x !== state.cursorPos.x || lastPoint.y !== state.cursorPos.y) {
+            points.push({ ...state.cursorPos });
+            // Update anchor for deselection distance check
+            state.selectedStrokeCursorPos = { ...state.cursorPos };
+        }
     }
 
     // Check if stroke is long enough to lock the gesture as drawing

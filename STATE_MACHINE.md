@@ -269,16 +269,14 @@ This anchor-based approach provides more intuitive deselection behavior compared
 
 ### Stroke Continuation
 
-When starting to draw (F2_DOWN in MovingCursor state), the `CREATE_STROKE` action checks if the cursor is positioned near the end of a selected stroke. If all conditions are met:
+When starting to draw (F2_DOWN in MovingCursor state), the `CREATE_STROKE` action checks if the cursor is positioned at the end of a selected stroke. If all conditions are met:
 1. A stroke is selected (`selectedStrokeIdx != null`)
-2. The cursor is within 3mm (deselect threshold) of the stroke's last point
+2. The cursor is at the last point of that stroke (`selectedStrokePointIdx == stroke.points.length - 1`)
 3. The stroke is not a group (has `points` array, no `strokes` array)
 
 Then instead of creating a new stroke, the selected stroke is removed from history and continued. New points will be appended to its existing points. When the stroke is saved, it will be added back to history as a single extended stroke.
 
 If any condition is not met, a new stroke is created as normal.
-
-**Note:** The proximity check uses canvas-space coordinates, so the threshold is adjusted by the current zoom scale.
 
 ### Stroke Protection
 

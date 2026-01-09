@@ -1,5 +1,5 @@
 import { Action } from './stateMachine';
-import { state, Stroke, showDebug } from './state';
+import { state, Stroke } from './state';
 import {
     initThreeFingerTransform,
 } from './transform';
@@ -62,7 +62,6 @@ export function handleActions(actions: Action[]): void {
                         // Only continue non-group strokes
                         if (selectedStroke.points && !selectedStroke.strokes) {
                             const lastPointIdx = selectedStroke.points.length - 1;
-                            showDebug(`pointIdx=${state.selectedStrokePointIdx}, lastIdx=${lastPointIdx}`);
                             if (state.selectedStrokePointIdx === lastPointIdx) {
                                 shouldContinue = true;
                             }
