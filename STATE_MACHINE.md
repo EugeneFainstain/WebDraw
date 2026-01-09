@@ -12,15 +12,15 @@ The application distinguishes between two-finger **drawing** gestures and two-fi
 
 1. When a second finger lands, the gesture initially assumes it's a drawing gesture and enters the **Drawing** state
 2. The distance between the two fingers is recorded at the moment the second finger lands
-3. **Pinch Detection**: If the distance between the fingers changes by more than 8mm (PINCH_THRESHOLD_MM), a `PINCH_DETECTED` event is fired, abandoning the stroke and transitioning to **Transform** state
-4. **Drawing Lock**: If the drawn stroke reaches a path length of 8mm (STROKE_LEN_THRESHOLD_MM) before any pinch is detected, the gesture is locked as a drawing gesture. Future changes in finger distance are ignored, and the stroke continues normally
+3. **Pinch Detection**: If the distance between the fingers changes by more than 4mm (PINCH_THRESHOLD_MM), a `PINCH_DETECTED` event is fired, abandoning the stroke and transitioning to **Transform** state
+4. **Drawing Lock**: If the drawn stroke reaches a path length of 4mm (STROKE_LEN_THRESHOLD_MM) before any pinch is detected, the gesture is locked as a drawing gesture. Future changes in finger distance are ignored, and the stroke continues normally
 5. This allows natural drawing with two fingers while still supporting zoom/pan/rotate when fingers move apart or together
 
 **Note on Thresholds**:
 - All thresholds are specified in millimeters (mm) to ensure consistent physical gesture recognition
 - Thresholds are converted to pixels using device DPI (96) and `devicePixelRatio`
 - **Screen-space measurements** (pinch detection, finger movement): Measured in screen pixels, unaffected by canvas zoom
-- **Canvas-space measurements** (stroke path length): The threshold is dynamically adjusted by dividing by the current canvas zoom scale, ensuring 8mm of physical finger movement always locks the drawing gesture regardless of zoom level
+- **Canvas-space measurements** (stroke path length): The threshold is dynamically adjusted by dividing by the current canvas zoom scale, ensuring 4mm of physical finger movement always locks the drawing gesture regardless of zoom level
 
 ## States
 
@@ -70,8 +70,8 @@ The state machine responds to **13 events**:
 7. **F3_UP** - One of three fingers lifted (was 3 fingers, now 2)
 8. **FINGER_UP** - Any finger lifts from screen (fires along with F1/F2/F3_UP)
 9. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `selectedStrokeCursorPos` (screen-space). Used for deselection and snap-back.
-10. **LONG_STROKE_DRAWN** - Stroke path length exceeded threshold (~4mm). Used for gesture disambiguation (pinch vs draw) and stroke protection.
-11. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (8mm screen-space), indicating zoom/pan/rotate gesture
+10. **LONG_STROKE_DRAWN** - Stroke path length exceeded threshold (4mm). Used for gesture disambiguation (pinch vs draw) and stroke protection.
+11. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (4mm screen-space), indicating zoom/pan/rotate gesture
 12. **DELETE** - Delete button pressed
 13. **CLEAR** - Clear button pressed
 
@@ -191,7 +191,7 @@ After all tables have been processed, record the timestamp for the current event
 | FINGER_UP | Go to MovingCursor. do [SAVE_STROKE]. If not isStrokeSelected() -> do [SELECT_STROKE] |
 | LONG_STROKE_DRAWN | Set longStrokeDrawnHappened = true |
 
-**Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >8mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached the length threshold (LONG_STROKE_DRAWN fired), the gesture is locked as drawing and PINCH_DETECTED won't fire.
+**Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >4mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached the length threshold (LONG_STROKE_DRAWN fired), the gesture is locked as drawing and PINCH_DETECTED won't fire.
 
 **Note on Drawing Lock and Highlighting:** When in Drawing state, one of two mutually exclusive events will occur first:
 1. **PINCH_DETECTED fires first** - Gesture becomes zoom/pan. Stroke is abandoned, highlighting is preserved (user can continue to transform highlighted strokes).
