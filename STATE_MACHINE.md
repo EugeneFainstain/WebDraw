@@ -173,7 +173,7 @@ After all tables have been processed, record the timestamp for the current event
 | F1_DOWN | If tapAndAHalfHappened() -> Go to SelectionRectangle, do [START_SELECTION_RECTANGLE, DESELECT_STROKE]. Else -> Go to MovingCursor, do [SAVE_DRAG_START_CURSOR] |
 | F2_DOWN | ----- |
 | F3_DOWN | ----- |
-| FINGER_UP | ----- |
+| FINGER_UP_COMMON | ----- |
 | PINCH_DETECTED | ----- |
 
 ### FROM MovingCursor State
@@ -182,7 +182,7 @@ After all tables have been processed, record the timestamp for the current event
 |-------|---------------------------|
 | F2_DOWN | Go to Drawing. do [CREATE_STROKE] |
 | F3_DOWN | Go to Idle. do [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
-| F1_UP | If doubleTapJustHappened() -> do [SELECT_CLOSEST_STROKE]. Else if singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]. Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
+| F1_UP | If singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]. Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
 | CURSOR_MOVED_FAR | If isStrokeSelected() -> do [DESELECT_STROKE] |
 | PINCH_DETECTED | ----- |
 
@@ -210,7 +210,7 @@ After all tables have been processed, record the timestamp for the current event
 | F1_DOWN | ----- |
 | F2_DOWN | ----- |
 | F3_DOWN | ----- |
-| FINGER_UP | Go to Idle. do [RESTORE_DRAG_START_CURSOR] |
+| FINGER_UP_COMMON | Go to Idle. do [RESTORE_DRAG_START_CURSOR] |
 | PINCH_DETECTED | ----- |
 
 ### FROM SelectionRectangle State
@@ -220,7 +220,7 @@ After all tables have been processed, record the timestamp for the current event
 | F1_DOWN | ----- |
 | F2_DOWN | Go to Idle. do [CANCEL_SELECTION_RECTANGLE] |
 | F3_DOWN | Go to Idle. do [CANCEL_SELECTION_RECTANGLE] |
-| FINGER_UP | Go to Idle. do [APPLY_SELECTION_RECTANGLE] |
+| FINGER_UP_COMMON | If doubleTapJustHappened() -> Go to Idle. do [CANCEL_SELECTION_RECTANGLE, SELECT_CLOSEST_STROKE]. Else -> Go to Idle. do [APPLY_SELECTION_RECTANGLE] |
 | PINCH_DETECTED | ----- |
 
 **Note:** SelectionRectangle state always has isStrokeSelected() = false.
@@ -244,7 +244,7 @@ After all tables have been processed, record the timestamp for the current event
 **isStrokeSelected()** returns true when `selectedStrokeIdx != null`.
 
 **Entry Conditions** (actions that set `selectedStrokeIdx`):
-- [SELECT_STROKE] - Automatically when completing a stroke (FINGER_UP in Drawing state)
+- [SELECT_STROKE] - Automatically when completing a stroke (FINGER_UP_COMMON in Drawing state)
 - [SELECT_CLOSEST_STROKE] - On double-tap, selects the closest stroke to the cursor
 
 **Exit Conditions** (actions that clear `selectedStrokeIdx`):
@@ -276,14 +276,14 @@ When in Drawing state and F3_DOWN event occurs:
 ### Selection Rectangle Mode
 
 **Entry Condition:**
-- Tap-and-a-half gesture: Quick tap (F1_DOWN -> FINGER_UP without timing out or cursor moving more than a few pixels), then another F1_DOWN before timeout
+- Tap-and-a-half gesture: Quick tap (F1_DOWN -> FINGER_UP_COMMON without timing out or cursor moving more than a few pixels), then another F1_DOWN before timeout
 
 **Behavior:**
 - Dragging creates a semi-transparent blue selection rectangle
 - **Real-time highlighting**: As the rectangle is dragged, strokes that intersect the rectangle are highlighted in real-time
   - Highlighted strokes are drawn with a light grey outline at 2x thickness, then the normal stroke is drawn on top
   - The highlighting updates continuously as the rectangle changes
-- On FINGER_UP, the selection rectangle disappears but strokes **remain highlighted**
+- On FINGER_UP_COMMON, the selection rectangle disappears but strokes **remain highlighted**
   - Highlighted strokes stay highlighted until explicitly cleared
   - Changing color or stroke width applies to **all highlighted strokes**
   - Any stroke with at least one point inside the rectangle is affected
@@ -294,7 +294,7 @@ When in Drawing state and F3_DOWN event occurs:
 - CLEAR button clears highlighting
 
 **Exit Conditions:**
-- FINGER_UP (completes selection, keeps strokes highlighted)
+- FINGER_UP_COMMON (completes selection, keeps strokes highlighted)
 - F2_DOWN or F3_DOWN (cancels selection rectangle and clears highlighting)
 - DELETE or CLEAR buttons (cancels selection rectangle and clears highlighting)
 

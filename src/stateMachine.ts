@@ -10,6 +10,19 @@
  * Keep them synchronized to avoid confusion.
  */
 
+// Debug callback - set externally to avoid circular dependency with state.ts
+let debugCallback: ((msg: string) => void) | null = null;
+
+export function setStateMachineDebugCallback(callback: (msg: string) => void): void {
+    debugCallback = callback;
+}
+
+function debug(msg: string): void {
+    if (debugCallback) {
+        debugCallback(msg);
+    }
+}
+
 // ============================================================================
 // STATES
 // ============================================================================
@@ -403,7 +416,7 @@ export class StateMachine {
             case State.Transform:
                 return this.transitionFromTransform(event);
             case State.SelectionRectangle:
-                return this.transitionFromSelectionRectangle(event);
+                return this.transitionFromSelectionRectangle(event, now);
             default:
                 return { newState: State.Idle, actions: [] };
         }
@@ -464,16 +477,11 @@ export class StateMachine {
                 };
 
             case Event.F1_UP:
-                // If doubleTapJustHappened() -> do [SELECT_CLOSEST_STROKE]
-                // Else if singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]
+                // If singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]
                 // Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE] (snap back after small movement)
                 // Finally: Go to Idle
-                if (this.doubleTapJustHappened(now)) {
-                    return {
-                        newState: State.Idle,
-                        actions: [Action.SELECT_CLOSEST_STROKE]
-                    };
-                } else if (this.singleTapJustHappened(now)) {
+                // Note: doubleTapJustHappened() is handled in SelectionRectangle state, not here
+                if (this.singleTapJustHappened(now)) {
                     const actions: Action[] = [Action.CLEAR_HIGHLIGHTING];
                     if (this.isStrokeSelected()) {
                         actions.push(Action.DESELECT_STROKE);
@@ -596,7 +604,7 @@ export class StateMachine {
     // TRANSITIONS FROM SELECTION RECTANGLE STATE
     // ========================================================================
 
-    private transitionFromSelectionRectangle(event: Event): TransitionResult {
+    private transitionFromSelectionRectangle(event: Event, now: number): TransitionResult {
         switch (event) {
             case Event.F1_DOWN:
                 return { newState: State.SelectionRectangle, actions: [] };
@@ -612,7 +620,14 @@ export class StateMachine {
             case Event.F1_UP:
             case Event.F2_UP:
             case Event.F3_UP:
-                // FINGER_UP: Go to Idle, do [APPLY_SELECTION_RECTANGLE]
+                // FINGER_UP_COMMON: If doubleTapJustHappened() -> do [CANCEL_SELECTION_RECTANGLE, SELECT_CLOSEST_STROKE]
+                // Else -> do [APPLY_SELECTION_RECTANGLE]
+                if (this.doubleTapJustHappened(now)) {
+                    return {
+                        newState: State.Idle,
+                        actions: [Action.CANCEL_SELECTION_RECTANGLE, Action.SELECT_CLOSEST_STROKE]
+                    };
+                }
                 return {
                     newState: State.Idle,
                     actions: [Action.APPLY_SELECTION_RECTANGLE]

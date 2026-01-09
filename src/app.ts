@@ -1,12 +1,13 @@
 import '../styles.css';
 import { createCombinedPicker } from './combinedPicker';
 import { createMenuPicker } from './menuPicker';
-import { Event } from './stateMachine';
+import { Event, setStateMachineDebugCallback } from './stateMachine';
 import { Point } from './eventHandler';
 import {
     state,
     initState,
     Stroke,
+    showDebug,
 } from './state';
 import { initActions, handleActions } from './actions';
 import {
@@ -61,6 +62,9 @@ import {
 
 const canvas = document.getElementById('drawingCanvas') as HTMLCanvasElement;
 initState(canvas);
+
+// Wire up state machine debug callback
+setStateMachineDebugCallback(showDebug);
 
 // Aliases for frequently accessed state (for cleaner code)
 const dom = state.dom;
@@ -239,8 +243,8 @@ state.eventHandler.setEventCallback((event: Event) => {
 
     handleActions(result.actions);
 
-    // Handle finger promotion discontinuity
-    if (event === Event.FINGER_UP) {
+    // Handle finger promotion discontinuity (on any finger-up event)
+    if (event === Event.F1_UP || event === Event.F2_UP || event === Event.F3_UP) {
         const promotionDelta = state.eventHandler.getAndClearPromotionDelta();
         if (promotionDelta) {
             // When fingers are promoted, we need to update the tracking positions
