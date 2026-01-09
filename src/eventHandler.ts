@@ -12,9 +12,6 @@ export interface Point {
     y: number;
 }
 
-// Constants
-const TIMEOUT_DELAY = 250; // ms - timeout after any finger down
-
 // Physical thresholds in millimeters (scale-invariant)
 const PINCH_THRESHOLD_MM = 4; // mm - threshold for detecting pinch/zoom gesture
 const PINCH_THRESHOLD_PX = mmToPixels(PINCH_THRESHOLD_MM); // in pixels
@@ -40,10 +37,6 @@ export class EventHandler {
     private primaryPos: Point | null = null;
     private secondaryPos: Point | null = null;
     private tertiaryPos: Point | null = null;
-
-    // Timeout tracking
-    private timeoutHandle: number | null = null;
-    private lastFingerDownTime: number = 0;
 
     // Event callback
     private eventCallback: ((event: Event) => void) | null = null;
@@ -98,23 +91,6 @@ export class EventHandler {
     }
 
     /**
-     * Start timeout timer
-     */
-    private startTimeout(): void {
-        // Clear any existing timeout
-        if (this.timeoutHandle !== null) {
-            clearTimeout(this.timeoutHandle);
-        }
-
-        // Start new timeout
-        this.lastFingerDownTime = Date.now();
-        this.timeoutHandle = window.setTimeout(() => {
-            this.emitEvent(Event.TIMEOUT);
-            this.timeoutHandle = null;
-        }, TIMEOUT_DELAY);
-    }
-
-    /**
      * Calculate distance between two points
      */
     private getDistance(p1: Point, p2: Point): number {
@@ -132,10 +108,8 @@ export class EventHandler {
             this.primaryPointerId = pointerId;
             this.primaryPos = { ...pos };
 
-            // Start timeout on any finger down
-            this.startTimeout();
-
             this.emitEvent(Event.F1_DOWN);
+            this.emitEvent(Event.FINGER_DOWN);
             return;
         }
 
@@ -150,10 +124,8 @@ export class EventHandler {
                 this.gestureLockedAsDrawing = false;
             }
 
-            // Restart timeout on any finger down
-            this.startTimeout();
-
             this.emitEvent(Event.F2_DOWN);
+            this.emitEvent(Event.FINGER_DOWN);
             return;
         }
 
@@ -162,10 +134,8 @@ export class EventHandler {
             this.tertiaryPointerId = pointerId;
             this.tertiaryPos = { ...pos };
 
-            // Restart timeout on any finger down
-            this.startTimeout();
-
             this.emitEvent(Event.F3_DOWN);
+            this.emitEvent(Event.FINGER_DOWN);
             return;
         }
 
@@ -200,8 +170,16 @@ export class EventHandler {
 
     /**
      * Handle pointer up event
+     *
+     * Emits specific finger-up events based on finger count transition:
+     * - F1_UP: Was 1 finger, now 0 (last finger lifted)
+     * - F2_UP: Was 2 fingers, now 1
+     * - F3_UP: Was 3 fingers, now 2
+     * Also emits FINGER_UP after the specific event.
      */
     public handlePointerUp(pointerId: number): void {
+        // Determine which finger is being lifted and the finger count before lift
+        const fingerCountBefore = this.getFingerCount();
         let fingerLifted = false;
         this.lastPromotionDelta = null;
 
@@ -258,20 +236,23 @@ export class EventHandler {
         }
 
         if (fingerLifted) {
+            // Emit specific finger-up event based on how many fingers we had before
+            // F1_UP: 1 -> 0, F2_UP: 2 -> 1, F3_UP: 3 -> 2
+            if (fingerCountBefore === 1) {
+                this.emitEvent(Event.F1_UP);
+            } else if (fingerCountBefore === 2) {
+                this.emitEvent(Event.F2_UP);
+            } else if (fingerCountBefore === 3) {
+                this.emitEvent(Event.F3_UP);
+            }
+
+            // Always emit generic FINGER_UP after the specific event
             this.emitEvent(Event.FINGER_UP);
 
             // Reset two-finger gesture tracking when we no longer have two fingers
             if (this.secondaryPointerId === null) {
                 this.initialTwoFingerDistance = null;
                 this.gestureLockedAsDrawing = false;
-            }
-
-            // Clear timeout if all fingers are up
-            if (this.getFingerCount() === 0) {
-                if (this.timeoutHandle !== null) {
-                    clearTimeout(this.timeoutHandle);
-                    this.timeoutHandle = null;
-                }
             }
         }
     }
@@ -317,18 +298,6 @@ export class EventHandler {
         this.tertiaryPos = null;
         this.initialTwoFingerDistance = null;
         this.gestureLockedAsDrawing = false;
-
-        if (this.timeoutHandle !== null) {
-            clearTimeout(this.timeoutHandle);
-            this.timeoutHandle = null;
-        }
-    }
-
-    /**
-     * Get time since last finger down (for debugging)
-     */
-    public getTimeSinceLastFingerDown(): number {
-        return Date.now() - this.lastFingerDownTime;
     }
 
     /**

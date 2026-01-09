@@ -23,28 +23,6 @@ export enum State {
 }
 
 // ============================================================================
-// STATE MODIFIERS
-// ============================================================================
-
-/**
- * Selected Stroke Mode
- * When true: A stroke is selected (cursor shows green), and 3-finger transform affects only that stroke
- * When false: No selection (normal mode), 3-finger transform affects entire canvas
- *
- * Note: The actual selected stroke index is tracked in app.ts (selectedStrokeIdx)
- * This flag indicates whether the selection mode is active.
- *
- * Exit conditions:
- * - Single tap (quick tap without timeout or movement)
- * - Moving the cursor far from the selected stroke position
- * - Undo/Clear operations
- * - Too many fingers touching
- */
-export type StateModifier = {
-    isStrokeSelected: boolean;
-};
-
-// ============================================================================
 // EVENTS
 // ============================================================================
 
@@ -52,8 +30,11 @@ export enum Event {
     F1_DOWN = 'F1_DOWN',              // First finger touches screen
     F2_DOWN = 'F2_DOWN',              // Second finger touches screen
     F3_DOWN = 'F3_DOWN',              // Third finger touches screen
-    FINGER_UP = 'FINGER_UP',          // Any finger lifts from screen
-    TIMEOUT = 'TIMEOUT',              // 250ms has elapsed since ANY finger down
+    FINGER_DOWN = 'FINGER_DOWN',      // Any finger touches screen (fires along with F1/F2/F3_DOWN)
+    F1_UP = 'F1_UP',                  // Last finger lifted (was 1 finger, now 0)
+    F2_UP = 'F2_UP',                  // One of two fingers lifted (was 2 fingers, now 1)
+    F3_UP = 'F3_UP',                  // One of three fingers lifted (was 3 fingers, now 2)
+    FINGER_UP = 'FINGER_UP',          // Any finger lifts from screen (fires along with F1/F2/F3_UP)
     CURSOR_MOVED_FAR = 'CURSOR_MOVED_FAR', // Cursor moved >3mm from selectedStrokeCursorPos (deselection/snap)
     LONG_STROKE_DRAWN = 'LONG_STROKE_DRAWN', // Stroke path length exceeded threshold (gesture lock)
     PINCH_DETECTED = 'PINCH_DETECTED', // Two-finger distance changed beyond threshold
@@ -62,16 +43,28 @@ export enum Event {
 }
 
 // ============================================================================
-// EVENT FLAGS
+// EVENT FLAGS AND TIMESTAMPS
 // ============================================================================
+
+/**
+ * Timestamps for tap detection (in milliseconds since epoch)
+ * Value of 0 means "not set" / "never happened"
+ */
+export type EventTimestamps = {
+    singleTapHappenedTimestamp: number;      // Set on quick single-finger tap
+    doubleTapHappenedTimestamp: number;      // Set on second quick tap within timeout
+    tapAndAHalfHappenedTimestamp: number;    // Set on F1_DOWN if singleTapHappenedRecently
+    F1_DOWN_TIMESTAMP: number;               // When F1_DOWN last fired
+    F2_DOWN_TIMESTAMP: number;               // When F2_DOWN last fired
+    F3_DOWN_TIMESTAMP: number;               // When F3_DOWN last fired
+};
 
 /**
  * Persistent flags set by events and checked by later transitions
  */
 export type EventFlags = {
-    TIMEOUT_HAPPENED: boolean;
-    CURSOR_MOVED_FAR_HAPPENED: boolean;
-    LONG_STROKE_DRAWN_HAPPENED: boolean;
+    cursorMovedFarHappened: boolean;
+    longStrokeDrawnHappened: boolean;
 };
 
 // ============================================================================
@@ -92,7 +85,7 @@ export enum Action {
 
     // Selected stroke actions
     SELECT_STROKE = 'SELECT_STROKE',                     // Select last drawn stroke (after drawing)
-    SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to cursor (single tap)
+    SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to cursor (double-tap)
     DESELECT_STROKE = 'DESELECT_STROKE',
 
     // Selection rectangle actions
@@ -111,15 +104,9 @@ export enum Action {
     PROCESS_CLEAR = 'PROCESS_CLEAR',
     ABORT_TOO_MANY_FINGERS = 'ABORT_TOO_MANY_FINGERS',
 
-    // Flag actions
-    SET_TIMEOUT_FLAG = 'SET_TIMEOUT_FLAG',
-    SET_CURSOR_MOVED_FAR_FLAG = 'SET_CURSOR_MOVED_FAR_FLAG',
-    SET_LONG_STROKE_DRAWN_FLAG = 'SET_LONG_STROKE_DRAWN_FLAG',
-
     // Cursor snap-back actions
-    SAVE_DRAG_START_CURSOR = 'SAVE_DRAG_START_CURSOR',           // Save cursor position when starting drag (for snap-back after transform)
-    RESTORE_DRAG_START_CURSOR = 'RESTORE_DRAG_START_CURSOR',     // Restore cursor after canvas transform (2-finger zoom)
-    SNAP_CURSOR_TO_SELECTED_POS = 'SNAP_CURSOR_TO_SELECTED_POS', // Snap cursor back to selected stroke position
+    SAVE_DRAG_START_CURSOR = 'SAVE_DRAG_START_CURSOR',           // Save cursor position when starting drag
+    RESTORE_DRAG_START_CURSOR = 'RESTORE_DRAG_START_CURSOR',     // Restore cursor after canvas transform
 
     // No action
     DO_NOTHING = 'DO_NOTHING'
@@ -131,9 +118,16 @@ export enum Action {
 
 export type TransitionResult = {
     newState: State;
-    newModifier: StateModifier;
     actions: Action[];
 };
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Timing constants (in milliseconds)
+const DOUBLE_TAP_TIMEOUT = 300;    // Max time between taps for double-tap/tap-and-a-half
+const SINGLE_TAP_TIMEOUT = 200;    // Max duration for a single tap to be "quick"
 
 // ============================================================================
 // STATE MACHINE
@@ -141,121 +135,265 @@ export type TransitionResult = {
 
 export class StateMachine {
     private currentState: State;
-    private modifier: StateModifier;
     private flags: EventFlags;
+    private timestamps: EventTimestamps;
+
+    // The selected stroke index - managed externally but checked via isStrokeSelected()
+    // This replaces the old StateModifier pattern
+    private selectedStrokeIdxRef: { current: number | null } = { current: null };
 
     constructor() {
         this.currentState = State.Idle;
-        this.modifier = { isStrokeSelected: false };
         this.flags = {
-            TIMEOUT_HAPPENED: false,
-            CURSOR_MOVED_FAR_HAPPENED: false,
-            LONG_STROKE_DRAWN_HAPPENED: false
+            cursorMovedFarHappened: false,
+            longStrokeDrawnHappened: false
+        };
+        this.timestamps = {
+            singleTapHappenedTimestamp: 0,
+            doubleTapHappenedTimestamp: 0,
+            tapAndAHalfHappenedTimestamp: 0,
+            F1_DOWN_TIMESTAMP: 0,
+            F2_DOWN_TIMESTAMP: 0,
+            F3_DOWN_TIMESTAMP: 0
         };
     }
 
-    // Getters
+    // ========================================================================
+    // GETTERS
+    // ========================================================================
+
     public getState(): State {
         return this.currentState;
-    }
-
-    public getModifier(): StateModifier {
-        return { ...this.modifier };
     }
 
     public getFlags(): EventFlags {
         return { ...this.flags };
     }
 
+    public getTimestamps(): EventTimestamps {
+        return { ...this.timestamps };
+    }
+
+    /**
+     * Set the reference to the selected stroke index (from app state)
+     * This allows isStrokeSelected() to check the actual app state
+     */
+    public setSelectedStrokeIdxRef(ref: { current: number | null }): void {
+        this.selectedStrokeIdxRef = ref;
+    }
+
+    // ========================================================================
+    // CALCULATED FUNCTIONS (as per STATE_MACHINE.md)
+    // ========================================================================
+
+    /**
+     * Returns true if a stroke is selected (selectedStrokeIdx != null)
+     */
     public isStrokeSelected(): boolean {
-        return this.modifier.isStrokeSelected;
+        return this.selectedStrokeIdxRef.current !== null;
     }
 
-    // Manually set stroke selection state (for double-tap manual selection)
-    public setStrokeSelected(selected: boolean): void {
-        this.modifier.isStrokeSelected = selected;
+    /**
+     * Returns true if a single tap happened recently (within doubleTapTimeout)
+     */
+    public singleTapHappenedRecently(now: number): boolean {
+        return this.timestamps.singleTapHappenedTimestamp !== 0 &&
+               (now - this.timestamps.singleTapHappenedTimestamp) < DOUBLE_TAP_TIMEOUT;
     }
 
-    // Manually enter selection rectangle mode (for tap-and-a-half gesture)
-    public enterSelectionRectangle(): void {
-        this.currentState = State.SelectionRectangle;
-        this.modifier.isStrokeSelected = false;
+    /**
+     * Returns true if singleTapHappenedTimestamp was set in this same pass (== now)
+     */
+    public singleTapJustHappened(now: number): boolean {
+        return this.timestamps.singleTapHappenedTimestamp === now;
     }
 
-    // Process an event and return the transition result
-    public processEvent(event: Event): TransitionResult {
-        const result = this.transition(this.currentState, this.modifier, event, this.flags);
+    /**
+     * Returns true if doubleTapHappenedTimestamp was set in this same pass (== now)
+     */
+    public doubleTapJustHappened(now: number): boolean {
+        return this.timestamps.doubleTapHappenedTimestamp === now;
+    }
 
-        // Apply the transition
+    /**
+     * Returns true if tapAndAHalfHappenedTimestamp is set (non-zero)
+     */
+    public tapAndAHalfHappened(): boolean {
+        return this.timestamps.tapAndAHalfHappenedTimestamp !== 0;
+    }
+
+    /**
+     * Returns true if F1_DOWN was the most recent finger-down event
+     */
+    public firstFingerWasTheLastFingerToGoDown(): boolean {
+        const { F1_DOWN_TIMESTAMP, F2_DOWN_TIMESTAMP, F3_DOWN_TIMESTAMP } = this.timestamps;
+        return F1_DOWN_TIMESTAMP > 0 &&
+               F1_DOWN_TIMESTAMP >= F2_DOWN_TIMESTAMP &&
+               F1_DOWN_TIMESTAMP >= F3_DOWN_TIMESTAMP;
+    }
+
+    /**
+     * Returns true if the first finger went down recently (within singleTapTimeout)
+     */
+    public firstFingerWentDownRecently(now: number): boolean {
+        return this.timestamps.F1_DOWN_TIMESTAMP !== 0 &&
+               (now - this.timestamps.F1_DOWN_TIMESTAMP) < SINGLE_TAP_TIMEOUT;
+    }
+
+    // ========================================================================
+    // MAIN EVENT PROCESSING
+    // ========================================================================
+
+    /**
+     * Process an event and return the transition result.
+     * The `now` parameter should be Date.now() for consistent timestamp handling.
+     */
+    public processEvent(event: Event, now: number = Date.now()): TransitionResult {
+        // ====================================================================
+        // BEFORE ALL - Flag calculations and timestamp assignments
+        // ====================================================================
+        this.processBeforeAll(event, now);
+
+        // ====================================================================
+        // STATE-SPECIFIC TRANSITIONS
+        // ====================================================================
+        const result = this.transition(this.currentState, event, now);
+
+        // Apply the state transition
         this.currentState = result.newState;
-        this.modifier = result.newModifier;
 
-        // Update flags based on actions
-        if (result.actions.includes(Action.SET_TIMEOUT_FLAG)) {
-            this.flags.TIMEOUT_HAPPENED = true;
-        }
-        if (result.actions.includes(Action.SET_CURSOR_MOVED_FAR_FLAG)) {
-            this.flags.CURSOR_MOVED_FAR_HAPPENED = true;
-        }
-        if (result.actions.includes(Action.SET_LONG_STROKE_DRAWN_FLAG)) {
-            this.flags.LONG_STROKE_DRAWN_HAPPENED = true;
-        }
+        // ====================================================================
+        // AFTER ALL - Resets and zero assignments
+        // ====================================================================
+        this.processAfterAll(event);
 
-        // Clear flags on every finger down event
-        if (event === Event.F1_DOWN || event === Event.F2_DOWN || event === Event.F3_DOWN) {
-            // Reset flags when any finger touches down
-            this.flags.TIMEOUT_HAPPENED = false;
-            this.flags.CURSOR_MOVED_FAR_HAPPENED = false;
-            this.flags.LONG_STROKE_DRAWN_HAPPENED = false;
-        }
+        // ====================================================================
+        // POSTPROCESSING - Record event timestamps
+        // ====================================================================
+        this.recordEventTimestamp(event, now);
 
         return result;
     }
 
-    // Reset the state machine
-    public reset(): void {
-        this.currentState = State.Idle;
-        this.modifier = { isStrokeSelected: false };
-        this.flags = {
-            TIMEOUT_HAPPENED: false,
-            CURSOR_MOVED_FAR_HAPPENED: false,
-            LONG_STROKE_DRAWN_HAPPENED: false
-        };
+    /**
+     * BEFORE ALL processing - happens before state-specific transitions
+     * Rule: Calculations/checks and timestamp assignments (setting to `now`) go here.
+     */
+    private processBeforeAll(event: Event, now: number): void {
+        switch (event) {
+            case Event.F1_DOWN:
+                // If singleTapHappenedRecently() -> set tapAndAHalfHappenedTimestamp = now
+                if (this.singleTapHappenedRecently(now)) {
+                    this.timestamps.tapAndAHalfHappenedTimestamp = now;
+                }
+                break;
+
+            case Event.F1_UP:
+                // If quick single-finger tap: set singleTap or doubleTap timestamp
+                const isQuickTap = !this.flags.cursorMovedFarHappened &&
+                                   this.firstFingerWasTheLastFingerToGoDown() &&
+                                   this.firstFingerWentDownRecently(now);
+                if (isQuickTap) {
+                    if (this.singleTapHappenedRecently(now)) {
+                        // Second quick tap -> double tap
+                        this.timestamps.doubleTapHappenedTimestamp = now;
+                    } else {
+                        // First quick tap -> single tap
+                        this.timestamps.singleTapHappenedTimestamp = now;
+                    }
+                }
+                break;
+
+            case Event.CURSOR_MOVED_FAR:
+                // Set cursorMovedFarHappened = true
+                this.flags.cursorMovedFarHappened = true;
+                break;
+
+            case Event.DELETE:
+                // Go to Idle, do [CANCEL_SELECTION_RECTANGLE, PROCESS_DELETE]
+                // (handled in transition, but state change happens here for "any state")
+                this.currentState = State.Idle;
+                break;
+
+            case Event.CLEAR:
+                // Go to Idle, do [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DESELECT_STROKE]
+                // (handled in transition, but state change happens here for "any state")
+                this.currentState = State.Idle;
+                break;
+        }
+    }
+
+    /**
+     * AFTER ALL processing - happens after state-specific transitions
+     * Rule: Resets and zero assignments (setting to `0`) go here.
+     */
+    private processAfterAll(event: Event): void {
+        switch (event) {
+            case Event.FINGER_DOWN:
+                // Reset timestamps and flags
+                this.timestamps.singleTapHappenedTimestamp = 0;
+                this.timestamps.doubleTapHappenedTimestamp = 0;
+                this.flags.cursorMovedFarHappened = false;
+                this.flags.longStrokeDrawnHappened = false;
+                break;
+
+            case Event.FINGER_UP:
+                // Reset tapAndAHalfHappenedTimestamp
+                this.timestamps.tapAndAHalfHappenedTimestamp = 0;
+                break;
+        }
+    }
+
+    /**
+     * Record the timestamp for the current event (postprocessing)
+     */
+    private recordEventTimestamp(event: Event, now: number): void {
+        switch (event) {
+            case Event.F1_DOWN:
+                this.timestamps.F1_DOWN_TIMESTAMP = now;
+                break;
+            case Event.F2_DOWN:
+                this.timestamps.F2_DOWN_TIMESTAMP = now;
+                break;
+            case Event.F3_DOWN:
+                this.timestamps.F3_DOWN_TIMESTAMP = now;
+                break;
+            // Other events can be added if needed
+        }
     }
 
     // ========================================================================
-    // TRANSITION LOGIC
+    // STATE TRANSITION LOGIC
     // ========================================================================
 
-    private transition(
-        state: State,
-        modifier: StateModifier,
-        event: Event,
-        flags: EventFlags
-    ): TransitionResult {
+    private transition(state: State, event: Event, now: number): TransitionResult {
+        // Handle global events first (DELETE, CLEAR)
+        if (event === Event.DELETE) {
+            return {
+                newState: State.Idle,
+                actions: [Action.CANCEL_SELECTION_RECTANGLE, Action.PROCESS_DELETE]
+            };
+        }
+        if (event === Event.CLEAR) {
+            return {
+                newState: State.Idle,
+                actions: [Action.CANCEL_SELECTION_RECTANGLE, Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
+            };
+        }
+
         switch (state) {
             case State.Idle:
-                return this.transitionFromIdle(modifier, event, flags);
-
+                return this.transitionFromIdle(event, now);
             case State.MovingCursor:
-                return this.transitionFromMovingCursor(modifier, event, flags);
-
+                return this.transitionFromMovingCursor(event, now);
             case State.Drawing:
-                return this.transitionFromDrawing(modifier, event, flags);
-
+                return this.transitionFromDrawing(event);
             case State.Transform:
-                return this.transitionFromTransform(modifier, event);
-
+                return this.transitionFromTransform(event);
             case State.SelectionRectangle:
-                return this.transitionFromSelectionRectangle(modifier, event);
-
+                return this.transitionFromSelectionRectangle(event);
             default:
-                // Should never happen
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },
-                    actions: [Action.DO_NOTHING]
-                };
+                return { newState: State.Idle, actions: [] };
         }
     }
 
@@ -263,68 +401,32 @@ export class StateMachine {
     // TRANSITIONS FROM IDLE STATE
     // ========================================================================
 
-    private transitionFromIdle(modifier: StateModifier, event: Event, flags: EventFlags): TransitionResult {
-        const { isStrokeSelected } = modifier;
-
+    private transitionFromIdle(event: Event, now: number): TransitionResult {
         switch (event) {
             case Event.F1_DOWN:
-                // Enter MovingCursor (tap-and-a-half will be handled by app.ts)
-                // Save cursor position when starting drag with stroke selected (for snap-back after transform)
-                return {
-                    newState: State.MovingCursor,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: isStrokeSelected ? [Action.SAVE_DRAG_START_CURSOR] : []
-                };
+                // If tapAndAHalfHappened() -> Go to SelectionRectangle
+                // Else -> Go to MovingCursor, do [SAVE_DRAG_START_CURSOR]
+                if (this.tapAndAHalfHappened()) {
+                    return {
+                        newState: State.SelectionRectangle,
+                        actions: [Action.START_SELECTION_RECTANGLE, Action.DESELECT_STROKE]
+                    };
+                } else {
+                    return {
+                        newState: State.MovingCursor,
+                        actions: [Action.SAVE_DRAG_START_CURSOR]
+                    };
+                }
 
             case Event.F2_DOWN:
             case Event.F3_DOWN:
             case Event.FINGER_UP:
+            case Event.F1_UP:
             case Event.PINCH_DETECTED:
-                // Keep modifier unchanged
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.DO_NOTHING]
-                };
-
-            case Event.CURSOR_MOVED_FAR:
-                // Cursor moved far - set flag for later checks
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.SET_CURSOR_MOVED_FAR_FLAG]
-                };
-
-            case Event.TIMEOUT:
-                // Keep modifier unchanged
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.SET_TIMEOUT_FLAG, Action.DO_NOTHING]
-                };
-
-            case Event.DELETE:
-                // Delete keeps selection mode unchanged (processDelete handles selection logic)
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected },  // keep (processDelete will manage)
-                    actions: [Action.PROCESS_DELETE]
-                };
-
-            case Event.CLEAR:
-                // Deselect stroke (→ Normal)
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
-                };
+                return { newState: State.Idle, actions: [] };
 
             default:
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected },
-                    actions: [Action.DO_NOTHING]
-                };
+                return { newState: State.Idle, actions: [] };
         }
     }
 
@@ -332,110 +434,62 @@ export class StateMachine {
     // TRANSITIONS FROM MOVING CURSOR STATE
     // ========================================================================
 
-    private transitionFromMovingCursor(modifier: StateModifier, event: Event, flags: EventFlags): TransitionResult {
-        const { isStrokeSelected } = modifier;
-
+    private transitionFromMovingCursor(event: Event, now: number): TransitionResult {
         switch (event) {
-            case Event.F1_DOWN:
-                // Keep in MovingCursor (tap-and-a-half will be handled by app.ts)
-                return {
-                    newState: State.MovingCursor,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.DO_NOTHING]
-                };
-
             case Event.F2_DOWN:
-                // Keep modifier unchanged
+                // Go to Drawing, do [CREATE_STROKE]
                 return {
                     newState: State.Drawing,
-                    newModifier: { isStrokeSelected },  // keep
                     actions: [Action.CREATE_STROKE]
                 };
 
             case Event.F3_DOWN:
-                // Too many fingers - abort and deselect stroke (→ Normal)
+                // Go to Idle, do [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE]
                 return {
                     newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
                     actions: [Action.ABORT_TOO_MANY_FINGERS, Action.DESELECT_STROKE]
                 };
 
-            case Event.FINGER_UP:
-                // Single tap detection: deselect stroke if no timeout and no movement
-                const isSingleTap = !flags.TIMEOUT_HAPPENED && !flags.CURSOR_MOVED_FAR_HAPPENED;
-
-                if (isSingleTap) {
-                    // Quick tap: clear highlighting and deselect stroke
-                    if (isStrokeSelected) {
-                        return {
-                            newState: State.Idle,
-                            newModifier: { isStrokeSelected: false },  // → Normal
-                            actions: [Action.CLEAR_HIGHLIGHTING, Action.DESELECT_STROKE]
-                        };
-                    } else {
-                        return {
-                            newState: State.Idle,
-                            newModifier: { isStrokeSelected },  // keep
-                            actions: [Action.CLEAR_HIGHLIGHTING]
-                        };
-                    }
-                } else {
-                    // Keep modifier unchanged (normal finger up or not a quick tap)
-                    // Snap cursor back to selected stroke position if cursor didn't move far
-                    const shouldSnapBack = isStrokeSelected && !flags.CURSOR_MOVED_FAR_HAPPENED;
+            case Event.F1_UP:
+                // If doubleTapJustHappened() -> do [SELECT_CLOSEST_STROKE]
+                // Else if singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]
+                // Finally: Go to Idle
+                if (this.doubleTapJustHappened(now)) {
                     return {
                         newState: State.Idle,
-                        newModifier: { isStrokeSelected },  // keep
-                        actions: shouldSnapBack ? [Action.SNAP_CURSOR_TO_SELECTED_POS] : []
+                        actions: [Action.SELECT_CLOSEST_STROKE]
+                    };
+                } else if (this.singleTapJustHappened(now)) {
+                    const actions: Action[] = [Action.CLEAR_HIGHLIGHTING];
+                    if (this.isStrokeSelected()) {
+                        actions.push(Action.DESELECT_STROKE);
+                    }
+                    return {
+                        newState: State.Idle,
+                        actions
+                    };
+                } else {
+                    return {
+                        newState: State.Idle,
+                        actions: []
                     };
                 }
 
-            case Event.TIMEOUT:
-                // Keep modifier unchanged
-                return {
-                    newState: State.MovingCursor,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.SET_TIMEOUT_FLAG]
-                };
-
             case Event.CURSOR_MOVED_FAR:
-                // Cursor moved far from anchor - deselect stroke
-                return {
-                    newState: State.MovingCursor,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.DESELECT_STROKE]
-                };
+                // If isStrokeSelected() -> do [DESELECT_STROKE]
+                if (this.isStrokeSelected()) {
+                    return {
+                        newState: State.MovingCursor,
+                        actions: [Action.DESELECT_STROKE]
+                    };
+                }
+                return { newState: State.MovingCursor, actions: [] };
 
             case Event.PINCH_DETECTED:
-                // Pinch in MovingCursor state - ignore (no stroke to abandon)
-                return {
-                    newState: State.MovingCursor,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.DO_NOTHING]
-                };
-
-            case Event.DELETE:
-                // Delete keeps selection mode unchanged (processDelete handles selection logic)
-                return {
-                    newState: State.MovingCursor,
-                    newModifier: { isStrokeSelected },  // keep (processDelete will manage)
-                    actions: [Action.PROCESS_DELETE]
-                };
-
-            case Event.CLEAR:
-                // Deselect stroke (→ Normal)
-                return {
-                    newState: State.MovingCursor,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
-                };
+                return { newState: State.MovingCursor, actions: [] };
 
             default:
-                return {
-                    newState: State.MovingCursor,
-                    newModifier: { isStrokeSelected },
-                    actions: [Action.DO_NOTHING]
-                };
+                return { newState: State.MovingCursor, actions: [] };
         }
     }
 
@@ -443,105 +497,53 @@ export class StateMachine {
     // TRANSITIONS FROM DRAWING STATE
     // ========================================================================
 
-    private transitionFromDrawing(
-        modifier: StateModifier,
-        event: Event,
-        flags: EventFlags
-    ): TransitionResult {
-        const { isStrokeSelected } = modifier;
-
+    private transitionFromDrawing(event: Event): TransitionResult {
         switch (event) {
             case Event.F1_DOWN:
             case Event.F2_DOWN:
-                // Keep modifier unchanged
-                return {
-                    newState: State.Drawing,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.DO_NOTHING]
-                };
+                return { newState: State.Drawing, actions: [] };
 
             case Event.PINCH_DETECTED:
-                // Two-finger pinch detected - abandon stroke and switch to transform
+                // Go to Transform, do [ABANDON_STROKE, INIT_TRANSFORM]
                 return {
                     newState: State.Transform,
-                    newModifier: { isStrokeSelected },  // keep
                     actions: [Action.ABANDON_STROKE, Action.INIT_TRANSFORM]
                 };
 
             case Event.F3_DOWN:
-                // Keep modifier unchanged, but action depends on flag
-                // Save stroke only if LONG_STROKE_DRAWN_HAPPENED (stroke is long enough), else abandon
-                if (flags.LONG_STROKE_DRAWN_HAPPENED) {
+                // Go to Transform. If longStrokeDrawnHappened -> do [SAVE_STROKE, INIT_TRANSFORM]
+                // else do [ABANDON_STROKE, INIT_TRANSFORM]
+                if (this.flags.longStrokeDrawnHappened) {
                     return {
                         newState: State.Transform,
-                        newModifier: { isStrokeSelected },  // keep
                         actions: [Action.SAVE_STROKE, Action.INIT_TRANSFORM]
                     };
                 } else {
                     return {
                         newState: State.Transform,
-                        newModifier: { isStrokeSelected },  // keep
                         actions: [Action.ABANDON_STROKE, Action.INIT_TRANSFORM]
                     };
                 }
 
             case Event.FINGER_UP:
-                // Transition to MovingCursor with remaining finger
-                // Select the stroke that was just drawn (Normal → Selected, Selected → keep Selected)
+            case Event.F2_UP:
+                // Go to MovingCursor, do [SAVE_STROKE]. If not isStrokeSelected() -> do [SELECT_STROKE]
+                const actions: Action[] = [Action.SAVE_STROKE];
+                if (!this.isStrokeSelected()) {
+                    actions.push(Action.SELECT_STROKE);
+                }
                 return {
                     newState: State.MovingCursor,
-                    newModifier: { isStrokeSelected: true },  // → Stroke Selected
-                    actions: isStrokeSelected ?
-                        [Action.SAVE_STROKE] :  // already selected, just save
-                        [Action.SAVE_STROKE, Action.SELECT_STROKE]  // Normal → Select stroke
-                };
-
-            case Event.TIMEOUT:
-                // Keep modifier unchanged
-                return {
-                    newState: State.Drawing,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.SET_TIMEOUT_FLAG]
-                };
-
-            case Event.CURSOR_MOVED_FAR:
-                // Cursor moved far - set flag (not used in Drawing, but keep consistent)
-                return {
-                    newState: State.Drawing,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.SET_CURSOR_MOVED_FAR_FLAG]
+                    actions
                 };
 
             case Event.LONG_STROKE_DRAWN:
-                // Stroke path length exceeded threshold - set flag for stroke protection
-                return {
-                    newState: State.Drawing,
-                    newModifier: { isStrokeSelected },  // keep
-                    actions: [Action.SET_LONG_STROKE_DRAWN_FLAG]
-                };
-
-            case Event.DELETE:
-                // Delete keeps selection mode unchanged (processDelete handles selection logic)
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected },  // keep (processDelete will manage)
-                    actions: [Action.PROCESS_DELETE]
-                };
-
-            case Event.CLEAR:
-                // Deselect stroke (→ Normal)
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
-                };
+                // Set longStrokeDrawnHappened = true (done here since it's state-specific)
+                this.flags.longStrokeDrawnHappened = true;
+                return { newState: State.Drawing, actions: [] };
 
             default:
-                return {
-                    newState: State.Drawing,
-                    newModifier: { isStrokeSelected },
-                    actions: [Action.DO_NOTHING]
-                };
+                return { newState: State.Drawing, actions: [] };
         }
     }
 
@@ -549,72 +551,25 @@ export class StateMachine {
     // TRANSITIONS FROM TRANSFORM STATE
     // ========================================================================
 
-    private transitionFromTransform(modifier: StateModifier, event: Event): TransitionResult {
+    private transitionFromTransform(event: Event): TransitionResult {
         switch (event) {
             case Event.F1_DOWN:
             case Event.F2_DOWN:
             case Event.F3_DOWN:
-                // Keep modifier unchanged
-                return {
-                    newState: State.Transform,
-                    newModifier: modifier,  // keep
-                    actions: [Action.DO_NOTHING]
-                };
+            case Event.PINCH_DETECTED:
+                return { newState: State.Transform, actions: [] };
 
             case Event.FINGER_UP:
-                // Restore cursor position after transform (snap-back for canvas zoom)
+            case Event.F2_UP:
+            case Event.F3_UP:
+                // Go to Idle, do [RESTORE_DRAG_START_CURSOR]
                 return {
                     newState: State.Idle,
-                    newModifier: modifier,  // keep
                     actions: [Action.RESTORE_DRAG_START_CURSOR]
                 };
 
-            case Event.TIMEOUT:
-                // Keep modifier unchanged
-                return {
-                    newState: State.Transform,
-                    newModifier: modifier,  // keep
-                    actions: [Action.SET_TIMEOUT_FLAG]
-                };
-
-            case Event.CURSOR_MOVED_FAR:
-                // Cursor moved far - set flag
-                return {
-                    newState: State.Transform,
-                    newModifier: modifier,  // keep
-                    actions: [Action.SET_CURSOR_MOVED_FAR_FLAG]
-                };
-
-            case Event.PINCH_DETECTED:
-                // Already in transform - ignore (already handling pinch)
-                return {
-                    newState: State.Transform,
-                    newModifier: modifier,  // keep
-                    actions: [Action.DO_NOTHING]
-                };
-
-            case Event.DELETE:
-                // Delete keeps selection mode unchanged (processDelete handles selection logic)
-                return {
-                    newState: State.Idle,
-                    newModifier: modifier,  // keep (processDelete will manage)
-                    actions: [Action.PROCESS_DELETE]
-                };
-
-            case Event.CLEAR:
-                // Deselect stroke (→ Normal)
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
-                };
-
             default:
-                return {
-                    newState: State.Transform,
-                    newModifier: modifier,
-                    actions: [Action.DO_NOTHING]
-                };
+                return { newState: State.Transform, actions: [] };
         }
     }
 
@@ -622,117 +577,67 @@ export class StateMachine {
     // TRANSITIONS FROM SELECTION RECTANGLE STATE
     // ========================================================================
 
-    private transitionFromSelectionRectangle(modifier: StateModifier, event: Event): TransitionResult {
+    private transitionFromSelectionRectangle(event: Event): TransitionResult {
         switch (event) {
             case Event.F1_DOWN:
-                // Keep in selection rectangle mode
-                return {
-                    newState: State.SelectionRectangle,
-                    newModifier: modifier,  // keep
-                    actions: [Action.DO_NOTHING]
-                };
+                return { newState: State.SelectionRectangle, actions: [] };
 
             case Event.F2_DOWN:
             case Event.F3_DOWN:
-                // Too many fingers - cancel selection rectangle
+                // Go to Idle, do [CANCEL_SELECTION_RECTANGLE]
                 return {
                     newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.CANCEL_SELECTION_RECTANGLE, Action.DESELECT_STROKE]
+                    actions: [Action.CANCEL_SELECTION_RECTANGLE]
                 };
 
             case Event.FINGER_UP:
-                // Apply selection and return to idle
+            case Event.F1_UP:
+                // Go to Idle, do [APPLY_SELECTION_RECTANGLE]
                 return {
                     newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions: [Action.APPLY_SELECTION_RECTANGLE, Action.DESELECT_STROKE]
-                };
-
-            case Event.TIMEOUT:
-                // Keep in selection rectangle mode, update selection
-                return {
-                    newState: State.SelectionRectangle,
-                    newModifier: modifier,  // keep
-                    actions: [Action.SET_TIMEOUT_FLAG, Action.UPDATE_SELECTION_RECTANGLE]
-                };
-
-            case Event.CURSOR_MOVED_FAR:
-                // Cursor moved far - set flag and update selection
-                return {
-                    newState: State.SelectionRectangle,
-                    newModifier: modifier,  // keep
-                    actions: [Action.SET_CURSOR_MOVED_FAR_FLAG, Action.UPDATE_SELECTION_RECTANGLE]
+                    actions: [Action.APPLY_SELECTION_RECTANGLE]
                 };
 
             case Event.PINCH_DETECTED:
-                // Pinch in selection rectangle - ignore
-                return {
-                    newState: State.SelectionRectangle,
-                    newModifier: modifier,  // keep
-                    actions: [Action.DO_NOTHING]
-                };
-
-            case Event.DELETE:
-            case Event.CLEAR:
-                // Cancel selection and process delete/clear
-                const actions = event === Event.DELETE ?
-                    [Action.CANCEL_SELECTION_RECTANGLE, Action.PROCESS_DELETE] :
-                    [Action.CANCEL_SELECTION_RECTANGLE, Action.PROCESS_CLEAR, Action.DESELECT_STROKE];
-                return {
-                    newState: State.Idle,
-                    newModifier: { isStrokeSelected: false },  // → Normal
-                    actions
-                };
+                return { newState: State.SelectionRectangle, actions: [] };
 
             default:
-                return {
-                    newState: State.SelectionRectangle,
-                    newModifier: modifier,
-                    actions: [Action.DO_NOTHING]
-                };
+                return { newState: State.SelectionRectangle, actions: [] };
         }
     }
 
     // ========================================================================
-    // TRANSITION TABLE UTILITIES (for debugging/documentation)
+    // RESET
     // ========================================================================
 
-    /**
-     * Get all possible transitions from a given state
-     */
-    public getTransitionsFrom(state: State): Map<Event, TransitionResult> {
-        const transitions = new Map<Event, TransitionResult>();
-
-        for (const event of Object.values(Event)) {
-            const normalMode = this.transition(state, { isStrokeSelected: false }, event, {
-                TIMEOUT_HAPPENED: false,
-                CURSOR_MOVED_FAR_HAPPENED: false,
-                LONG_STROKE_DRAWN_HAPPENED: false
-            });
-            transitions.set(event, normalMode);
-        }
-
-        return transitions;
+    public reset(): void {
+        this.currentState = State.Idle;
+        this.flags = {
+            cursorMovedFarHappened: false,
+            longStrokeDrawnHappened: false
+        };
+        this.timestamps = {
+            singleTapHappenedTimestamp: 0,
+            doubleTapHappenedTimestamp: 0,
+            tapAndAHalfHappenedTimestamp: 0,
+            F1_DOWN_TIMESTAMP: 0,
+            F2_DOWN_TIMESTAMP: 0,
+            F3_DOWN_TIMESTAMP: 0
+        };
     }
 
-    /**
-     * Get all states
-     */
+    // ========================================================================
+    // UTILITIES (for debugging/documentation)
+    // ========================================================================
+
     public static getAllStates(): State[] {
         return Object.values(State);
     }
 
-    /**
-     * Get all events
-     */
     public static getAllEvents(): Event[] {
         return Object.values(Event);
     }
 
-    /**
-     * Get all actions
-     */
     public static getAllActions(): Action[] {
         return Object.values(Action);
     }

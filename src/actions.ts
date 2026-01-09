@@ -93,7 +93,6 @@ export function handleActions(actions: Action[]): void {
                 // Triggered after: Finishing a drawing (lifting second finger)
                 // Behavior: Selects the last stroke in history (the one just completed)
                 //           Cursor stays at its current position
-                //           Marks as "fresh stroke" (Undo button will delete it)
                 // Note: selectedStrokeCursorPos is already set during drawing via addPointToStroke()
                 // Set selected stroke to the last stroke in history
                 if (state.strokeHistory.length > 0) {
@@ -238,13 +237,6 @@ export function handleActions(actions: Action[]): void {
                     state.cursorPos = { ...state.dragStartCursorPos };
                 }
                 state.dragStartCursorPos = null;
-                break;
-
-            case Action.SNAP_CURSOR_TO_SELECTED_POS:
-                // Snap cursor back to selected stroke position (after drawing without moving far)
-                if (state.selectedStrokeCursorPos) {
-                    state.cursorPos = { ...state.selectedStrokeCursorPos };
-                }
                 break;
 
             case Action.DO_NOTHING:

@@ -78,11 +78,6 @@ export const STROKE_LEN_THRESHOLD_MM = 4;
 // Distance threshold for deselecting a stroke (cursor distance from anchor, in millimeters)
 export const DESELECT_DISTANCE_THRESHOLD_MM = 3;
 
-// Double-tap detection constants
-export const DOUBLE_TAP_DELAY = 300; // ms - max time between first lift and second down
-export const DOUBLE_TAP_MAX_DURATION = 200; // ms - max time the second tap can be held
-export const DOUBLE_TAP_DISTANCE = 50; // pixels - max distance between taps
-
 // Toolbar height - cursor can extend into this area
 export const TOOLBAR_HEIGHT = 60;
 
@@ -174,14 +169,6 @@ export const state = {
     lastDelta: null as { x: number; y: number; pointerId: number } | null,
     batchedDelta: null as { x: number; y: number } | null,
 
-    // Double-tap detection for stroke selection
-    firstTapDownTime: 0,
-    firstTapDownPos: null as Point | null,
-    firstTapUpTime: 0,
-    secondTapDownTime: 0,
-    secondTapDownPos: null as Point | null,
-    isTrackingDoubleTap: false, // True when we're waiting to see if second tap completes
-
     // Track pointers that started on UI elements (for drag detection)
     pointersOnUI: new Map<number, { startX: number; startY: number }>(),
 
@@ -196,6 +183,12 @@ export const state = {
 export function initState(canvas: HTMLCanvasElement) {
     state.canvas = canvas;
     state.ctx = canvas.getContext('2d')!;
+
+    // Wire up state machine's selectedStrokeIdx reference
+    // This allows isStrokeSelected() to check the actual state
+    state.stateMachine.setSelectedStrokeIdxRef({
+        get current() { return state.selectedStrokeIdx; }
+    });
 
     // Initialize DOM references
     state.dom.combinedPickerEl = document.getElementById('combinedPicker') as HTMLElement;
@@ -235,12 +228,6 @@ export function resetState() {
     state.lastSecondaryPos = null;
     state.lastDelta = null;
     state.batchedDelta = null;
-    state.firstTapDownTime = 0;
-    state.firstTapDownPos = null;
-    state.firstTapUpTime = 0;
-    state.secondTapDownTime = 0;
-    state.secondTapDownPos = null;
-    state.isTrackingDoubleTap = false;
     state.pointersOnUI.clear();
     state.debugMessages = [];
 

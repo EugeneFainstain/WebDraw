@@ -304,7 +304,6 @@ initActions({
 // Initialize and setup pointer handlers
 initPointerHandlers({
     getDistance,
-    isCursorInMenuRegion,
     updateCursorPosition,
     addPointToStroke,
     applyThreeFingerTransform,
@@ -313,11 +312,7 @@ initPointerHandlers({
     handleActions,
     clampCursorToView,
     snapToGrid,
-    findClosestStrokeAndPoint,
     updateUI,
-    updatePickersForSelectedStroke,
-    isPickerOpen: () => combinedPicker.isOpen() || menuPicker.isOpen(),
-    closePicker: () => { combinedPicker.close(); menuPicker.close(); },
     canvasToScreen,
 });
 setupPointerEventListeners();
