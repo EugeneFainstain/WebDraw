@@ -69,16 +69,12 @@ export function restoreSnapshot(snapshot: AppState): void {
 
     appState.viewTransform = cloned.viewTransform;
     appState.transformStart = cloned.transformStart;
-    appState.lastPrimaryPos = cloned.lastPrimaryPos;
-    appState.lastSecondaryPos = cloned.lastSecondaryPos;
-    appState.lastDelta = cloned.lastDelta;
-    appState.batchedDelta = cloned.batchedDelta;
 
-    // Handle Map - clear and repopulate
-    appState.pointersOnUI.clear();
-    for (const [key, value] of cloned.pointersOnUI) {
-        appState.pointersOnUI.set(key, value);
-    }
+    // NOTE: We intentionally do NOT restore these transient pointer-tracking values:
+    // - lastPrimaryPos, lastSecondaryPos, lastDelta, batchedDelta
+    // - pointersOnUI
+    // These are input-tracking state that gets set when fingers touch the screen.
+    // Restoring them would cause cursor jumps on the next finger movement.
 
     appState.debugMessages = cloned.debugMessages;
 }
