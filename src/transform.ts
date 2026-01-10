@@ -175,9 +175,22 @@ export function initThreeFingerTransform(): void {
     const positions = state.eventHandler.getFingerPositions();
     const fingerCount = state.eventHandler.getFingerCount();
 
-    // 2-finger gesture: ONLY canvas zoom (never transforms selected stroke)
-    // 3-finger gesture: ONLY selected stroke zoom (does nothing if no stroke selected)
-    if (fingerCount === 2) {
+    // 1-finger gesture: canvas pan only
+    // 2-finger gesture: canvas zoom/pan/rotate (never transforms selected stroke)
+    // 3-finger gesture: selected stroke zoom (does nothing if no stroke selected)
+    if (fingerCount === 1) {
+        if (!positions.primary) return;
+
+        // One-finger transform - pan only
+        state.transformStart = {
+            pivot: { ...positions.primary },
+            initialScale: 1,
+            fingerAngles: [],
+            unwrappedRotation: 0,
+            initialTransform: { ...state.viewTransform }
+            // No strokeSnapshotsMap - 1-finger always pans canvas
+        };
+    } else if (fingerCount === 2) {
         if (!positions.primary || !positions.secondary) return;
 
         // Two-finger transform - ALWAYS transforms canvas, never selected stroke
@@ -314,8 +327,20 @@ export function applyThreeFingerTransform(): void {
     let currentScale: number;
     let averageDelta: number;
 
-    // Support both 2-finger and 3-finger gestures
-    if (fingerCount === 2 && positions.primary && positions.secondary) {
+    // Support 1-finger, 2-finger, and 3-finger gestures
+    if (fingerCount === 1 && positions.primary) {
+        // One-finger pan only
+        currentPivot = { ...positions.primary };
+
+        // Calculate pan delta from initial pivot to current position
+        const panDeltaX = currentPivot.x - state.transformStart.pivot.x;
+        const panDeltaY = currentPivot.y - state.transformStart.pivot.y;
+
+        // Apply pan to canvas
+        state.viewTransform.panX = state.transformStart.initialTransform.panX + panDeltaX;
+        state.viewTransform.panY = state.transformStart.initialTransform.panY + panDeltaY;
+        return;
+    } else if (fingerCount === 2 && positions.primary && positions.secondary) {
         // Two-finger transform
         currentPivot = {
             x: (positions.primary.x + positions.secondary.x) / 2,
