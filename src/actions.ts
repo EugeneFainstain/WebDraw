@@ -28,6 +28,8 @@ export interface ActionDependencies {
     getPickerSize: () => number;
     findClosestStrokeAndPoint: (searchPos?: { x: number; y: number }) => { strokeIdx: number; pointIdx: number; point: { x: number; y: number } } | null;
     updatePickersForSelectedStroke: () => void;
+    isAnyPickerOpen: () => boolean;
+    closePickers: () => void;
 }
 
 // ============================================================================
@@ -326,7 +328,19 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.CLEAR_HIGHLIGHTING:
-                // Check if cursor is in the menu region
+                // If a picker is open, handle it first and don't process further
+                if (deps.isAnyPickerOpen()) {
+                    if (isCursorInMenuRegion()) {
+                        // Cursor is over one of the the picker - forward the tap to it
+                        simulateTapAtCursor();
+                    } else {
+                        // Cursor is outside - close the pickers
+                        deps.closePickers();
+                    }
+                    break;
+                }
+
+                // No picker open - normal tap processing
                 if (isCursorInMenuRegion()) {
                     // Cursor is in menu region - try to tap a menu element
                     // Don't clear highlighting regardless (menu taps shouldn't affect canvas)

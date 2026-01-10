@@ -35,7 +35,6 @@ import {
     addPointToStroke,
     clampCursorToView,
     panToKeepCursorInView,
-    isCursorInMenuRegion,
     updateCursorDiv,
 } from './cursorMovement';
 import {
@@ -361,6 +360,8 @@ initActions({
     getPickerSize: () => combinedPicker.getSize(),
     findClosestStrokeAndPoint,
     updatePickersForSelectedStroke,
+    isAnyPickerOpen: () => combinedPicker.isOpen() || menuPicker.isOpen(),
+    closePickers: () => { combinedPicker.close(); menuPicker.close(); },
 });
 
 // Initialize and setup pointer handlers

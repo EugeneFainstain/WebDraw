@@ -200,7 +200,10 @@ export function createMenuPicker(
         document.body.appendChild(popup);
         positionPopup();
 
-        // Close on outside click
+        // Close on outside click (for non-canvas elements like other toolbar buttons).
+        // This only handles mouse clicks and touches on non-canvas areas.
+        // Canvas taps don't fire 'click' events because pointer handlers call preventDefault(),
+        // so canvas taps are handled via state machine -> CLEAR_HIGHLIGHTING -> closePickersIfOutside()
         setTimeout(() => {
             document.addEventListener('click', handleOutsideClick);
         }, 0);
