@@ -295,8 +295,10 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
 // STATE MACHINE EVENT CALLBACK
 // ============================================================================
 
-state.eventHandler.setEventCallback((event: Event) => {
-    const result = state.stateMachine.processEvent(event);
+state.eventHandler.setEventCallback((event: Event, pos?: Point) => {
+    // Pass the position for F1_DOWN/F1_UP events (used for tap-and-a-half spatial proximity check)
+    const posForStateMachine = pos ? { x: pos.x, y: pos.y } : null;
+    const result = state.stateMachine.processEvent(event, Date.now(), posForStateMachine);
 
     handleActions(result.actions);
 

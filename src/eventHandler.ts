@@ -38,8 +38,8 @@ export class EventHandler {
     private secondaryPos: Point | null = null;
     private tertiaryPos: Point | null = null;
 
-    // Event callback
-    private eventCallback: ((event: Event) => void) | null = null;
+    // Event callback - receives event and optional position for F1_DOWN/F1_UP
+    private eventCallback: ((event: Event, pos?: Point) => void) | null = null;
 
     // Finger promotion tracking - stores the position delta when a finger is promoted
     private lastPromotionDelta: Point | null = null;
@@ -51,16 +51,16 @@ export class EventHandler {
     /**
      * Set the callback for state machine events
      */
-    public setEventCallback(callback: (event: Event) => void): void {
+    public setEventCallback(callback: (event: Event, pos?: Point) => void): void {
         this.eventCallback = callback;
     }
 
     /**
      * Emit an event to the state machine
      */
-    private emitEvent(event: Event): void {
+    private emitEvent(event: Event, pos?: Point): void {
         if (this.eventCallback) {
-            this.eventCallback(event);
+            this.eventCallback(event, pos);
         }
     }
 
@@ -108,7 +108,7 @@ export class EventHandler {
             this.primaryPointerId = pointerId;
             this.primaryPos = { ...pos };
 
-            this.emitEvent(Event.F1_DOWN);
+            this.emitEvent(Event.F1_DOWN, pos);
             return;
         }
 
@@ -123,7 +123,7 @@ export class EventHandler {
                 this.gestureLockedAsDrawing = false;
             }
 
-            this.emitEvent(Event.F2_DOWN);
+            this.emitEvent(Event.F2_DOWN, pos);
             return;
         }
 
@@ -132,7 +132,7 @@ export class EventHandler {
             this.tertiaryPointerId = pointerId;
             this.tertiaryPos = { ...pos };
 
-            this.emitEvent(Event.F3_DOWN);
+            this.emitEvent(Event.F3_DOWN, pos);
             return;
         }
 
@@ -179,7 +179,13 @@ export class EventHandler {
         let fingerLifted = false;
         this.lastPromotionDelta = null;
 
+        // Save the position of the lifted finger (used for tap detection spatial proximity)
+        let liftedFingerPos: Point | null = null;
+
         if (pointerId === this.primaryPointerId) {
+            // Save position before promotion
+            liftedFingerPos = this.primaryPos ? { ...this.primaryPos } : null;
+
             // Calculate the position delta before promotion
             const oldPrimaryPos = this.primaryPos;
             const newPrimaryPos = this.secondaryPos;
@@ -204,6 +210,9 @@ export class EventHandler {
 
             fingerLifted = true;
         } else if (pointerId === this.secondaryPointerId) {
+            // Save position before promotion
+            liftedFingerPos = this.secondaryPos ? { ...this.secondaryPos } : null;
+
             // Calculate the position delta before promotion
             const oldSecondaryPos = this.secondaryPos;
             const newSecondaryPos = this.tertiaryPos;
@@ -225,6 +234,9 @@ export class EventHandler {
 
             fingerLifted = true;
         } else if (pointerId === this.tertiaryPointerId) {
+            // Save position before clearing
+            liftedFingerPos = this.tertiaryPos ? { ...this.tertiaryPos } : null;
+
             // Tertiary finger lifted - just clear it
             this.tertiaryPointerId = null;
             this.tertiaryPos = null;
@@ -235,11 +247,11 @@ export class EventHandler {
             // Emit specific finger-up event based on how many fingers we had before
             // F1_UP: 1 -> 0, F2_UP: 2 -> 1, F3_UP: 3 -> 2
             if (fingerCountBefore === 1) {
-                this.emitEvent(Event.F1_UP);
+                this.emitEvent(Event.F1_UP, liftedFingerPos ?? undefined);
             } else if (fingerCountBefore === 2) {
-                this.emitEvent(Event.F2_UP);
+                this.emitEvent(Event.F2_UP, liftedFingerPos ?? undefined);
             } else if (fingerCountBefore === 3) {
-                this.emitEvent(Event.F3_UP);
+                this.emitEvent(Event.F3_UP, liftedFingerPos ?? undefined);
             }
 
             // Reset two-finger gesture tracking when we no longer have two fingers

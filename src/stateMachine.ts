@@ -58,16 +58,39 @@ export enum Event {
 // ============================================================================
 
 /**
- * Timestamps for tap detection (in milliseconds since epoch)
- * Value of 0 means "not set" / "never happened"
+ * Position type for spatial proximity checks
+ */
+export type Position = {
+    x: number;
+    y: number;
+};
+
+/**
+ * Timestamps and positions for tap detection
+ * Timestamps are in milliseconds since epoch, 0 means "not set" / "never happened"
+ * Positions are in screen-space pixels, null means "not set"
  */
 export type EventTimestamps = {
+    // Derived tap detection timestamps
     singleTapHappenedTimestamp: number;      // Set on quick single-finger tap
     doubleTapHappenedTimestamp: number;      // Set on second quick tap within timeout
-    tapAndAHalfHappenedTimestamp: number;    // Set on F1_DOWN if singleTapHappenedRecently
-    F1_DOWN_TIMESTAMP: number;               // When F1_DOWN last fired
-    F2_DOWN_TIMESTAMP: number;               // When F2_DOWN last fired
-    F3_DOWN_TIMESTAMP: number;               // When F3_DOWN last fired
+    tapAndAHalfHappenedTimestamp: number;    // Set on F1_DOWN if singleTapHappenedRecently AND spatially close
+
+    // Finger-down timestamps and positions
+    F1_DOWN_TIMESTAMP: number;
+    F2_DOWN_TIMESTAMP: number;
+    F3_DOWN_TIMESTAMP: number;
+    F1_DOWN_POS: Position | null;
+    F2_DOWN_POS: Position | null;
+    F3_DOWN_POS: Position | null;
+
+    // Finger-up timestamps and positions
+    F1_UP_TIMESTAMP: number;
+    F2_UP_TIMESTAMP: number;
+    F3_UP_TIMESTAMP: number;
+    F1_UP_POS: Position | null;
+    F2_UP_POS: Position | null;
+    F3_UP_POS: Position | null;
 };
 
 /**
@@ -141,6 +164,27 @@ export type TransitionResult = {
 const DOUBLE_TAP_TIMEOUT = 300;    // Max time between taps for double-tap/tap-and-a-half
 const SINGLE_TAP_TIMEOUT = 200;    // Max duration for a single tap to be "quick"
 
+// Spatial constants
+// TAP_PROXIMITY_THRESHOLD_MM: Maximum distance in millimeters for tap detection.
+// Used for: single-tap (F1_UP close to F1_DOWN), tap-and-a-half (F1_DOWN close to previous F1_UP),
+// and double-tap (second F1_UP close to tap-and-a-half position).
+// All measurements are in screen-space (zoom-independent).
+const TAP_PROXIMITY_THRESHOLD_MM = 5;
+
+// Convert millimeters to screen pixels based on device DPI
+// Assumes 96 DPI as default (standard for web), adjusted by devicePixelRatio
+// 1 inch = 25.4 mm, so pixels = (mm / 25.4) * DPI * devicePixelRatio
+function mmToPixels(mm: number): number {
+    const dpi = 96;
+    const pixelRatio = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+    return (mm / 25.4) * dpi * pixelRatio;
+}
+
+// Get tap proximity threshold in pixels (computed at runtime for correct devicePixelRatio)
+function getTapProximityThresholdPx(): number {
+    return mmToPixels(TAP_PROXIMITY_THRESHOLD_MM);
+}
+
 // ============================================================================
 // STATE MACHINE
 // ============================================================================
@@ -166,7 +210,16 @@ export class StateMachine {
             tapAndAHalfHappenedTimestamp: 0,
             F1_DOWN_TIMESTAMP: 0,
             F2_DOWN_TIMESTAMP: 0,
-            F3_DOWN_TIMESTAMP: 0
+            F3_DOWN_TIMESTAMP: 0,
+            F1_DOWN_POS: null,
+            F2_DOWN_POS: null,
+            F3_DOWN_POS: null,
+            F1_UP_TIMESTAMP: 0,
+            F2_UP_TIMESTAMP: 0,
+            F3_UP_TIMESTAMP: 0,
+            F1_UP_POS: null,
+            F2_UP_POS: null,
+            F3_UP_POS: null
         };
     }
 
@@ -261,6 +314,36 @@ export class StateMachine {
                (now - this.timestamps.F1_DOWN_TIMESTAMP) < SINGLE_TAP_TIMEOUT;
     }
 
+    /**
+     * Returns true if two positions are within the tap proximity threshold (5mm).
+     * If either position is null, returns true (falls back to temporal-only check).
+     */
+    private arePositionsClose(pos1: Position | null, pos2: Position | null): boolean {
+        if (!pos1 || !pos2) {
+            return true;
+        }
+        const dx = pos1.x - pos2.x;
+        const dy = pos1.y - pos2.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        return distance <= getTapProximityThresholdPx();
+    }
+
+    /**
+     * Returns true if the given F1_DOWN position is close to the previous F1_UP position.
+     * Used for tap-and-a-half detection (second tap must be near first tap).
+     */
+    private isF1DownCloseToLastF1Up(f1DownPos: Position | null): boolean {
+        return this.arePositionsClose(f1DownPos, this.timestamps.F1_UP_POS);
+    }
+
+    /**
+     * Returns true if the given F1_UP position is close to the F1_DOWN position.
+     * Used for single-tap detection (finger must lift close to where it landed).
+     */
+    private isF1UpCloseToF1Down(f1UpPos: Position | null): boolean {
+        return this.arePositionsClose(f1UpPos, this.timestamps.F1_DOWN_POS);
+    }
+
     // ========================================================================
     // MAIN EVENT PROCESSING
     // ========================================================================
@@ -268,12 +351,13 @@ export class StateMachine {
     /**
      * Process an event and return the transition result.
      * The `now` parameter should be Date.now() for consistent timestamp handling.
+     * The `pos` parameter is the screen-space position of the finger for F1_DOWN/F1_UP events.
      */
-    public processEvent(event: Event, now: number = Date.now()): TransitionResult {
+    public processEvent(event: Event, now: number = Date.now(), pos: Position | null = null): TransitionResult {
         // ====================================================================
         // BEFORE ALL - Flag calculations and timestamp assignments
         // ====================================================================
-        this.processBeforeAll(event, now);
+        this.processBeforeAll(event, now, pos);
 
         // ====================================================================
         // STATE-SPECIFIC TRANSITIONS
@@ -289,9 +373,9 @@ export class StateMachine {
         this.processAfterAll(event);
 
         // ====================================================================
-        // POSTPROCESSING - Record event timestamps
+        // POSTPROCESSING - Record event timestamps and positions
         // ====================================================================
-        this.recordEventTimestamp(event, now);
+        this.recordEventTimestamp(event, now, pos);
 
         return result;
     }
@@ -300,20 +384,22 @@ export class StateMachine {
      * BEFORE ALL processing - happens before state-specific transitions
      * Rule: Calculations/checks and timestamp assignments (setting to `now`) go here.
      */
-    private processBeforeAll(event: Event, now: number): void {
+    private processBeforeAll(event: Event, now: number, pos: Position | null): void {
         switch (event) {
             case Event.F1_DOWN:
-                // If singleTapHappenedRecently() -> set tapAndAHalfHappenedTimestamp = now
-                if (this.singleTapHappenedRecently(now)) {
+                // If singleTapHappenedRecently() AND F1_DOWN is close to previous F1_UP -> set tapAndAHalfHappenedTimestamp = now
+                if (this.singleTapHappenedRecently(now) && this.isF1DownCloseToLastF1Up(pos)) {
                     this.timestamps.tapAndAHalfHappenedTimestamp = now;
                 }
                 break;
 
             case Event.F1_UP:
-                // If quick single-finger tap: set singleTap or doubleTap timestamp
+                // Quick tap requires: no cursor movement, F1 was last finger down, F1 went down recently,
+                // AND F1_UP is close to F1_DOWN (spatial proximity)
                 const isQuickTap = !this.flags.cursorMovedFarHappened &&
                                    this.firstFingerWasTheLastFingerToGoDown() &&
-                                   this.firstFingerWentDownRecently(now);
+                                   this.firstFingerWentDownRecently(now) &&
+                                   this.isF1UpCloseToF1Down(pos);
                 if (isQuickTap) {
                     if (this.tapAndAHalfHappenedRecently(now)) {
                         // Second quick tap (tapAndAHalf was set on F1_DOWN) -> double tap
@@ -353,7 +439,7 @@ export class StateMachine {
             case Event.F1_DOWN:
             case Event.F2_DOWN:
             case Event.F3_DOWN:
-                // FINGER_DOWN_COMMON: Reset timestamps and flags
+                // FINGER_DOWN_COMMON: Reset derived tap timestamps and flags
                 this.timestamps.singleTapHappenedTimestamp = 0;
                 this.timestamps.doubleTapHappenedTimestamp = 0;
                 this.flags.cursorMovedFarHappened = false;
@@ -370,20 +456,34 @@ export class StateMachine {
     }
 
     /**
-     * Record the timestamp for the current event (postprocessing)
+     * Record the timestamp and position for the current event (postprocessing)
      */
-    private recordEventTimestamp(event: Event, now: number): void {
+    private recordEventTimestamp(event: Event, now: number, pos: Position | null): void {
         switch (event) {
             case Event.F1_DOWN:
                 this.timestamps.F1_DOWN_TIMESTAMP = now;
+                this.timestamps.F1_DOWN_POS = pos;
                 break;
             case Event.F2_DOWN:
                 this.timestamps.F2_DOWN_TIMESTAMP = now;
+                this.timestamps.F2_DOWN_POS = pos;
                 break;
             case Event.F3_DOWN:
                 this.timestamps.F3_DOWN_TIMESTAMP = now;
+                this.timestamps.F3_DOWN_POS = pos;
                 break;
-            // Other events can be added if needed
+            case Event.F1_UP:
+                this.timestamps.F1_UP_TIMESTAMP = now;
+                this.timestamps.F1_UP_POS = pos;
+                break;
+            case Event.F2_UP:
+                this.timestamps.F2_UP_TIMESTAMP = now;
+                this.timestamps.F2_UP_POS = pos;
+                break;
+            case Event.F3_UP:
+                this.timestamps.F3_UP_TIMESTAMP = now;
+                this.timestamps.F3_UP_POS = pos;
+                break;
         }
     }
 
@@ -657,7 +757,16 @@ export class StateMachine {
             tapAndAHalfHappenedTimestamp: 0,
             F1_DOWN_TIMESTAMP: 0,
             F2_DOWN_TIMESTAMP: 0,
-            F3_DOWN_TIMESTAMP: 0
+            F3_DOWN_TIMESTAMP: 0,
+            F1_DOWN_POS: null,
+            F2_DOWN_POS: null,
+            F3_DOWN_POS: null,
+            F1_UP_TIMESTAMP: 0,
+            F2_UP_TIMESTAMP: 0,
+            F3_UP_TIMESTAMP: 0,
+            F1_UP_POS: null,
+            F2_UP_POS: null,
+            F3_UP_POS: null
         };
     }
 

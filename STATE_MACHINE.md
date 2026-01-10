@@ -81,12 +81,22 @@ The state machine responds to **11 events**:
 
 ## Event Flags
 
-The state machine maintains **2 flags** and **3 timestamps**:
+The state machine maintains **2 flags**, **derived tap timestamps**, and **raw event timestamps/positions**:
 
-**Timestamps:**
-- **singleTapHappenedTimestamp** - Set to current time on F1_UP if quick single-finger tap. Reset to 0 on any finger down (FINGER_DOWN_COMMON).
-- **doubleTapHappenedTimestamp** - Set to current time on F1_UP if quick single-finger tap AND tapAndAHalfHappenedRecently(). Reset to 0 on any finger down (FINGER_DOWN_COMMON).
-- **tapAndAHalfHappenedTimestamp** - Set to current time on F1_DOWN if singleTapHappenedRecently(). Reset to 0 on any finger up (FINGER_UP_COMMON).
+**Derived Tap Timestamps** (reset on any finger down via FINGER_DOWN_COMMON):
+- **singleTapHappenedTimestamp** - Set to current time on F1_UP if quick single-finger tap (see criteria below). Reset to 0 on any finger down.
+- **doubleTapHappenedTimestamp** - Set to current time on F1_UP if quick single-finger tap AND tapAndAHalfHappenedRecently(). Reset to 0 on any finger down.
+- **tapAndAHalfHappenedTimestamp** - Set to current time on F1_DOWN if singleTapHappenedRecently() AND isF1DownCloseToLastF1Up(). Reset to 0 on any finger up (FINGER_UP_COMMON).
+
+**Raw Event Timestamps and Positions** (recorded in postprocessing for each event):
+- **F1_DOWN_TIMESTAMP**, **F1_DOWN_POS** - When and where F1_DOWN last fired
+- **F2_DOWN_TIMESTAMP**, **F2_DOWN_POS** - When and where F2_DOWN last fired
+- **F3_DOWN_TIMESTAMP**, **F3_DOWN_POS** - When and where F3_DOWN last fired
+- **F1_UP_TIMESTAMP**, **F1_UP_POS** - When and where F1_UP last fired
+- **F2_UP_TIMESTAMP**, **F2_UP_POS** - When and where F2_UP last fired
+- **F3_UP_TIMESTAMP**, **F3_UP_POS** - When and where F3_UP last fired
+
+All positions are in screen-space pixels (zoom-independent).
 
 **Calculated functions:**
 - **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null`. Managed by [FINISH_STROKE], [SELECT_CLOSEST_STROKE], [DESELECT_STROKE] actions.
@@ -97,6 +107,9 @@ The state machine maintains **2 flags** and **3 timestamps**:
 - **tapAndAHalfHappenedRecently()** - Returns true if tapAndAHalfHappenedTimestamp != 0 AND (now - tapAndAHalfHappenedTimestamp) < singleTapTimeout. Used for double-tap detection (ensures the second tap is quick).
 - **FirstFingerWasTheLastFingerToGoDown()** - Returns true if F1_DOWN was the most recent finger-down event (no F2_DOWN or F3_DOWN after it).
 - **FirstFingerWentDownRecently()** - Returns true if (now - F1_DOWN_TIMESTAMP) < singleTapTimeout. Ensures the tap was quick.
+- **arePositionsClose(pos1, pos2)** - Returns true if pos1 and pos2 are within TAP_PROXIMITY_THRESHOLD_MM (5mm) of each other. If either position is null, returns true (falls back to temporal-only check).
+- **isF1DownCloseToLastF1Up(pos)** - Returns arePositionsClose(pos, F1_UP_POS). Used for tap-and-a-half detection.
+- **isF1UpCloseToF1Down(pos)** - Returns arePositionsClose(pos, F1_DOWN_POS). Used for single-tap detection.
 
 **Set by events** (reset on any finger down via FINGER_DOWN_COMMON):
 1. **cursorMovedFarHappened** - Set when CURSOR_MOVED_FAR event fires
@@ -145,8 +158,8 @@ These flag updates happen regardless of current state, before state-specific tra
 
 | Event | Transitions and/or Actions |
 |-------|---------------------------|
-| F1_DOWN | If singleTapHappenedRecently() -> set tapAndAHalfHappenedTimestamp = now. |
-| F1_UP | If quick single-finger tap (i.e. !cursorMovedFarHappened && FirstFingerWasTheLastFingerToGoDown() && FirstFingerWentDownRecently()): if tapAndAHalfHappenedRecently() -> set doubleTapHappenedTimestamp = now, else -> set singleTapHappenedTimestamp = now |
+| F1_DOWN | If singleTapHappenedRecently() AND isF1DownCloseToLastF1Up() -> set tapAndAHalfHappenedTimestamp = now. |
+| F1_UP | If quick single-finger tap (i.e. !cursorMovedFarHappened && FirstFingerWasTheLastFingerToGoDown() && FirstFingerWentDownRecently() && isF1UpCloseToF1Down()): if tapAndAHalfHappenedRecently() -> set doubleTapHappenedTimestamp = now, else -> set singleTapHappenedTimestamp = now |
 | CURSOR_MOVED_FAR | Set cursorMovedFarHappened = true |
 | DELETE | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, PROCESS_DELETE] |
 | CLEAR | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DESELECT_STROKE] |
@@ -164,7 +177,7 @@ These updates happen regardless of current state, after state-specific transitio
 
 ### Postprocessing
 
-After all tables have been processed, record the timestamp for the current event. For every event X, we maintain X_TIMESTAMP which is set to the current time when event X fires. For example, F1_DOWN sets F1_DOWN_TIMESTAMP = now, F2_DOWN sets F2_DOWN_TIMESTAMP = now, etc.
+After all tables have been processed, record the timestamp and position for the current event. For every finger event X, we maintain X_TIMESTAMP (set to current time) and X_POS (set to screen-space position). For example, F1_DOWN sets F1_DOWN_TIMESTAMP = now and F1_DOWN_POS = position, F1_UP sets F1_UP_TIMESTAMP = now and F1_UP_POS = position, etc.
 
 ### FROM Idle State
 
@@ -297,7 +310,7 @@ When in Drawing state and F3_DOWN event occurs:
 ### Selection Rectangle Mode
 
 **Entry Condition:**
-- Tap-and-a-half gesture: Quick tap (F1_DOWN -> FINGER_UP_COMMON without timing out or cursor moving more than a few pixels), then another F1_DOWN before timeout
+- Tap-and-a-half gesture: Quick tap (F1_DOWN -> F1_UP where F1_UP is within 5mm of F1_DOWN and within singleTapTimeout), then another F1_DOWN before doubleTapTimeout AND within 5mm of the first F1_UP location
 
 **Behavior:**
 - Dragging creates a semi-transparent blue selection rectangle
