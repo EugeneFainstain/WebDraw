@@ -74,12 +74,10 @@ export function handleActions(actions: Action[]): void {
                             }
                         }
                     }
-                    // Clear the ready flag - we're starting to draw
-                    state.cursorReadyToContinueStroke = false;
 
                     if (mightContinue) {
                         // Potential continuation: create new stroke but keep selection
-                        // The merge will happen in SAVE_STROKE
+                        // The merge will happen in SAVE_STROKE (cursorReadyToContinueStroke stays true)
                         const selectedStroke = state.strokeHistory[state.selectedStrokeIdx!];
                         const startPoint = state.isGridMode ? snapToGrid(state.cursorPos) : state.cursorPos;
                         state.currentStroke = {
@@ -119,7 +117,9 @@ export function handleActions(actions: Action[]): void {
             case Action.SAVE_STROKE:
                 if (state.currentStroke && state.currentStroke.points!.length > 0) {
                     // Check if we should merge with a selected stroke (deferred continuation)
-                    if (state.selectedStrokeIdx !== null &&
+                    // Only merge if cursorReadyToContinueStroke was true when stroke started
+                    if (state.cursorReadyToContinueStroke &&
+                        state.selectedStrokeIdx !== null &&
                         state.selectedStrokePointIdx !== null &&
                         state.selectedStrokeIdx < state.strokeHistory.length) {
                         const selectedStroke = state.strokeHistory[state.selectedStrokeIdx];
@@ -191,6 +191,7 @@ export function handleActions(actions: Action[]): void {
                 }
                 state.currentStroke = null;
                 state.lastGridPosition = null;
+                state.cursorReadyToContinueStroke = false;
                 // Clear dragStartCursorPos - we completed a new stroke, so zoom restoration
                 // should not snap back to the old stroke's position
                 state.dragStartCursorPos = null;
@@ -207,6 +208,7 @@ export function handleActions(actions: Action[]): void {
                 }
                 state.currentStroke = null;
                 state.lastGridPosition = null;
+                state.cursorReadyToContinueStroke = false;
                 break;
 
             case Action.FINISH_STROKE:
@@ -259,8 +261,10 @@ export function handleActions(actions: Action[]): void {
                     state.hasUndoableTransform = false;
                     // Update color and size pickers to match selected stroke
                     deps.updatePickersForSelectedStroke();
-                    // Cursor is ready to continue this stroke (if at last point)
-                    state.cursorReadyToContinueStroke = true;
+                    // Cursor is ready to continue this stroke (only if all fingers lifted)
+                    if (state.eventHandler.getFingerCount() === 0) {
+                        state.cursorReadyToContinueStroke = true;
+                    }
                     // Also highlight the selected stroke
                     state.highlightedStrokes.clear();
                     state.highlightedStrokes.add(closestResult.strokeIdx);
@@ -405,8 +409,8 @@ export function handleActions(actions: Action[]): void {
                     }
                 }
                 state.dragStartCursorPos = null;
-                // After any transform, if there's a selected stroke, cursor is ready to continue
-                if (state.selectedStrokeIdx !== null) {
+                // After any transform, if there's a selected stroke and all fingers lifted, cursor is ready to continue
+                if (state.selectedStrokeIdx !== null && state.eventHandler.getFingerCount() === 0) {
                     state.cursorReadyToContinueStroke = true;
                 }
                 // Snapshot AFTER transform is complete (coherent state)
@@ -421,8 +425,10 @@ export function handleActions(actions: Action[]): void {
                 // Cursor snap is just a UI convenience, not a document change
                 if (state.selectedStrokeCursorPos) {
                     state.cursorPos = { ...state.selectedStrokeCursorPos };
-                    // Cursor snapped back - ready to continue stroke
-                    state.cursorReadyToContinueStroke = true;
+                    // Cursor snapped back - ready to continue stroke (only if all fingers lifted)
+                    if (state.eventHandler.getFingerCount() === 0) {
+                        state.cursorReadyToContinueStroke = true;
+                    }
                 }
                 break;
 
