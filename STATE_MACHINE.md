@@ -283,7 +283,7 @@ This anchor-based approach provides more intuitive deselection behavior compared
 ### Stroke Continuation
 
 When starting to draw (F2_DOWN in MovingCursor state), the `CREATE_STROKE` action checks if the cursor is positioned at either endpoint of a selected stroke. If all conditions are met:
-1. `cursorReadyToContinueStroke` flag is true
+1. `continueExistingStroke` flag is true
 2. A stroke is selected (`selectedStrokeIdx != null`)
 3. The cursor is at an endpoint of that stroke (`selectedStrokePointIdx == 0` OR `selectedStrokePointIdx == stroke.points.length - 1`)
 4. The stroke is not a group (has `points` array, no `strokes` array)
@@ -296,9 +296,9 @@ This deferred approach ensures that if the gesture is abandoned (e.g., pinch det
 
 If any condition is not met, a new stroke is created as normal (and the selection is cleared).
 
-**The `cursorReadyToContinueStroke` flag:**
-- Set to `true` when: stroke is selected via double-tap ([SELECT_CLOSEST_STROKE]), cursor snaps back to selected stroke ([SNAP_CURSOR_TO_SELECTED_STROKE]), or transform completes with a selected stroke ([RESTORE_DRAG_START_CURSOR])
-- Set to `false` when: [CREATE_STROKE] is executed (starting to draw)
+**The `continueExistingStroke` flag:**
+- Set to `true` when: stroke is selected via double-tap ([SELECT_CLOSEST_STROKE]), cursor snaps back to selected stroke ([SNAP_CURSOR_TO_SELECTED_STROKE]), or transform completes with a selected stroke ([RESTORE_DRAG_START_CURSOR]) - but ONLY if all fingers are lifted (`getFingerCount() === 0`)
+- Set to `false` when: [SAVE_STROKE] or [ABANDON_STROKE] is executed (stroke completed or cancelled)
 - NOT set by [FINISH_STROKE] - this ensures continuation only works after all fingers are lifted, not when just the drawing finger is lifted while the anchor finger remains down.
 
 ### Stroke Protection

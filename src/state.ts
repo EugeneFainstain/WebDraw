@@ -152,7 +152,7 @@ export interface AppContext {
     pointersOnUI: Map<number, { startX: number; startY: number }>;
 
     // Transient cursor state (not snapshotted for undo)
-    cursorReadyToContinueStroke: boolean;
+    continueExistingStroke: boolean;  // If true, next stroke will merge with selected stroke
     dragStartCursorPos: Point | null;
 }
 
@@ -234,7 +234,7 @@ export const appContext: AppContext = {
     batchedDelta: null,
     pointersOnUI: new Map<number, { startX: number; startY: number }>(),
     // Transient cursor state (not snapshotted)
-    cursorReadyToContinueStroke: false,
+    continueExistingStroke: false,
     dragStartCursorPos: null,
 };
 
@@ -338,7 +338,7 @@ export function resetState() {
     appContext.lastDelta = null;
     appContext.batchedDelta = null;
     appContext.pointersOnUI.clear();
-    appContext.cursorReadyToContinueStroke = false;
+    appContext.continueExistingStroke = false;
     appContext.dragStartCursorPos = null;
 
     // Reset state machine and event handler
