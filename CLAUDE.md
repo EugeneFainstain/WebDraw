@@ -2,15 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ CRITICAL: Debug Output Rules ⚠️
+
+**NEVER USE `console.log()` FOR DEBUGGING IN THIS PROJECT!**
+
+This application is tested on mobile devices where the browser console is not accessible. All debug output MUST use the on-screen overlay via `showDebug()` from `state.ts`:
+
+```typescript
+import { showDebug } from './state';
+showDebug('Your debug message here');
+```
+
+The overlay is the ONLY way to see debug information during mobile testing.
+
+---
+
 **IMPORTANT**: When modifying the state machine ([src/stateMachine.ts](src/stateMachine.ts)), always update the documentation in STATE_MACHINE.md file synchronously. Keep code and documentation in sync.
 
 ## Project Overview
 
 WebDraw is a browser-based multi-touch drawing application built with TypeScript and Vite. It uses the HTML5 Canvas API with Pointer Events for drawing functionality.
-
-## Development Guidelines
-
-**CRITICAL**: This application is primarily tested on mobile devices (phones/tablets). All debug output must be displayed in the on-screen overlay, NOT in console.log. The overlay is the only way to see debug information during mobile testing.
 
 ## Commands
 

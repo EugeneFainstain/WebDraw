@@ -52,8 +52,6 @@ export function restoreSnapshot(snapshot: AppState): void {
     appState.selectedStrokeIdx = cloned.selectedStrokeIdx;
     appState.selectedStrokePointIdx = cloned.selectedStrokePointIdx;
     appState.selectedStrokeCursorPos = cloned.selectedStrokeCursorPos;
-    appState.cursorReadyToContinueStroke = cloned.cursorReadyToContinueStroke;
-    appState.dragStartCursorPos = cloned.dragStartCursorPos;
     appState.transformSnapshot = cloned.transformSnapshot;
     appState.hasUndoableTransform = cloned.hasUndoableTransform;
     appState.lastGridPosition = cloned.lastGridPosition;
@@ -69,24 +67,33 @@ export function restoreSnapshot(snapshot: AppState): void {
 
     appState.viewTransform = cloned.viewTransform;
     appState.transformStart = cloned.transformStart;
-    appState.debugMessages = cloned.debugMessages;
+    // NOTE: Don't restore debugMessages - we want to keep seeing debug output after undo
+    // appState.debugMessages = cloned.debugMessages;
 }
 
 /**
  * Push current state to undo stack (call AFTER making changes).
  * Each snapshot represents a completed, coherent state.
+ * Only pushes if the current state differs from the top of the stack.
  */
 export function pushUndoSnapshot(): void {
+    // Don't push duplicate snapshots
+    if (undoStack.length > 0 && !statesDiffer(undoStack[undoStack.length - 1])) {
+        return;
+    }
     undoStack.push(captureSnapshot());
 }
 
 /**
  * Convert a snapshot to a comparable string (for state comparison).
+ * Excludes debugMessages since those change during comparison and shouldn't affect undo.
  */
 function snapshotToString(snapshot: AppState): string {
     // Create a serializable version (Set needs to be converted to Array for JSON)
+    // Exclude debugMessages - they change during comparison and shouldn't affect undo logic
+    const { debugMessages, ...rest } = snapshot;
     const serializable = {
-        ...snapshot,
+        ...rest,
         highlightedStrokes: Array.from(snapshot.highlightedStrokes),
     };
     return JSON.stringify(serializable);
@@ -97,7 +104,9 @@ function snapshotToString(snapshot: AppState): string {
  */
 function statesDiffer(snapshot: AppState): boolean {
     const current = captureSnapshot();
-    return snapshotToString(current) !== snapshotToString(snapshot);
+    const currentStr = snapshotToString(current);
+    const snapshotStr = snapshotToString(snapshot);
+    return currentStr !== snapshotStr;
 }
 
 /**
