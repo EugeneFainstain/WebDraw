@@ -8,10 +8,11 @@
  * Design:
  * - Uses structuredClone() for deep copying (native, handles nested structures)
  * - Undo stack lives outside AppState (only thing not snapshotted)
- * - Snapshots captured BEFORE operations, restored on undo
+ * - Snapshots captured AFTER operations complete (each snapshot = completed coherent state)
+ * - Undo pops current state and restores the previous one
  *
  * Usage:
- * - Call pushUndoSnapshot() BEFORE any significant state change
+ * - Call pushUndoSnapshot() AFTER any significant state change completes
  * - Call performUndo() to restore previous state
  * - Call clearUndoStack() on Clear All (page reload behavior)
  */
@@ -83,22 +84,34 @@ export function restoreSnapshot(snapshot: AppState): void {
 }
 
 /**
- * Push current state to undo stack (call BEFORE making changes).
+ * Push current state to undo stack (call AFTER making changes).
+ * Each snapshot represents a completed, coherent state.
  */
 export function pushUndoSnapshot(): void {
     undoStack.push(captureSnapshot());
 }
 
 /**
- * Pop and restore previous state (the actual undo operation).
- * Returns true if undo was performed, false if stack was empty.
+ * Undo: discard current state and restore the previous one.
+ * Returns true if undo was performed, false if no previous state exists.
+ *
+ * With the "snapshot AFTER" approach:
+ * - Stack contains completed states [S0, S1, S2, ...]
+ * - Current state is always the top of the stack
+ * - Undo pops the current state (discards it) and restores the one below
+ * - Need at least 2 entries: one to discard, one to restore
  */
 export function performUndo(): boolean {
-    if (undoStack.length === 0) {
+    if (undoStack.length < 2) {
+        // Need at least 2 states: current to discard, previous to restore
         return false;
     }
 
-    const previousState = undoStack.pop()!;
+    // Pop and discard current state
+    undoStack.pop();
+
+    // Restore the previous state (but keep it on the stack - it's now "current")
+    const previousState = undoStack[undoStack.length - 1];
     restoreSnapshot(previousState);
     return true;
 }
@@ -115,6 +128,13 @@ export function clearUndoStack(): void {
  */
 export function getUndoStackSize(): number {
     return undoStack.length;
+}
+
+/**
+ * Check if undo is possible (need at least 2 states on stack).
+ */
+export function canUndo(): boolean {
+    return undoStack.length >= 2;
 }
 
 // ============================================================================

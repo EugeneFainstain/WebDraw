@@ -108,8 +108,6 @@ const combinedPicker = createCombinedPicker(
     (color: string) => {
         // Apply to all highlighted strokes (including groups), or to selected stroke if no highlights
         if (state.highlightedStrokes.size > 0) {
-            // Snapshot BEFORE changing color (for undo)
-            pushUndoSnapshot();
             for (const index of state.highlightedStrokes) {
                 if (index < state.strokeHistory.length) {
                     transformStroke(state.strokeHistory[index], (stroke: Stroke) => {
@@ -117,20 +115,20 @@ const combinedPicker = createCombinedPicker(
                     });
                 }
             }
-        } else if (state.selectedStrokeIdx !== null) {
-            // Snapshot BEFORE changing color (for undo)
+            // Snapshot AFTER color change is complete (coherent state)
             pushUndoSnapshot();
+        } else if (state.selectedStrokeIdx !== null) {
             transformStroke(state.strokeHistory[state.selectedStrokeIdx], (stroke: Stroke) => {
                 stroke.color = color;
             });
+            // Snapshot AFTER color change is complete (coherent state)
+            pushUndoSnapshot();
         }
         redraw();
     },
     (size: number) => {
         // Apply to all highlighted strokes (including groups), or to selected stroke if no highlights
         if (state.highlightedStrokes.size > 0) {
-            // Snapshot BEFORE changing size (for undo)
-            pushUndoSnapshot();
             for (const index of state.highlightedStrokes) {
                 if (index < state.strokeHistory.length) {
                     transformStroke(state.strokeHistory[index], (stroke: Stroke) => {
@@ -138,12 +136,14 @@ const combinedPicker = createCombinedPicker(
                     });
                 }
             }
-        } else if (state.selectedStrokeIdx !== null) {
-            // Snapshot BEFORE changing size (for undo)
+            // Snapshot AFTER size change is complete (coherent state)
             pushUndoSnapshot();
+        } else if (state.selectedStrokeIdx !== null) {
             transformStroke(state.strokeHistory[state.selectedStrokeIdx], (stroke: Stroke) => {
                 stroke.size = size;
             });
+            // Snapshot AFTER size change is complete (coherent state)
+            pushUndoSnapshot();
         }
         redraw();
     },

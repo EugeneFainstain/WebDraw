@@ -22,7 +22,7 @@
 import { Point } from './eventHandler';
 import { state, resetState, showDebug, Stroke } from './state';
 import { fitStroke } from './shapeFitting';
-import { pushUndoSnapshot, performUndo, getUndoStackSize } from './undoSystem';
+import { pushUndoSnapshot, performUndo, canUndo } from './undoSystem';
 
 // ============================================================================
 // TYPES
@@ -115,11 +115,10 @@ export function cloneStroke(stroke: Stroke): Stroke {
 
 export function updateUI(): void {
     const dom = state.dom;
-    const hasUndoableActions = getUndoStackSize() > 0;
     const hasHighlightedStrokes = state.highlightedStrokes.size > 0;
 
-    // Undo button: enabled when there are items in the undo stack
-    dom.undoBtn!.disabled = !hasUndoableActions;
+    // Undo button: enabled when undo is possible (at least 2 states on stack)
+    dom.undoBtn!.disabled = !canUndo();
 
     // Del button: enabled when there are highlighted strokes
     dom.delBtn!.disabled = !hasHighlightedStrokes;
@@ -219,9 +218,6 @@ export function processUndo(): void {
 export function processDelete(): void {
     if (state.highlightedStrokes.size === 0) return;
 
-    // Snapshot BEFORE deleting strokes (for undo)
-    pushUndoSnapshot();
-
     // Get sorted indices in descending order (to remove from end first)
     const indicesToDelete = Array.from(state.highlightedStrokes).sort((a, b) => b - a);
 
@@ -242,6 +238,8 @@ export function processDelete(): void {
     state.transformSnapshot = null;
     state.hasUndoableTransform = false;
 
+    // Snapshot AFTER delete is complete (coherent state)
+    pushUndoSnapshot();
     updateUI();
     callbacks.redraw();
 }
@@ -272,9 +270,6 @@ export function duplicateSelectedStroke(): void {
         showDebug('Invalid highlighted stroke index!');
         return;
     }
-
-    // Snapshot BEFORE duplicating stroke (for undo)
-    pushUndoSnapshot();
 
     const sourceStroke = state.strokeHistory[highlightedIdx];
 
@@ -351,6 +346,8 @@ export function duplicateSelectedStroke(): void {
     state.transformSnapshot = null;
     state.hasUndoableTransform = false;
 
+    // Snapshot AFTER duplicate is complete (coherent state)
+    pushUndoSnapshot();
     updateUI();
     callbacks.redraw();
 }
@@ -364,9 +361,6 @@ export function groupHighlightedStrokes(): void {
         showDebug('Need at least 2 strokes to group!');
         return;
     }
-
-    // Snapshot BEFORE grouping strokes (for undo)
-    pushUndoSnapshot();
 
     // Collect the strokes to group (in order of their indices)
     const indices = Array.from(state.highlightedStrokes).sort((a, b) => a - b);
@@ -394,6 +388,8 @@ export function groupHighlightedStrokes(): void {
     state.highlightedStrokes.add(indices[0]);
     state.selectedStrokeIdx = indices[0];
 
+    // Snapshot AFTER group is complete (coherent state)
+    pushUndoSnapshot();
     updateUI();
     callbacks.updatePickersForSelectedStroke();
     callbacks.redraw();
@@ -419,9 +415,6 @@ export function ungroupSelectedStroke(): void {
         return;
     }
 
-    // Snapshot BEFORE ungrouping stroke (for undo)
-    pushUndoSnapshot();
-
     // Get the immediate children (one level only)
     const children = stroke.strokes!.map(child => cloneStroke(child));
 
@@ -443,6 +436,8 @@ export function ungroupSelectedStroke(): void {
     state.selectedStrokePointIdx = null;
     state.selectedStrokeCursorPos = null;
 
+    // Snapshot AFTER ungroup is complete (coherent state)
+    pushUndoSnapshot();
     updateUI();
     updateGroupButtons();
     callbacks.redraw();
@@ -466,9 +461,6 @@ export function toggleFit(): void {
         return;
     }
 
-    // Snapshot BEFORE toggling fit (for undo)
-    pushUndoSnapshot();
-
     // Determine if we're toggling ON or OFF
     const turningOn = !stroke.showingFitted;
 
@@ -487,6 +479,8 @@ export function toggleFit(): void {
         stroke.showingFitted = turningOn;
     }
 
+    // Snapshot AFTER fit toggle is complete (coherent state)
+    pushUndoSnapshot();
     updateFitButton();
     callbacks.redraw();
 }

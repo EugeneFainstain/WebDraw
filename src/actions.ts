@@ -115,9 +115,7 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.SAVE_STROKE:
-                // Snapshot BEFORE saving stroke (for undo)
                 if (state.currentStroke && state.currentStroke.points!.length > 0) {
-                    pushUndoSnapshot();
                     // Check if we should merge with a selected stroke (deferred continuation)
                     if (state.selectedStrokeIdx !== null &&
                         state.selectedStrokePointIdx !== null &&
@@ -229,12 +227,14 @@ export function handleActions(actions: Action[]): void {
                 // Clear transformation undo state when selecting new stroke
                 state.transformSnapshot = null;
                 state.hasUndoableTransform = false;
+                // Snapshot AFTER stroke is complete and selected (coherent state)
+                pushUndoSnapshot();
                 updateUI();
                 break;
 
             case Action.SELECT_CLOSEST_STROKE:
-                // Snapshot BEFORE selecting stroke (for undo)
-                pushUndoSnapshot();
+                // Note: No snapshot here - selection is a UI state change, not a document change
+                // Users don't expect "undo" to deselect a stroke they just tapped on
                 // SELECT_CLOSEST_STROKE: Manually select stroke closest to cursor
                 // Triggered by: Single tap (quick tap with no timeout or movement)
                 // Behavior: Finds closest stroke to current cursor position
@@ -266,8 +266,8 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.DESELECT_STROKE:
-                // Snapshot BEFORE deselecting stroke (for undo)
-                pushUndoSnapshot();
+                // Deselection is a state change - we snapshot AFTER so that undo
+                // from this state goes back to the selected state
                 state.selectedStrokeCursorPos = null;
                 state.selectedStrokeIdx = null;
                 state.selectedStrokePointIdx = null;
@@ -276,6 +276,8 @@ export function handleActions(actions: Action[]): void {
                 if (state.currentStroke !== null) {
                     state.highlightedStrokes.clear();
                 }
+                // Snapshot AFTER deselection (so undo from here restores selection)
+                pushUndoSnapshot();
                 // Clear transformation undo state on deselection
                 state.transformSnapshot = null;
                 state.hasUndoableTransform = false;
@@ -307,8 +309,7 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.APPLY_SELECTION_RECTANGLE:
-                // Snapshot BEFORE applying selection (for undo)
-                pushUndoSnapshot();
+                // Note: No snapshot here - selection is a UI state change, not a document change
                 // Complete selection rectangle - keep strokes highlighted, don't apply colors yet
                 state.selectionRectStart = null;
                 state.selectionRectEnd = null;
@@ -364,9 +365,7 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.RESTORE_DRAG_START_CURSOR:
-                // Snapshot BEFORE restoring cursor (captures transform completion for undo)
                 // This fires when Transform→Idle transition happens
-                pushUndoSnapshot();
                 // Restore cursor after canvas transform (2-finger zoom)
                 // Only snap back for 2-finger canvas transforms (no strokeSnapshotsMap)
                 // 3-finger stroke transforms have strokeSnapshotsMap and cursor is already correctly positioned
@@ -397,6 +396,8 @@ export function handleActions(actions: Action[]): void {
                 if (state.selectedStrokeIdx !== null) {
                     state.cursorReadyToContinueStroke = true;
                 }
+                // Snapshot AFTER transform is complete (coherent state)
+                pushUndoSnapshot();
                 break;
 
             case Action.SNAP_CURSOR_TO_SELECTED_STROKE:
