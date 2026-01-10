@@ -218,12 +218,34 @@ export function initThreeFingerTransform(): void {
             }
         }
 
-        // If no strokes to transform, do nothing
+        if (!positions.primary || !positions.secondary || !positions.tertiary) return;
+
+        // If no strokes to transform, continue canvas transform with 3 fingers
         if (strokesToTransform.size === 0) {
+            const pivot = {
+                x: (positions.primary.x + positions.secondary.x + positions.tertiary.x) / 3,
+                y: (positions.primary.y + positions.secondary.y + positions.tertiary.y) / 3
+            };
+
+            const dist1 = callbacks.getDistance(pivot, positions.primary);
+            const dist2 = callbacks.getDistance(pivot, positions.secondary);
+            const dist3 = callbacks.getDistance(pivot, positions.tertiary);
+            const initialScale = (dist1 + dist2 + dist3) / 3;
+
+            const angle1 = getAngle(pivot, positions.primary);
+            const angle2 = getAngle(pivot, positions.secondary);
+            const angle3 = getAngle(pivot, positions.tertiary);
+
+            state.transformStart = {
+                pivot,
+                initialScale,
+                fingerAngles: [angle1, angle2, angle3],
+                unwrappedRotation: 0,
+                initialTransform: { ...state.viewTransform }
+                // No strokeSnapshotsMap - canvas transform
+            };
             return;
         }
-
-        if (!positions.primary || !positions.secondary || !positions.tertiary) return;
 
         const pivot = {
             x: (positions.primary.x + positions.secondary.x + positions.tertiary.x) / 3,

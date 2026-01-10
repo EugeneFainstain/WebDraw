@@ -222,8 +222,10 @@ After all tables have been processed, record the timestamp and position for the 
 |-------|---------------------------|
 | F1_DOWN | ----- |
 | F2_DOWN | ----- |
-| F3_DOWN | ----- |
-| FINGER_UP_COMMON | Go to Idle. do [RESTORE_DRAG_START_CURSOR] |
+| F3_DOWN | do [INIT_TRANSFORM] |
+| F1_UP | Go to Idle. do [RESTORE_DRAG_START_CURSOR] |
+| F2_UP | Go to MovingCursor. do [RESTORE_DRAG_START_CURSOR] |
+| F3_UP | do [INIT_TRANSFORM] |
 | PINCH_DETECTED | ----- |
 
 ### FROM SelectionRectangle State

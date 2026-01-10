@@ -682,18 +682,30 @@ export class StateMachine {
         switch (event) {
             case Event.F1_DOWN:
             case Event.F2_DOWN:
-            case Event.F3_DOWN:
             case Event.PINCH_DETECTED:
                 return { newState: State.Transform, actions: [] };
 
+            case Event.F3_DOWN:
+                // Re-initialize transform with 3 fingers
+                return { newState: State.Transform, actions: [Action.INIT_TRANSFORM] };
+
             case Event.F1_UP:
-            case Event.F2_UP:
-            case Event.F3_UP:
                 // Go to Idle, do [RESTORE_DRAG_START_CURSOR]
                 return {
                     newState: State.Idle,
                     actions: [Action.RESTORE_DRAG_START_CURSOR]
                 };
+
+            case Event.F2_UP:
+                // Go to MovingCursor, do [RESTORE_DRAG_START_CURSOR]
+                return {
+                    newState: State.MovingCursor,
+                    actions: [Action.RESTORE_DRAG_START_CURSOR]
+                };
+
+            case Event.F3_UP:
+                // Re-initialize as 2-finger canvas transform
+                return { newState: State.Transform, actions: [Action.INIT_TRANSFORM] };
 
             default:
                 return { newState: State.Transform, actions: [] };
