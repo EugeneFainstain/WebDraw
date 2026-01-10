@@ -116,15 +116,6 @@ export interface AppState {
     // Transform state for multi-finger gesture
     transformStart: TransformStart | null;
 
-    // Movement tracking for continuous updates
-    lastPrimaryPos: Point | null;
-    lastSecondaryPos: Point | null;
-    lastDelta: { x: number; y: number; pointerId: number } | null;
-    batchedDelta: { x: number; y: number } | null;
-
-    // Track pointers that started on UI elements
-    pointersOnUI: Map<number, { startX: number; startY: number }>;
-
     // Debug messages
     debugMessages: string[];
 }
@@ -157,6 +148,13 @@ export interface AppContext {
     // Core state machine and event handler
     stateMachine: StateMachine;
     eventHandler: EventHandler;
+
+    // Transient pointer-tracking state (not snapshotted for undo)
+    lastPrimaryPos: Point | null;
+    lastSecondaryPos: Point | null;
+    lastDelta: { x: number; y: number; pointerId: number } | null;
+    batchedDelta: { x: number; y: number } | null;
+    pointersOnUI: Map<number, { startX: number; startY: number }>;
 }
 
 // ============================================================================
@@ -201,11 +199,6 @@ function createDefaultAppState(): AppState {
         highlightedStrokes: new Set<number>(),
         viewTransform: { scale: 1, rotation: 0, panX: 0, panY: 0 },
         transformStart: null,
-        lastPrimaryPos: null,
-        lastSecondaryPos: null,
-        lastDelta: null,
-        batchedDelta: null,
-        pointersOnUI: new Map<number, { startX: number; startY: number }>(),
         debugMessages: [],
     };
 }
@@ -237,6 +230,12 @@ export const appContext: AppContext = {
     },
     stateMachine: new StateMachine(),
     eventHandler: new EventHandler(),
+    // Transient pointer-tracking state (not snapshotted)
+    lastPrimaryPos: null,
+    lastSecondaryPos: null,
+    lastDelta: null,
+    batchedDelta: null,
+    pointersOnUI: new Map<number, { startX: number; startY: number }>(),
 };
 
 // ============================================================================
@@ -333,12 +332,14 @@ export function resetState() {
     appState.highlightedStrokes.clear();
     appState.viewTransform = defaults.viewTransform;
     appState.transformStart = defaults.transformStart;
-    appState.lastPrimaryPos = defaults.lastPrimaryPos;
-    appState.lastSecondaryPos = defaults.lastSecondaryPos;
-    appState.lastDelta = defaults.lastDelta;
-    appState.batchedDelta = defaults.batchedDelta;
-    appState.pointersOnUI.clear();
     appState.debugMessages = defaults.debugMessages;
+
+    // Reset transient pointer-tracking state (in appContext)
+    appContext.lastPrimaryPos = null;
+    appContext.lastSecondaryPos = null;
+    appContext.lastDelta = null;
+    appContext.batchedDelta = null;
+    appContext.pointersOnUI.clear();
 
     // Reset state machine and event handler
     appContext.stateMachine.reset();

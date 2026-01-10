@@ -69,13 +69,6 @@ export function restoreSnapshot(snapshot: AppState): void {
 
     appState.viewTransform = cloned.viewTransform;
     appState.transformStart = cloned.transformStart;
-
-    // NOTE: We intentionally do NOT restore these transient pointer-tracking values:
-    // - lastPrimaryPos, lastSecondaryPos, lastDelta, batchedDelta
-    // - pointersOnUI
-    // These are input-tracking state that gets set when fingers touch the screen.
-    // Restoring them would cause cursor jumps on the next finger movement.
-
     appState.debugMessages = cloned.debugMessages;
 }
 
@@ -88,27 +81,57 @@ export function pushUndoSnapshot(): void {
 }
 
 /**
- * Undo: discard current state and restore the previous one.
+ * Convert a snapshot to a comparable string (for state comparison).
+ */
+function snapshotToString(snapshot: AppState): string {
+    // Create a serializable version (Set needs to be converted to Array for JSON)
+    const serializable = {
+        ...snapshot,
+        highlightedStrokes: Array.from(snapshot.highlightedStrokes),
+    };
+    return JSON.stringify(serializable);
+}
+
+/**
+ * Check if current app state differs from a snapshot.
+ */
+function statesDiffer(snapshot: AppState): boolean {
+    const current = captureSnapshot();
+    return snapshotToString(current) !== snapshotToString(snapshot);
+}
+
+/**
+ * Undo: restore a previous state.
  * Returns true if undo was performed, false if no previous state exists.
  *
- * With the "snapshot AFTER" approach:
- * - Stack contains completed states [S0, S1, S2, ...]
- * - Current state is always the top of the stack
- * - Undo pops the current state (discards it) and restores the one below
- * - Need at least 2 entries: one to discard, one to restore
+ * Logic:
+ * - If current state differs from top of stack → restore top (don't pop)
+ *   This handles cases where state changed without a snapshot (cursor moved, etc.)
+ * - If current state matches top of stack → pop and restore the one below
+ *   This is the normal case right after an operation completed with a snapshot
  */
 export function performUndo(): boolean {
-    if (undoStack.length < 2) {
-        // Need at least 2 states: current to discard, previous to restore
+    if (undoStack.length < 1) {
         return false;
     }
 
-    // Pop and discard current state
-    undoStack.pop();
+    const topSnapshot = undoStack[undoStack.length - 1];
 
-    // Restore the previous state (but keep it on the stack - it's now "current")
-    const previousState = undoStack[undoStack.length - 1];
-    restoreSnapshot(previousState);
+    if (statesDiffer(topSnapshot)) {
+        // Current state differs from top - restore top without popping
+        restoreSnapshot(topSnapshot);
+        return true;
+    }
+
+    // Current state matches top - need to go back one more
+    if (undoStack.length < 2) {
+        // Only one state on stack and we're already there
+        return false;
+    }
+
+    // Pop current state and restore the previous one
+    undoStack.pop();
+    restoreSnapshot(undoStack[undoStack.length - 1]);
     return true;
 }
 
@@ -127,10 +150,20 @@ export function getUndoStackSize(): number {
 }
 
 /**
- * Check if undo is possible (need at least 2 states on stack).
+ * Check if undo is possible.
+ * Undo is possible if:
+ * - Current state differs from top of stack (can restore to top), OR
+ * - There are at least 2 states on stack (can go back one)
  */
 export function canUndo(): boolean {
-    return undoStack.length >= 2;
+    if (undoStack.length < 1) {
+        return false;
+    }
+    if (undoStack.length >= 2) {
+        return true;
+    }
+    // Only 1 state - can undo only if current state differs from it
+    return statesDiffer(undoStack[0]);
 }
 
 // ============================================================================

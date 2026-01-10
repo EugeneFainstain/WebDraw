@@ -227,7 +227,8 @@ export function handleActions(actions: Action[]): void {
                 // Clear transformation undo state when selecting new stroke
                 state.transformSnapshot = null;
                 state.hasUndoableTransform = false;
-                // Snapshot AFTER stroke is complete and selected (coherent state)
+                // Snapshot AFTER stroke is saved and selected (coherent state)
+                // This is the key undo point - the stroke now exists in history
                 pushUndoSnapshot();
                 updateUI();
                 break;
@@ -266,8 +267,8 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.DESELECT_STROKE:
-                // Deselection is a state change - we snapshot AFTER so that undo
-                // from this state goes back to the selected state
+                // Deselection happens when cursor moves far from selected stroke
+                // No snapshot needed - this is just UI state, not a document change
                 state.selectedStrokeCursorPos = null;
                 state.selectedStrokeIdx = null;
                 state.selectedStrokePointIdx = null;
@@ -276,8 +277,6 @@ export function handleActions(actions: Action[]): void {
                 if (state.currentStroke !== null) {
                     state.highlightedStrokes.clear();
                 }
-                // Snapshot AFTER deselection (so undo from here restores selection)
-                pushUndoSnapshot();
                 // Clear transformation undo state on deselection
                 state.transformSnapshot = null;
                 state.hasUndoableTransform = false;
@@ -403,6 +402,9 @@ export function handleActions(actions: Action[]): void {
             case Action.SNAP_CURSOR_TO_SELECTED_STROKE:
                 // Snap cursor back to the anchor point on the selected stroke
                 // This happens when lifting finger after small cursor movement (< 3mm)
+                // Also happens after drawing a stroke (F1_UP after FINISH_STROKE)
+                // Note: No snapshot here - the stroke was already snapshotted in FINISH_STROKE
+                // Cursor snap is just a UI convenience, not a document change
                 if (state.selectedStrokeCursorPos) {
                     state.cursorPos = { ...state.selectedStrokeCursorPos };
                     // Cursor snapped back - ready to continue stroke
