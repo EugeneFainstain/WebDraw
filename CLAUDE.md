@@ -17,7 +17,23 @@ The overlay is the ONLY way to see debug information during mobile testing.
 
 ---
 
-**IMPORTANT**: When modifying the state machine ([src/stateMachine.ts](src/stateMachine.ts)), always update the documentation in STATE_MACHINE.md file synchronously. Keep code and documentation in sync.
+## ⚠️ CRITICAL: State Machine Documentation Rules ⚠️
+
+**WHEN MODIFYING THE STATE MACHINE, YOU MUST UPDATE THE DOCUMENTATION!**
+
+Any changes to the following files REQUIRE immediate updates to [STATE_MACHINE.md](STATE_MACHINE.md):
+- [src/stateMachine.ts](src/stateMachine.ts) - State transitions, events, actions
+- [src/actions.ts](src/actions.ts) - Action handlers (if adding new actions or changing behavior)
+
+**Before completing ANY state machine change:**
+1. Update the relevant sections in STATE_MACHINE.md
+2. Update transition tables if transitions changed
+3. Update action descriptions if actions changed
+4. Update event descriptions if events changed
+
+**This is NON-NEGOTIABLE. Code and documentation MUST stay in sync.**
+
+---
 
 ## Project Overview
 
