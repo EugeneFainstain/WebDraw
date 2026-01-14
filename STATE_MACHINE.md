@@ -36,9 +36,9 @@ The application has **5 distinct states**:
 
 ## State Modifier
 
-**Selected Stroke Mode** (`isStrokeSelected()`: function)
+**Selected Stroke Mode** (`isOnlyOneStrokeHighlighted()`: function)
 
-- **isStrokeSelected()** - Returns true if exactly one stroke is highlighted (i.e., `highlightedStrokes.size === 1`)
+- **isOnlyOneStrokeHighlighted()** - Returns true if exactly one stroke is highlighted (i.e., `highlightedStrokes.size === 1`)
 - When true: A stroke is selected (cursor shows green)
 - When false: No selection (normal mode, or multiple strokes highlighted)
 - The selected stroke is derived from `highlightedStrokes` - when exactly one stroke is highlighted, it's the "selected" stroke
@@ -99,7 +99,7 @@ The state machine maintains **2 flags**, **derived tap timestamps**, and **raw e
 All positions are in screen-space pixels (zoom-independent).
 
 **Calculated functions:**
-- **isStrokeSelected()** - Returns true if `highlightedStrokes.size === 1`. Derived from highlightedStrokes set.
+- **isOnlyOneStrokeHighlighted()** - Returns true if `highlightedStrokes.size === 1`. Derived from highlightedStrokes set.
 - **singleTapHappenedRecently()** - Returns true if singleTapHappenedTimestamp != 0 AND (now - singleTapHappenedTimestamp) < doubleTapTimeout.
 - **singleTapJustHappened()** - Returns true if singleTapHappenedTimestamp == now. Used to detect if a single tap was set in this same state machine pass.
 - **doubleTapJustHappened()** - Returns true if doubleTapHappenedTimestamp == now. Used to detect if a double tap was set in this same state machine pass.
@@ -195,8 +195,8 @@ After all tables have been processed, record the timestamp and position for the 
 |-------|---------------------------|
 | F2_DOWN | Go to Drawing. do [CREATE_STROKE] |
 | F3_DOWN | Go to Idle. do [ABORT_TOO_MANY_FINGERS, DEHIGHLIGHT_ALL] |
-| F1_UP | If singleTapJustHappened() -> do [SINGLE_TAP]. Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
-| CURSOR_MOVED_FAR | If isStrokeSelected() -> do [DEANCHOR_CURSOR] (clears anchor but keeps stroke highlighted) |
+| F1_UP | If singleTapJustHappened() -> do [SINGLE_TAP]. Else if isOnlyOneStrokeHighlighted() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
+| CURSOR_MOVED_FAR | If isOnlyOneStrokeHighlighted() -> do [DEANCHOR_CURSOR] (clears anchor but keeps stroke highlighted) |
 | PINCH_DETECTED | ----- |
 
 ### FROM Drawing State
@@ -238,7 +238,7 @@ After all tables have been processed, record the timestamp and position for the 
 | FINGER_UP_COMMON | If doubleTapJustHappened() -> Go to Idle. do [CANCEL_SELECTION_RECTANGLE, SELECT_CLOSEST_STROKE]. Else -> Go to Idle. do [APPLY_SELECTION_RECTANGLE] |
 | PINCH_DETECTED | ----- |
 
-**Note:** SelectionRectangle state always has isStrokeSelected() = false.
+**Note:** SelectionRectangle state always has isOnlyOneStrokeHighlighted() = false.
 
 **Note:** While in SelectionRectangle state, the rectangle updates continuously on cursor movement (handled outside state machine transitions).
 
@@ -256,7 +256,7 @@ After all tables have been processed, record the timestamp and position for the 
 
 ### Selected Stroke Mode
 
-**isStrokeSelected()** returns true when `highlightedStrokes.size === 1` (exactly one stroke is highlighted).
+**isOnlyOneStrokeHighlighted()** returns true when `highlightedStrokes.size === 1` (exactly one stroke is highlighted).
 
 The "selected stroke" is derived from `highlightedStrokes`:
 - When exactly 1 stroke is highlighted → that stroke is "selected" (`getSelectedStrokeIdx()` returns its index)
@@ -273,7 +273,7 @@ The "selected stroke" is derived from `highlightedStrokes`:
   - Tap-and-a-half (entering SelectionRectangle mode)
 - [SINGLE_TAP] - Handles single tap gesture, clears highlighting if cursor is on canvas (not on picker/menu)
 - DELETE button pressed (removes highlighted strokes)
-- Selection rectangle (can highlight multiple strokes, making `isStrokeSelected()` return false)
+- Selection rectangle (can highlight multiple strokes, making `isOnlyOneStrokeHighlighted()` return false)
 
 **De-anchoring** (clears anchor but keeps stroke highlighted):
 - [DEANCHOR_CURSOR] - Called when cursor moves >3mm from `cursorAnchorPos` (CURSOR_MOVED_FAR event)
@@ -352,7 +352,7 @@ When in Drawing state and F3_DOWN event occurs:
    - `State` enum - All possible states
    - `Event` enum - All possible events
    - `Action` enum - All possible actions
-   - `isStrokeSelected()` function - checks if a stroke is selected
+   - `isOnlyOneStrokeHighlighted()` function - checks if a stroke is selected
    - `EventFlags` type - Persistent event flags
    - `StateMachine` class - Main state machine logic
 
@@ -387,7 +387,7 @@ showDebug(`${result.actions}`);   // []
 showDebug(`${stateMachine.getState()}`);  // State.MovingCursor
 
 // Check if a stroke is selected (returns highlightedStrokes.size === 1)
-showDebug(`${isStrokeSelected()}`);  // false
+showDebug(`${isOnlyOneStrokeHighlighted()}`);  // false
 ```
 
 ### Debugging Utilities
@@ -421,7 +421,7 @@ To verify state machine behavior, use `showDebug()` from `state.ts` (see CLAUDE.
 
 2. **Check if stroke is selected:**
    ```typescript
-   showDebug(`Selected: ${isStrokeSelected()}`);  // true if highlightedStrokes.size === 1
+   showDebug(`Selected: ${isOnlyOneStrokeHighlighted()}`);  // true if highlightedStrokes.size === 1
    ```
 
 3. **Check flags:**

@@ -196,7 +196,7 @@ export class StateMachine {
     private flags: EventFlags;
     private timestamps: EventTimestamps;
 
-    // Reference to highlightedStrokes set - used to derive isStrokeSelected()
+    // Reference to highlightedStrokes set - used to derive isOnlyOneStrokeHighlighted()
     private highlightedStrokesRef: { current: Set<number> } = { current: new Set() };
 
     constructor() {
@@ -242,7 +242,7 @@ export class StateMachine {
 
     /**
      * Set the reference to highlightedStrokes (from app state)
-     * This allows isStrokeSelected() to check if exactly one stroke is highlighted
+     * This allows isOnlyOneStrokeHighlighted() to check if exactly one stroke is highlighted
      */
     public setHighlightedStrokesRef(ref: { current: Set<number> }): void {
         this.highlightedStrokesRef = ref;
@@ -255,7 +255,7 @@ export class StateMachine {
     /**
      * Returns true if exactly one stroke is highlighted (i.e., a stroke is "selected")
      */
-    public isStrokeSelected(): boolean {
+    public isOnlyOneStrokeHighlighted(): boolean {
         return this.highlightedStrokesRef.current.size === 1;
     }
 
@@ -579,7 +579,7 @@ export class StateMachine {
 
             case Event.F1_UP:
                 // If singleTapJustHappened() -> do [SINGLE_TAP] (handles highlighting, picker, menu interactions)
-                // Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE] (snap back after small movement)
+                // Else if isOnlyOneStrokeHighlighted() -> do [SNAP_CURSOR_TO_SELECTED_STROKE] (snap back after small movement)
                 // Finally: Go to Idle
                 // Note: doubleTapJustHappened() is handled in SelectionRectangle state, not here
                 if (this.singleTapJustHappened(now)) {
@@ -587,7 +587,7 @@ export class StateMachine {
                         newState: State.Idle,
                         actions: [Action.SINGLE_TAP]
                     };
-                } else if (this.isStrokeSelected()) {
+                } else if (this.isOnlyOneStrokeHighlighted()) {
                     // Not a tap, but stroke is selected - snap cursor back to anchor
                     return {
                         newState: State.Idle,
@@ -601,9 +601,9 @@ export class StateMachine {
                 }
 
             case Event.CURSOR_MOVED_FAR:
-                // If isStrokeSelected() -> do [DEANCHOR_CURSOR]
+                // If isOnlyOneStrokeHighlighted() -> do [DEANCHOR_CURSOR]
                 // This clears the anchor (no snap-back) but keeps the stroke highlighted
-                if (this.isStrokeSelected()) {
+                if (this.isOnlyOneStrokeHighlighted()) {
                     return {
                         newState: State.MovingCursor,
                         actions: [Action.DEANCHOR_CURSOR]

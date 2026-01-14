@@ -144,7 +144,7 @@ export function handlePointerMove(e: PointerEvent): void {
         callbacks.updateCursorPosition();
 
         // Check if cursor moved far from anchor - emit CURSOR_MOVED_FAR event
-        if (currentState === State.MovingCursor && state.stateMachine.isStrokeSelected()) {
+        if (currentState === State.MovingCursor && state.stateMachine.isOnlyOneStrokeHighlighted()) {
             if (isCursorFarFromAnchor()) {
                 // Emit event - state machine will handle deselection
                 const result = state.stateMachine.processEvent(SMEvent.CURSOR_MOVED_FAR);
