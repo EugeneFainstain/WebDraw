@@ -32,7 +32,7 @@ export interface StrokeOperationCallbacks {
     panToKeepCursorInView: () => void;
     findClosestStrokeAndPoint: (searchPos?: Point) => { strokeIdx: number; pointIdx: number; point: Point } | null;
     screenToCanvas: (screenPos: Point) => Point;
-    updatePickersForSelectedStroke: () => void;
+    updatePickersBasedOnSelectedStroke: () => void;
     redraw: () => void;
 }
 
@@ -380,7 +380,7 @@ export function groupHighlightedStrokes(): void {
     // Snapshot AFTER group is complete (coherent state)
     pushUndoSnapshot();
     updateUI();
-    callbacks.updatePickersForSelectedStroke();
+    callbacks.updatePickersBasedOnSelectedStroke();
     callbacks.redraw();
 }
 
