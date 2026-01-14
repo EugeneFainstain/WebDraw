@@ -34,15 +34,6 @@ The application has **5 distinct states**:
 4. **Transform** - Two or three fingers on screen, transforming canvas or selected stroke (zoom/pan/rotate)
 5. **SelectionRectangle** - Tap-and-a-half gesture active, dragging selection rectangle
 
-## State Modifier
-
-**Selected Stroke Mode** (`isOnlyOneStrokeHighlighted()`: function)
-
-- **isOnlyOneStrokeHighlighted()** - Returns true if exactly one stroke is highlighted (i.e., `highlightedStrokes.size === 1`)
-- When true: A stroke is selected (cursor shows green)
-- When false: No selection (normal mode, or multiple strokes highlighted)
-- The selected stroke is derived from `highlightedStrokes` - when exactly one stroke is highlighted, it's the "selected" stroke
-
 ## Gesture Separation: 2-Finger vs 3-Finger Transform
 
 The application separates zoom/pan/rotate gestures by finger count:
