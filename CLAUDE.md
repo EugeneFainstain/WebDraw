@@ -72,5 +72,5 @@ The app uses a formal state machine architecture (see [STATE_MACHINE.md](STATE_M
 - `currentStroke` - Stroke currently being drawn
 - `cursorPos` - Position of the drawing cursor in canvas coordinates
 - `selectedStrokeIdx` - Index of the selected stroke (null = no selection)
-- `selectedStrokeCursorPos` - Anchor point for deselection (updated while drawing, set on manual selection)
+- `cursorAnchorPos` - Cursor anchor position for snap-back and deselection distance check
 - `viewTransform` - Canvas transformation (scale, rotation, pan)

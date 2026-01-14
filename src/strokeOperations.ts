@@ -234,7 +234,7 @@ export function processDelete(): void {
     // Clear selection state
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
-    state.selectedStrokeCursorPos = null;
+    state.cursorAnchorPos = null;
     state.transformSnapshot = null;
     state.hasUndoableTransform = false;
 
@@ -340,7 +340,7 @@ export function duplicateSelectedStroke(): void {
     // Deselect any selected stroke
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
-    state.selectedStrokeCursorPos = null;
+    state.cursorAnchorPos = null;
 
     // Clear transformation undo state
     state.transformSnapshot = null;
@@ -434,7 +434,7 @@ export function ungroupSelectedStroke(): void {
     // Deselect
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
-    state.selectedStrokeCursorPos = null;
+    state.cursorAnchorPos = null;
 
     // Snapshot AFTER ungroup is complete (coherent state)
     pushUndoSnapshot();

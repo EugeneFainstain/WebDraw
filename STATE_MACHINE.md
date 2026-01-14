@@ -69,7 +69,7 @@ The state machine responds to **11 events**:
 4. **F1_UP** - Last finger lifted (was 1 finger, now 0)
 5. **F2_UP** - One of two fingers lifted (was 2 fingers, now 1)
 6. **F3_UP** - One of three fingers lifted (was 3 fingers, now 2)
-7. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `selectedStrokeCursorPos` (screen-space). Used for de-anchoring (clearing anchor while keeping stroke highlighted).
+7. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `cursorAnchorPos` (screen-space). Used for de-anchoring (clearing anchor while keeping stroke highlighted).
 8. **LONG_STROKE_DRAWN** - Stroke path length exceeded threshold (4mm). Used for gesture disambiguation (pinch vs draw) and stroke protection.
 9. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (4mm screen-space), indicating zoom/pan/rotate gesture
 10. **DELETE** - Delete button pressed
@@ -127,7 +127,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `ABANDON_STROKE` | Discard current stroke |
 | `SELECT_CLOSEST_STROKE` | Select closest stroke to cursor, snap cursor to that point, update pickers |
 | `DEHIGHLIGHT_ALL` | Clear all highlighting and anchor state |
-| `DEANCHOR_CURSOR` | Clear cursor anchor only (selectedStrokePointIdx, selectedStrokeCursorPos) - keeps stroke highlighted |
+| `DEANCHOR_CURSOR` | Clear cursor anchor only (selectedStrokePointIdx, cursorAnchorPos) - keeps stroke highlighted |
 | `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
 | `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag (also updates real-time highlighting) |
 | `APPLY_SELECTION_RECTANGLE` | Complete selection rectangle and keep strokes highlighted |
@@ -140,7 +140,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `ABORT_TOO_MANY_FINGERS` | Abort gesture (too many fingers) |
 | `SAVE_DRAG_START_CURSOR` | Save cursor position when starting drag (for snap-back after transform) |
 | `RESTORE_DRAG_START_CURSOR` | Restore cursor after canvas transform (2-finger zoom) |
-| `SNAP_CURSOR_TO_SELECTED_STROKE` | Snap cursor back to `selectedStrokeCursorPos` when lifting finger with stroke selected |
+| `SNAP_CURSOR_TO_SELECTED_STROKE` | Snap cursor back to `cursorAnchorPos` when lifting finger with stroke selected |
 | `DO_NOTHING` | No action required |
 
 ## Transition Tables
@@ -246,7 +246,7 @@ After all tables have been processed, record the timestamp and position for the 
 
 ### Event Flags Usage
 
-1. **cursorMovedFarHappened**: Set when the cursor moves >3mm from `selectedStrokeCursorPos` (the anchor point on the selected stroke). Used for:
+1. **cursorMovedFarHappened**: Set when the cursor moves >3mm from `cursorAnchorPos` (the anchor point on the selected stroke). Used for:
    - Single tap detection (deselection requires no cursor movement)
    - Cursor drag restoration when finger is lifted without significant movement
 
@@ -271,14 +271,14 @@ After all tables have been processed, record the timestamp and position for the 
 - DELETE button pressed (removes selected stroke, may select another)
 
 **De-anchoring** (clears anchor but keeps stroke highlighted):
-- [DEANCHOR_CURSOR] - Called when cursor moves >3mm from `selectedStrokeCursorPos` (CURSOR_MOVED_FAR event)
-  - Clears `selectedStrokePointIdx` and `selectedStrokeCursorPos`
+- [DEANCHOR_CURSOR] - Called when cursor moves >3mm from `cursorAnchorPos` (CURSOR_MOVED_FAR event)
+  - Clears `selectedStrokePointIdx` and `cursorAnchorPos`
   - Keeps `selectedStrokeIdx` and `highlightedStrokes` intact
   - Cursor shows white (no longer at a specific point on the stroke)
   - No snap-back when finger is lifted
   - Stroke continuation is disabled (can't continue a stroke when not anchored to an endpoint)
 
-**Note on Anchor Distance:** The anchor distance is measured from `selectedStrokeCursorPos`, which is:
+**Note on Anchor Distance:** The anchor distance is measured from `cursorAnchorPos`, which is:
 - Updated continuously while drawing (tracks the last point added to the stroke)
 - Set to the closest point on the stroke when manually selecting via double-tap
 

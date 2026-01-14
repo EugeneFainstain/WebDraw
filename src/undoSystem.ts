@@ -51,7 +51,7 @@ export function restoreSnapshot(snapshot: AppState): void {
     appState.cursorPos = cloned.cursorPos;
     appState.selectedStrokeIdx = cloned.selectedStrokeIdx;
     appState.selectedStrokePointIdx = cloned.selectedStrokePointIdx;
-    appState.selectedStrokeCursorPos = cloned.selectedStrokeCursorPos;
+    appState.cursorAnchorPos = cloned.cursorAnchorPos;
     appState.transformSnapshot = cloned.transformSnapshot;
     appState.hasUndoableTransform = cloned.hasUndoableTransform;
     appState.lastGridPosition = cloned.lastGridPosition;

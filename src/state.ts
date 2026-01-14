@@ -84,8 +84,8 @@ export interface AppState {
     // Index of the point within the selected stroke where the cursor is positioned
     selectedStrokePointIdx: number | null;
 
-    // Anchor point on the selected stroke (used to determine when to deselect)
-    selectedStrokeCursorPos: Point | null;
+    // Cursor anchor position (for snap-back and deselection distance check)
+    cursorAnchorPos: Point | null;
 
 
     // Track transformation undo state
@@ -186,7 +186,7 @@ function createDefaultAppState(): AppState {
         cursorPos: null,
         selectedStrokeIdx: null,
         selectedStrokePointIdx: null,
-        selectedStrokeCursorPos: null,
+        cursorAnchorPos: null,
         transformSnapshot: null,
         hasUndoableTransform: false,
         lastGridPosition: null,
@@ -320,7 +320,7 @@ export function resetState() {
     appState.cursorPos = defaults.cursorPos;
     appState.selectedStrokeIdx = defaults.selectedStrokeIdx;
     appState.selectedStrokePointIdx = defaults.selectedStrokePointIdx;
-    appState.selectedStrokeCursorPos = defaults.selectedStrokeCursorPos;
+    appState.cursorAnchorPos = defaults.cursorAnchorPos;
     appState.transformSnapshot = defaults.transformSnapshot;
     appState.hasUndoableTransform = defaults.hasUndoableTransform;
     appState.lastGridPosition = defaults.lastGridPosition;

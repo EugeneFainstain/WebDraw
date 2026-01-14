@@ -55,7 +55,7 @@ export function initActions(dependencies: ActionDependencies): void {
  * Called by DEHIGHLIGHT_ALL action and SINGLE_TAP action (when cursor is on canvas).
  */
 function doDehighlightAll(): void {
-    state.selectedStrokeCursorPos = null;
+    state.cursorAnchorPos = null;
     state.selectedStrokeIdx = null;
     state.selectedStrokePointIdx = null;
     state.highlightedStrokes.clear();
@@ -136,7 +136,7 @@ export function handleActions(actions: Action[]): void {
             case Action.SAVE_STROKE:
                 // SAVE_STROKE: Save current stroke to history and select/highlight it
                 // Handles both new strokes and stroke continuation (merging)
-                // Note: selectedStrokeCursorPos is already set during drawing via addPointToStroke()
+                // Note: cursorAnchorPos is already set during drawing via addPointToStroke()
                 if (state.currentStroke && state.currentStroke.points!.length > 0) {
                     let mergedSuccessfully = false;
 
@@ -170,7 +170,7 @@ export function handleActions(actions: Action[]): void {
                                 // Update selectedStrokePointIdx to still point to first point (now at index 0)
                                 state.selectedStrokePointIdx = 0;
                                 // Update anchor position to the new first point
-                                state.selectedStrokeCursorPos = { ...selectedStroke.points[0] };
+                                state.cursorAnchorPos = { ...selectedStroke.points[0] };
                                 mergedSuccessfully = true;
                             } else if (state.selectedStrokePointIdx === lastPointIdx) {
                                 // APPEND: cursor was at last point, append new points
@@ -185,7 +185,7 @@ export function handleActions(actions: Action[]): void {
                                 // Update selectedStrokePointIdx to the new last point
                                 state.selectedStrokePointIdx = selectedStroke.points.length - 1;
                                 // Update anchor position to the new last point
-                                state.selectedStrokeCursorPos = { ...selectedStroke.points[state.selectedStrokePointIdx] };
+                                state.cursorAnchorPos = { ...selectedStroke.points[state.selectedStrokePointIdx] };
                                 mergedSuccessfully = true;
                             }
                             // else: Not at an endpoint, can't merge - fall through to save as new stroke
@@ -240,8 +240,8 @@ export function handleActions(actions: Action[]): void {
                 // Move cursor back to where the stroke started
                 // BUT: if there's a selected stroke, snap to its anchor instead
                 // (this handles the case where a potential continuation was abandoned)
-                if (state.selectedStrokeCursorPos) {
-                    state.cursorPos = { ...state.selectedStrokeCursorPos };
+                if (state.cursorAnchorPos) {
+                    state.cursorPos = { ...state.cursorAnchorPos };
                 } else if (state.currentStroke && state.currentStroke.points && state.currentStroke.points.length > 0) {
                     state.cursorPos = { ...state.currentStroke.points[0] };
                 }
@@ -268,7 +268,7 @@ export function handleActions(actions: Action[]): void {
                     state.selectedStrokeIdx = closestResult.strokeIdx;
                     state.selectedStrokePointIdx = closestResult.pointIdx;
                     // Set anchor for deselection distance check
-                    state.selectedStrokeCursorPos = { ...closestResult.point };
+                    state.cursorAnchorPos = { ...closestResult.point };
                     // Clear transformation undo state when manually selecting a stroke
                     state.transformSnapshot = null;
                     state.hasUndoableTransform = false;
@@ -295,7 +295,7 @@ export function handleActions(actions: Action[]): void {
                 // Used when: cursor moves far from anchor (>3mm)
                 // Effect: No snap-back, but stroke stays highlighted/selected
                 // Cursor will show white (no endpoint indicator) since we're no longer at a point
-                state.selectedStrokeCursorPos = null;
+                state.cursorAnchorPos = null;
                 state.selectedStrokePointIdx = null;
                 // Keep selectedStrokeIdx and highlightedStrokes intact!
                 // Don't clear transformation undo state - stroke is still selected
@@ -412,7 +412,7 @@ export function handleActions(actions: Action[]): void {
                         if (state.selectedStrokePointIdx < allPoints.length) {
                             const snapPoint = allPoints[state.selectedStrokePointIdx];
                             state.cursorPos = { ...snapPoint };
-                            state.selectedStrokeCursorPos = { ...snapPoint };
+                            state.cursorAnchorPos = { ...snapPoint };
                         } else {
                             state.cursorPos = { ...state.dragStartCursorPos };
                         }
@@ -435,8 +435,8 @@ export function handleActions(actions: Action[]): void {
                 // Also happens after drawing a stroke (F1_UP after FINISH_STROKE)
                 // Note: No snapshot here - the stroke was already snapshotted in FINISH_STROKE
                 // Cursor snap is just a UI convenience, not a document change
-                if (state.selectedStrokeCursorPos) {
-                    state.cursorPos = { ...state.selectedStrokeCursorPos };
+                if (state.cursorAnchorPos) {
+                    state.cursorPos = { ...state.cursorAnchorPos };
                     // Cursor snapped back - ready to continue stroke (only if all fingers lifted)
                     if (state.eventHandler.getFingerCount() === 0) {
                         state.continueExistingStroke = true;

@@ -46,7 +46,7 @@ export enum Event {
     F1_UP = 'F1_UP',                  // Last finger lifted (was 1 finger, now 0)
     F2_UP = 'F2_UP',                  // One of two fingers lifted (was 2 fingers, now 1)
     F3_UP = 'F3_UP',                  // One of three fingers lifted (was 3 fingers, now 2)
-    CURSOR_MOVED_FAR = 'CURSOR_MOVED_FAR', // Cursor moved >3mm from selectedStrokeCursorPos (deselection/snap)
+    CURSOR_MOVED_FAR = 'CURSOR_MOVED_FAR', // Cursor moved >3mm from cursorAnchorPos (deselection/snap)
     LONG_STROKE_DRAWN = 'LONG_STROKE_DRAWN', // Stroke path length exceeded threshold (gesture lock)
     PINCH_DETECTED = 'PINCH_DETECTED', // Two-finger distance changed beyond threshold
     DELETE = 'DELETE',                // Delete button pressed
@@ -143,7 +143,7 @@ export enum Action {
     // Cursor snap-back actions
     SAVE_DRAG_START_CURSOR = 'SAVE_DRAG_START_CURSOR',           // Save cursor position when starting drag
     RESTORE_DRAG_START_CURSOR = 'RESTORE_DRAG_START_CURSOR',     // Restore cursor after canvas transform
-    SNAP_CURSOR_TO_SELECTED_STROKE = 'SNAP_CURSOR_TO_SELECTED_STROKE', // Snap cursor back to selectedStrokeCursorPos
+    SNAP_CURSOR_TO_SELECTED_STROKE = 'SNAP_CURSOR_TO_SELECTED_STROKE', // Snap cursor back to cursorAnchorPos
 
     // No action
     DO_NOTHING = 'DO_NOTHING'

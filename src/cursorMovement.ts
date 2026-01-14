@@ -317,7 +317,7 @@ export function addPointToStroke(): void {
             // Snap the cursor to the grid point while drawing
             state.cursorPos = { ...gridPoint };
             // Update anchor for deselection distance check
-            state.selectedStrokeCursorPos = { ...gridPoint };
+            state.cursorAnchorPos = { ...gridPoint };
         }
     } else {
         // Normal mode: add every point, but skip duplicates
@@ -327,7 +327,7 @@ export function addPointToStroke(): void {
         if (lastPoint.x !== state.cursorPos.x || lastPoint.y !== state.cursorPos.y) {
             points.push({ ...state.cursorPos });
             // Update anchor for deselection distance check
-            state.selectedStrokeCursorPos = { ...state.cursorPos };
+            state.cursorAnchorPos = { ...state.cursorPos };
         }
     }
 

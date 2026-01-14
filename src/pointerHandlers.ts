@@ -74,13 +74,13 @@ function getPointerPos(e: PointerEvent): Point {
  * Distance is measured in screen space for scale-independent behavior.
  */
 function isCursorFarFromAnchor(): boolean {
-    if (!state.cursorPos || !state.selectedStrokeCursorPos) {
+    if (!state.cursorPos || !state.cursorAnchorPos) {
         return false;
     }
 
     // Convert both points to screen space for scale-independent distance check
     const cursorScreen = callbacks.canvasToScreen(state.cursorPos);
-    const anchorScreen = callbacks.canvasToScreen(state.selectedStrokeCursorPos);
+    const anchorScreen = callbacks.canvasToScreen(state.cursorAnchorPos);
 
     const distance = callbacks.getDistance(cursorScreen, anchorScreen);
     return distance > getDeselectDistanceThreshold();
