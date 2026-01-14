@@ -1,5 +1,5 @@
 import { Action } from './stateMachine';
-import { state, Stroke, getSelectedStrokeIdx, clearSelectionState, clearAnchorState, clearTransformUndoState } from './state';
+import { state, Stroke, getSelectedStrokeIdx, clearSelectionState, clearAnchorState, resetTransformUndoState } from './state';
 import {
     initThreeFingerTransform,
 } from './transform';
@@ -217,7 +217,7 @@ export function handleActions(actions: Action[]): void {
                     }
 
                     // Clear transformation undo state when saving stroke
-                    clearTransformUndoState();
+                    resetTransformUndoState();
                     // Snapshot AFTER stroke is saved and selected (coherent state)
                     // This is the key undo point - the stroke now exists in history
                     pushUndoSnapshot();
@@ -265,7 +265,7 @@ export function handleActions(actions: Action[]): void {
                     // Set anchor for deselection distance check
                     state.cursorAnchorPos = { ...closestResult.point };
                     // Clear transformation undo state when manually selecting a stroke
-                    clearTransformUndoState();
+                    resetTransformUndoState();
                     // Highlight the selected stroke (this makes it the "selected" stroke)
                     state.highlightedStrokes.clear();
                     state.highlightedStrokes.add(closestResult.strokeIdx);

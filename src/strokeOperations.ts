@@ -20,7 +20,7 @@
  */
 
 import { Point } from './eventHandler';
-import { state, resetState, showDebug, Stroke, clearSelectionState, clearAnchorState, clearTransformUndoState } from './state';
+import { state, resetState, showDebug, Stroke, clearSelectionState, clearAnchorState, resetTransformUndoState } from './state';
 import { fitStroke } from './shapeFitting';
 import { pushUndoSnapshot, performUndo, canUndo } from './undoSystem';
 
@@ -317,7 +317,7 @@ export function duplicateSelectedStroke(): void {
 
     // Clear anchor and transform undo state (duplicated stroke has no anchor)
     clearAnchorState();
-    clearTransformUndoState();
+    resetTransformUndoState();
 
     // Highlight the new stroke (clear previous highlights)
     // This makes it the "selected" stroke since it's the only one highlighted

@@ -412,10 +412,10 @@ export function clearAnchorState(): void {
 }
 
 /**
- * Clear the transform undo state (snapshot for undoing transforms).
- * Use when: a new stroke is selected, or transform is committed/discarded.
+ * Reset the transform undo state (snapshot for undoing transforms).
+ * Use when: a new stroke is selected, or transform is committed (ready for next transform).
  */
-export function clearTransformUndoState(): void {
+export function resetTransformUndoState(): void {
     appState.transformSnapshot = null;
     appState.hasUndoableTransform = false;
 }
@@ -427,5 +427,5 @@ export function clearTransformUndoState(): void {
 export function clearSelectionState(): void {
     appState.highlightedStrokes.clear();
     clearAnchorState();
-    clearTransformUndoState();
+    resetTransformUndoState();
 }
