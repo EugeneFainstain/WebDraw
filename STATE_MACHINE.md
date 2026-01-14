@@ -69,7 +69,7 @@ The state machine responds to **11 events**:
 4. **F1_UP** - Last finger lifted (was 1 finger, now 0)
 5. **F2_UP** - One of two fingers lifted (was 2 fingers, now 1)
 6. **F3_UP** - One of three fingers lifted (was 3 fingers, now 2)
-7. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `selectedStrokeCursorPos` (screen-space). Used for deselection and snap-back.
+7. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `selectedStrokeCursorPos` (screen-space). Used for de-anchoring (clearing anchor while keeping stroke highlighted).
 8. **LONG_STROKE_DRAWN** - Stroke path length exceeded threshold (4mm). Used for gesture disambiguation (pinch vs draw) and stroke protection.
 9. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (4mm screen-space), indicating zoom/pan/rotate gesture
 10. **DELETE** - Delete button pressed
@@ -127,7 +127,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `ABANDON_STROKE` | Discard current stroke |
 | `FINISH_STROKE` | Finish drawing stroke (save and select it) |
 | `SELECT_CLOSEST_STROKE` | Select closest stroke to cursor, snap cursor to that point, update pickers |
-| `DESELECT_STROKE` | Deselect stroke (exit selected stroke mode) |
+| `DESELECT_STROKE` | Full deselection - clears highlighting, anchor, and selection |
+| `DEANCHOR_CURSOR` | Clear cursor anchor only (selectedStrokePointIdx, selectedStrokeCursorPos) - keeps stroke highlighted |
 | `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
 | `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag (also updates real-time highlighting) |
 | `APPLY_SELECTION_RECTANGLE` | Complete selection rectangle and keep strokes highlighted |
@@ -196,7 +197,7 @@ After all tables have been processed, record the timestamp and position for the 
 | F2_DOWN | Go to Drawing. do [CREATE_STROKE] |
 | F3_DOWN | Go to Idle. do [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
 | F1_UP | If singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]. Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
-| CURSOR_MOVED_FAR | If isStrokeSelected() -> do [DESELECT_STROKE] |
+| CURSOR_MOVED_FAR | If isStrokeSelected() -> do [DEANCHOR_CURSOR] (clears anchor but keeps stroke highlighted) |
 | PINCH_DETECTED | ----- |
 
 ### FROM Drawing State
@@ -263,18 +264,24 @@ After all tables have been processed, record the timestamp and position for the 
 - [SELECT_CLOSEST_STROKE] - On double-tap, selects the closest stroke to the cursor
 
 **Exit Conditions** (actions that clear `selectedStrokeIdx`):
-- [DESELECT_STROKE] - Called on:
+- [DESELECT_STROKE] - Full deselection, called on:
   - Single tap (quick tap without timeout or movement) when a stroke is selected
   - CLEAR button pressed
-  - Cursor movement >3mm from `selectedStrokeCursorPos` (CURSOR_MOVED_FAR event)
   - Too many fingers (F3_DOWN in MovingCursor)
   - Tap-and-a-half (entering SelectionRectangle mode)
 - DELETE button pressed (removes selected stroke, may select another)
 
-**Note on Deselection Distance:** The deselection distance is measured from `selectedStrokeCursorPos`, which is:
+**De-anchoring** (clears anchor but keeps stroke highlighted):
+- [DEANCHOR_CURSOR] - Called when cursor moves >3mm from `selectedStrokeCursorPos` (CURSOR_MOVED_FAR event)
+  - Clears `selectedStrokePointIdx` and `selectedStrokeCursorPos`
+  - Keeps `selectedStrokeIdx` and `highlightedStrokes` intact
+  - Cursor shows white (no longer at a specific point on the stroke)
+  - No snap-back when finger is lifted
+  - Stroke continuation is disabled (can't continue a stroke when not anchored to an endpoint)
+
+**Note on Anchor Distance:** The anchor distance is measured from `selectedStrokeCursorPos`, which is:
 - Updated continuously while drawing (tracks the last point added to the stroke)
 - Set to the closest point on the stroke when manually selecting via double-tap
-This anchor-based approach provides more intuitive deselection behavior compared to using finger movement thresholds.
 
 **Behavior:**
 - 2-finger transform always affects the entire canvas (regardless of selection/highlighting)

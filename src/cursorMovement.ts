@@ -564,10 +564,10 @@ export function updateCursorDiv(): void {
         // Normal state: show arrow cursor
         const outerColor = isWhite ? 'black' : drawColor;
 
-        // Inner ring color based on selection state:
-        // - lime (green): cursor at endpoint of selected stroke (can continue)
-        // - lightskyblue: cursor at middle point of selected stroke (can't continue)
-        // - white: no stroke selected
+        // Inner ring color based on anchor state:
+        // - lime (green): cursor anchored at endpoint of stroke (can continue drawing)
+        // - lightskyblue: cursor anchored at middle point of stroke (can't continue)
+        // - white: cursor not anchored to any stroke point (free-floating)
         let innerColor = 'white';
         if (state.selectedStrokeIdx !== null && state.selectedStrokePointIdx !== null) {
             const selectedStroke = state.strokeHistory[state.selectedStrokeIdx];

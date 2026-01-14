@@ -120,7 +120,8 @@ export enum Action {
     // Selected stroke actions
     FINISH_STROKE = 'FINISH_STROKE',                     // Finish drawing stroke (save and select it)
     SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to cursor (double-tap)
-    DESELECT_STROKE = 'DESELECT_STROKE',
+    DESELECT_STROKE = 'DESELECT_STROKE',                 // Full deselection (clears highlighting and anchor)
+    DEANCHOR_CURSOR = 'DEANCHOR_CURSOR',                 // Clear anchor only (cursor moved far, but keep highlighting)
 
     // Selection rectangle actions
     START_SELECTION_RECTANGLE = 'START_SELECTION_RECTANGLE',
@@ -604,11 +605,12 @@ export class StateMachine {
                 }
 
             case Event.CURSOR_MOVED_FAR:
-                // If isStrokeSelected() -> do [DESELECT_STROKE]
+                // If isStrokeSelected() -> do [DEANCHOR_CURSOR]
+                // This clears the anchor (no snap-back) but keeps the stroke highlighted
                 if (this.isStrokeSelected()) {
                     return {
                         newState: State.MovingCursor,
-                        actions: [Action.DESELECT_STROKE]
+                        actions: [Action.DEANCHOR_CURSOR]
                     };
                 }
                 return { newState: State.MovingCursor, actions: [] };

@@ -273,20 +273,28 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.DESELECT_STROKE:
-                // Deselection happens when cursor moves far from selected stroke
+                // Full deselection - clears everything (highlighting, anchor, selection)
+                // Used when: clearing canvas, aborting gesture, starting new selection rectangle
                 // No snapshot needed - this is just UI state, not a document change
                 state.selectedStrokeCursorPos = null;
                 state.selectedStrokeIdx = null;
                 state.selectedStrokePointIdx = null;
-                // If we're currently drawing, also clear highlighting
-                // (this happens when FINGER_MOVED_FAR during drawing)
-                if (state.currentStroke !== null) {
-                    state.highlightedStrokes.clear();
-                }
+                state.highlightedStrokes.clear();
                 // Clear transformation undo state on deselection
                 state.transformSnapshot = null;
                 state.hasUndoableTransform = false;
-                // NOTE: Don't clearDebug() here - debug messages should persist
+                updateUI();
+                break;
+
+            case Action.DEANCHOR_CURSOR:
+                // De-anchor cursor - clears anchor point but keeps stroke highlighted
+                // Used when: cursor moves far from anchor (>3mm)
+                // Effect: No snap-back, but stroke stays highlighted/selected
+                // Cursor will show white (no endpoint indicator) since we're no longer at a point
+                state.selectedStrokeCursorPos = null;
+                state.selectedStrokePointIdx = null;
+                // Keep selectedStrokeIdx and highlightedStrokes intact!
+                // Don't clear transformation undo state - stroke is still selected
                 updateUI();
                 break;
 
