@@ -344,11 +344,6 @@ export function addPointToStroke(): void {
             state.eventHandler.lockGestureAsDrawing();
             // Emit LONG_STROKE_DRAWN event to set the flag for stroke protection
             state.stateMachine.processEvent(Event.LONG_STROKE_DRAWN);
-            // Clear highlighting - we're now committed to drawing, not zooming
-            // BUT: keep highlighting if we're continuing an existing stroke (for merge in SAVE_STROKE)
-            if (!state.continueExistingStroke) {
-                state.highlightedStrokes.clear();
-            }
         }
     }
 }
