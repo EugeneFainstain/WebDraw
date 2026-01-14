@@ -20,7 +20,7 @@
  */
 
 import { Point } from './eventHandler';
-import { state, resetState, showDebug, Stroke } from './state';
+import { state, resetState, showDebug, Stroke, clearSelectionState, clearAnchorState, clearTransformUndoState } from './state';
 import { fitStroke } from './shapeFitting';
 import { pushUndoSnapshot, performUndo, canUndo } from './undoSystem';
 
@@ -218,14 +218,8 @@ export function processDelete(): void {
         }
     }
 
-    // Clear highlighted strokes (this also clears "selected" state since it's derived)
-    state.highlightedStrokes.clear();
-
-    // Clear anchor state
-    state.selectedStrokePointIdx = null;
-    state.cursorAnchorPos = null;
-    state.transformSnapshot = null;
-    state.hasUndoableTransform = false;
+    // Clear all selection state (highlighted strokes + anchor + transform undo)
+    clearSelectionState();
 
     // Snapshot AFTER delete is complete (coherent state)
     pushUndoSnapshot();
@@ -321,19 +315,15 @@ export function duplicateSelectedStroke(): void {
     // Add the duplicated stroke to history
     state.strokeHistory.push(duplicatedStroke);
 
+    // Clear anchor and transform undo state (duplicated stroke has no anchor)
+    clearAnchorState();
+    clearTransformUndoState();
+
     // Highlight the new stroke (clear previous highlights)
     // This makes it the "selected" stroke since it's the only one highlighted
     const newIdx = state.strokeHistory.length - 1;
     state.highlightedStrokes.clear();
     state.highlightedStrokes.add(newIdx);
-
-    // Clear anchor state (duplicated stroke has no anchor)
-    state.selectedStrokePointIdx = null;
-    state.cursorAnchorPos = null;
-
-    // Clear transformation undo state
-    state.transformSnapshot = null;
-    state.hasUndoableTransform = false;
 
     // Snapshot AFTER duplicate is complete (coherent state)
     pushUndoSnapshot();
@@ -422,8 +412,7 @@ export function ungroupSelectedStroke(): void {
     }
 
     // Clear anchor state (no single selected stroke after ungroup)
-    state.selectedStrokePointIdx = null;
-    state.cursorAnchorPos = null;
+    clearAnchorState();
 
     // Snapshot AFTER ungroup is complete (coherent state)
     pushUndoSnapshot();

@@ -397,3 +397,35 @@ export function getSelectedStrokeIdx(): number | null {
     }
     return null;
 }
+
+// ============================================================================
+// SELECTION STATE HELPERS
+// ============================================================================
+
+/**
+ * Clear the cursor anchor state (where cursor is anchored on a stroke).
+ * Use when: cursor moves away from its anchor point, or selection changes.
+ */
+export function clearAnchorState(): void {
+    appState.selectedStrokePointIdx = null;
+    appState.cursorAnchorPos = null;
+}
+
+/**
+ * Clear the transform undo state (snapshot for undoing transforms).
+ * Use when: a new stroke is selected, or transform is committed/discarded.
+ */
+export function clearTransformUndoState(): void {
+    appState.transformSnapshot = null;
+    appState.hasUndoableTransform = false;
+}
+
+/**
+ * Clear all selection-related state (highlighted strokes + anchor + transform undo).
+ * Use when: stroke is deleted or fully deselected.
+ */
+export function clearSelectionState(): void {
+    appState.highlightedStrokes.clear();
+    clearAnchorState();
+    clearTransformUndoState();
+}

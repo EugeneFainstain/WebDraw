@@ -1,5 +1,5 @@
 import { Action } from './stateMachine';
-import { state, Stroke, getSelectedStrokeIdx } from './state';
+import { state, Stroke, getSelectedStrokeIdx, clearSelectionState, clearAnchorState, clearTransformUndoState } from './state';
 import {
     initThreeFingerTransform,
 } from './transform';
@@ -55,12 +55,7 @@ export function initActions(dependencies: ActionDependencies): void {
  * Called by DEHIGHLIGHT_ALL action and SINGLE_TAP action (when cursor is on canvas).
  */
 function doDehighlightAll(): void {
-    state.cursorAnchorPos = null;
-    state.selectedStrokePointIdx = null;
-    state.highlightedStrokes.clear();
-    // Clear transformation undo state
-    state.transformSnapshot = null;
-    state.hasUndoableTransform = false;
+    clearSelectionState();
     updateUI();
 }
 
@@ -222,8 +217,7 @@ export function handleActions(actions: Action[]): void {
                     }
 
                     // Clear transformation undo state when saving stroke
-                    state.transformSnapshot = null;
-                    state.hasUndoableTransform = false;
+                    clearTransformUndoState();
                     // Snapshot AFTER stroke is saved and selected (coherent state)
                     // This is the key undo point - the stroke now exists in history
                     pushUndoSnapshot();
@@ -271,8 +265,7 @@ export function handleActions(actions: Action[]): void {
                     // Set anchor for deselection distance check
                     state.cursorAnchorPos = { ...closestResult.point };
                     // Clear transformation undo state when manually selecting a stroke
-                    state.transformSnapshot = null;
-                    state.hasUndoableTransform = false;
+                    clearTransformUndoState();
                     // Highlight the selected stroke (this makes it the "selected" stroke)
                     state.highlightedStrokes.clear();
                     state.highlightedStrokes.add(closestResult.strokeIdx);
@@ -297,8 +290,7 @@ export function handleActions(actions: Action[]): void {
                 // Used when: cursor moves far from anchor (>3mm)
                 // Effect: No snap-back, but stroke stays highlighted/selected
                 // Cursor will show white (no endpoint indicator) since we're no longer at a point
-                state.cursorAnchorPos = null;
-                state.selectedStrokePointIdx = null;
+                clearAnchorState();
                 // Keep highlightedStrokes intact!
                 // Don't clear transformation undo state - stroke is still selected
                 updateUI();
