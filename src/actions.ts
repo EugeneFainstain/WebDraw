@@ -246,6 +246,9 @@ export function handleActions(actions: Action[]): void {
                     if (selectedStroke.points!.length > 0) {
                         state.selectedStrokePointIdx = selectedStroke.points!.length - 1;
                     }
+                    // Clear previous highlighting and highlight the new stroke
+                    state.highlightedStrokes.clear();
+                    state.highlightedStrokes.add(state.selectedStrokeIdx);
                 }
                 // Clear transformation undo state when selecting new stroke
                 state.transformSnapshot = null;

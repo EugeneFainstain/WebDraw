@@ -654,14 +654,11 @@ export class StateMachine {
                 }
 
             case Event.F2_UP:
-                // Go to MovingCursor, do [SAVE_STROKE]. If not isStrokeSelected() -> do [FINISH_STROKE]
-                const actions: Action[] = [Action.SAVE_STROKE];
-                if (!this.isStrokeSelected()) {
-                    actions.push(Action.FINISH_STROKE);
-                }
+                // Go to MovingCursor, do [SAVE_STROKE, FINISH_STROKE]
+                // FINISH_STROKE always runs - it selects and highlights the last stroke in history
                 return {
                     newState: State.MovingCursor,
-                    actions
+                    actions: [Action.SAVE_STROKE, Action.FINISH_STROKE]
                 };
 
             case Event.LONG_STROKE_DRAWN:

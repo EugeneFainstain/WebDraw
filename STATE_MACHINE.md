@@ -208,7 +208,7 @@ After all tables have been processed, record the timestamp and position for the 
 | F2_DOWN | ----- |
 | PINCH_DETECTED | Go to Transform. do [ABANDON_STROKE, INIT_TRANSFORM] |
 | F3_DOWN | Go to Transform. If longStrokeDrawnHappened -> do [SAVE_STROKE, INIT_TRANSFORM], else do [ABANDON_STROKE, INIT_TRANSFORM] |
-| F2_UP | Go to MovingCursor. do [SAVE_STROKE]. If not isStrokeSelected() -> do [FINISH_STROKE] |
+| F2_UP | Go to MovingCursor. do [SAVE_STROKE, FINISH_STROKE] |
 | LONG_STROKE_DRAWN | Set longStrokeDrawnHappened = true |
 
 **Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >4mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached the length threshold (LONG_STROKE_DRAWN fired), the gesture is locked as drawing and PINCH_DETECTED won't fire.
