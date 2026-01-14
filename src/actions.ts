@@ -197,6 +197,10 @@ export function handleActions(actions: Action[]): void {
                                 selectedStroke.fitType = undefined;
                                 selectedStroke.showingFitted = undefined;
                                 selectedStroke.fittedWithSize = undefined;
+                                // Re-highlight the merged stroke (highlighting may have been cleared
+                                // when the gesture was locked as drawing)
+                                state.highlightedStrokes.clear();
+                                state.highlightedStrokes.add(state.selectedStrokeIdx!);
                             }
                         }
                         // else: Can't merge (it's a group) - fall through to save as new stroke
