@@ -118,7 +118,6 @@ export enum Action {
     ABANDON_STROKE = 'ABANDON_STROKE',
 
     // Selected stroke actions
-    FINISH_STROKE = 'FINISH_STROKE',                     // Finish drawing stroke (save and select it)
     SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to cursor (double-tap)
     DEHIGHLIGHT_ALL = 'DEHIGHLIGHT_ALL',                 // Clear all highlighting and anchor state
     DEANCHOR_CURSOR = 'DEANCHOR_CURSOR',                 // Clear anchor only (cursor moved far, but keep highlighting)
@@ -654,11 +653,11 @@ export class StateMachine {
                 }
 
             case Event.F2_UP:
-                // Go to MovingCursor, do [SAVE_STROKE, FINISH_STROKE]
-                // FINISH_STROKE always runs - it selects and highlights the last stroke in history
+                // Go to MovingCursor, do [SAVE_STROKE]
+                // SAVE_STROKE now handles everything: saving, selecting, and highlighting
                 return {
                     newState: State.MovingCursor,
-                    actions: [Action.SAVE_STROKE, Action.FINISH_STROKE]
+                    actions: [Action.SAVE_STROKE]
                 };
 
             case Event.LONG_STROKE_DRAWN:

@@ -41,7 +41,7 @@ The application has **5 distinct states**:
 - **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null` (i.e., a stroke is selected)
 - When true: A stroke is selected (cursor shows green)
 - When false: No selection (normal mode)
-- The underlying `selectedStrokeIdx` is managed by actions like [FINISH_STROKE], [SELECT_CLOSEST_STROKE], and [DEHIGHLIGHT_ALL]
+- The underlying `selectedStrokeIdx` is managed by actions like [SAVE_STROKE], [SELECT_CLOSEST_STROKE], and [DEHIGHLIGHT_ALL]
 
 ## Gesture Separation: 2-Finger vs 3-Finger Transform
 
@@ -99,7 +99,7 @@ The state machine maintains **2 flags**, **derived tap timestamps**, and **raw e
 All positions are in screen-space pixels (zoom-independent).
 
 **Calculated functions:**
-- **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null`. Managed by [FINISH_STROKE], [SELECT_CLOSEST_STROKE], [DEHIGHLIGHT_ALL] actions.
+- **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null`. Managed by [SAVE_STROKE], [SELECT_CLOSEST_STROKE], [DEHIGHLIGHT_ALL] actions.
 - **singleTapHappenedRecently()** - Returns true if singleTapHappenedTimestamp != 0 AND (now - singleTapHappenedTimestamp) < doubleTapTimeout.
 - **singleTapJustHappened()** - Returns true if singleTapHappenedTimestamp == now. Used to detect if a single tap was set in this same state machine pass.
 - **doubleTapJustHappened()** - Returns true if doubleTapHappenedTimestamp == now. Used to detect if a double tap was set in this same state machine pass.
@@ -123,9 +123,8 @@ When a state transition occurs, the state machine returns a list of **actions** 
 |--------|-------------|
 | `MOVE_CURSOR` | Move the drawing cursor |
 | `CREATE_STROKE` | Create a new stroke, or continue an existing selected stroke if cursor is at its last point |
-| `SAVE_STROKE` | Save current stroke to history |
+| `SAVE_STROKE` | Save current stroke to history, select it, and highlight it |
 | `ABANDON_STROKE` | Discard current stroke |
-| `FINISH_STROKE` | Finish drawing stroke (save and select it) |
 | `SELECT_CLOSEST_STROKE` | Select closest stroke to cursor, snap cursor to that point, update pickers |
 | `DEHIGHLIGHT_ALL` | Clear all highlighting and anchor state |
 | `DEANCHOR_CURSOR` | Clear cursor anchor only (selectedStrokePointIdx, selectedStrokeCursorPos) - keeps stroke highlighted |
@@ -208,7 +207,7 @@ After all tables have been processed, record the timestamp and position for the 
 | F2_DOWN | ----- |
 | PINCH_DETECTED | Go to Transform. do [ABANDON_STROKE, INIT_TRANSFORM] |
 | F3_DOWN | Go to Transform. If longStrokeDrawnHappened -> do [SAVE_STROKE, INIT_TRANSFORM], else do [ABANDON_STROKE, INIT_TRANSFORM] |
-| F2_UP | Go to MovingCursor. do [SAVE_STROKE, FINISH_STROKE] |
+| F2_UP | Go to MovingCursor. do [SAVE_STROKE] |
 | LONG_STROKE_DRAWN | Set longStrokeDrawnHappened = true |
 
 **Note on PINCH_DETECTED:** Triggered when two-finger distance changes by >4mm (screen-space). The stroke is abandoned (not saved) and transform begins. However, if the stroke has already reached the length threshold (LONG_STROKE_DRAWN fired), the gesture is locked as drawing and PINCH_DETECTED won't fire.
@@ -260,7 +259,7 @@ After all tables have been processed, record the timestamp and position for the 
 **isStrokeSelected()** returns true when `selectedStrokeIdx != null`.
 
 **Entry Conditions** (actions that set `selectedStrokeIdx`):
-- [FINISH_STROKE] - Automatically when completing a stroke (F2_UP in Drawing state)
+- [SAVE_STROKE] - Automatically when saving a stroke (selects and highlights it)
 - [SELECT_CLOSEST_STROKE] - On double-tap, selects the closest stroke to the cursor
 
 **Exit Conditions** (actions that clear `selectedStrokeIdx`):
@@ -308,7 +307,7 @@ If any condition is not met, a new stroke is created as normal (and the selectio
 **The `continueExistingStroke` flag:**
 - Set to `true` when: stroke is selected via double-tap ([SELECT_CLOSEST_STROKE]), cursor snaps back to selected stroke ([SNAP_CURSOR_TO_SELECTED_STROKE]), or transform completes with a selected stroke ([RESTORE_DRAG_START_CURSOR]) - but ONLY if all fingers are lifted (`getFingerCount() === 0`)
 - Set to `false` when: [SAVE_STROKE] or [ABANDON_STROKE] is executed (stroke completed or cancelled)
-- NOT set by [FINISH_STROKE] - this ensures continuation only works after all fingers are lifted, not when just the drawing finger is lifted while the anchor finger remains down.
+- NOT set by [SAVE_STROKE] when saving - this ensures continuation only works after all fingers are lifted, not when just the drawing finger is lifted while the anchor finger remains down.
 
 ### Stroke Protection
 

@@ -134,7 +134,12 @@ export function handleActions(actions: Action[]): void {
                 break;
 
             case Action.SAVE_STROKE:
+                // SAVE_STROKE: Save current stroke to history and select/highlight it
+                // Handles both new strokes and stroke continuation (merging)
+                // Note: selectedStrokeCursorPos is already set during drawing via addPointToStroke()
                 if (state.currentStroke && state.currentStroke.points!.length > 0) {
+                    let mergedSuccessfully = false;
+
                     // Check if we should merge with a selected stroke (deferred continuation)
                     // Only merge if continueExistingStroke was true when stroke started
                     if (state.continueExistingStroke &&
@@ -166,6 +171,7 @@ export function handleActions(actions: Action[]): void {
                                 state.selectedStrokePointIdx = 0;
                                 // Update anchor position to the new first point
                                 state.selectedStrokeCursorPos = { ...selectedStroke.points[0] };
+                                mergedSuccessfully = true;
                             } else if (state.selectedStrokePointIdx === lastPointIdx) {
                                 // APPEND: cursor was at last point, append new points
                                 const lastSelectedPoint = selectedStroke.points[lastPointIdx];
@@ -180,32 +186,42 @@ export function handleActions(actions: Action[]): void {
                                 state.selectedStrokePointIdx = selectedStroke.points.length - 1;
                                 // Update anchor position to the new last point
                                 state.selectedStrokeCursorPos = { ...selectedStroke.points[state.selectedStrokePointIdx] };
-                            } else {
-                                // Not at an endpoint, can't merge - save as new stroke and clear selection
-                                state.strokeHistory.push(state.currentStroke);
-                                state.selectedStrokeIdx = null;
-                                state.selectedStrokePointIdx = null;
-                                state.selectedStrokeCursorPos = null;
-                                state.highlightedStrokes.clear();
+                                mergedSuccessfully = true;
                             }
-                            // Clear any fitted data since the stroke changed
-                            selectedStroke.fittedPoints = undefined;
-                            selectedStroke.originalPoints = undefined;
-                            selectedStroke.fitType = undefined;
-                            selectedStroke.showingFitted = undefined;
-                            selectedStroke.fittedWithSize = undefined;
-                        } else {
-                            // Can't merge (it's a group), just save as new stroke and clear selection
-                            state.strokeHistory.push(state.currentStroke);
-                            state.selectedStrokeIdx = null;
-                            state.selectedStrokePointIdx = null;
-                            state.selectedStrokeCursorPos = null;
-                            state.highlightedStrokes.clear();
+                            // else: Not at an endpoint, can't merge - fall through to save as new stroke
+
+                            if (mergedSuccessfully) {
+                                // Clear any fitted data since the stroke changed
+                                selectedStroke.fittedPoints = undefined;
+                                selectedStroke.originalPoints = undefined;
+                                selectedStroke.fitType = undefined;
+                                selectedStroke.showingFitted = undefined;
+                                selectedStroke.fittedWithSize = undefined;
+                            }
                         }
-                    } else {
-                        // No selection, just save as new stroke
-                        state.strokeHistory.push(state.currentStroke);
+                        // else: Can't merge (it's a group) - fall through to save as new stroke
                     }
+
+                    if (!mergedSuccessfully) {
+                        // Save as new stroke and select/highlight it
+                        state.strokeHistory.push(state.currentStroke);
+                        state.selectedStrokeIdx = state.strokeHistory.length - 1;
+                        const savedStroke = state.strokeHistory[state.selectedStrokeIdx];
+                        // Set point index to the last point of the stroke
+                        if (savedStroke.points!.length > 0) {
+                            state.selectedStrokePointIdx = savedStroke.points!.length - 1;
+                        }
+                        // Clear previous highlighting and highlight the new stroke
+                        state.highlightedStrokes.clear();
+                        state.highlightedStrokes.add(state.selectedStrokeIdx);
+                    }
+
+                    // Clear transformation undo state when saving stroke
+                    state.transformSnapshot = null;
+                    state.hasUndoableTransform = false;
+                    // Snapshot AFTER stroke is saved and selected (coherent state)
+                    // This is the key undo point - the stroke now exists in history
+                    pushUndoSnapshot();
                     updateUI();
                 }
                 state.currentStroke = null;
@@ -228,35 +244,6 @@ export function handleActions(actions: Action[]): void {
                 state.currentStroke = null;
                 state.lastGridPosition = null;
                 state.continueExistingStroke = false;
-                break;
-
-            case Action.FINISH_STROKE:
-                // FINISH_STROKE: Automatically select the stroke that was just drawn
-                // Triggered after: Finishing a drawing (lifting second finger)
-                // Behavior: Selects the last stroke in history (the one just completed)
-                //           Cursor stays at its current position
-                // Note: selectedStrokeCursorPos is already set during drawing via addPointToStroke()
-                // Note: continueExistingStroke is NOT set here - it will be set when
-                //       all fingers are lifted (via SNAP_CURSOR_TO_SELECTED_STROKE on F1_UP)
-                // Set selected stroke to the last stroke in history
-                if (state.strokeHistory.length > 0) {
-                    state.selectedStrokeIdx = state.strokeHistory.length - 1;
-                    const selectedStroke = state.strokeHistory[state.selectedStrokeIdx];
-                    // Set point index to the last point of the stroke
-                    if (selectedStroke.points!.length > 0) {
-                        state.selectedStrokePointIdx = selectedStroke.points!.length - 1;
-                    }
-                    // Clear previous highlighting and highlight the new stroke
-                    state.highlightedStrokes.clear();
-                    state.highlightedStrokes.add(state.selectedStrokeIdx);
-                }
-                // Clear transformation undo state when selecting new stroke
-                state.transformSnapshot = null;
-                state.hasUndoableTransform = false;
-                // Snapshot AFTER stroke is saved and selected (coherent state)
-                // This is the key undo point - the stroke now exists in history
-                pushUndoSnapshot();
-                updateUI();
                 break;
 
             case Action.SELECT_CLOSEST_STROKE:
