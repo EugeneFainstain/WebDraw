@@ -374,19 +374,20 @@ When in Drawing state and F3_DOWN event occurs:
 
 ```typescript
 import { StateMachine, Event } from './stateMachine';
+import { showDebug } from './state';
 
 const stateMachine = new StateMachine();
 
 // Process an event
 const result = stateMachine.processEvent(Event.F1_DOWN);
-console.log(result.newState);  // State.MovingCursor
-console.log(result.actions);    // []
+showDebug(`${result.newState}`);  // State.MovingCursor
+showDebug(`${result.actions}`);   // []
 
 // Check current state
-console.log(stateMachine.getState());  // State.MovingCursor
+showDebug(`${stateMachine.getState()}`);  // State.MovingCursor
 
 // Check if a stroke is selected (returns highlightedStrokes.size === 1)
-console.log(isStrokeSelected());  // false
+showDebug(`${isStrokeSelected()}`);  // false
 ```
 
 ### Debugging Utilities
@@ -410,29 +411,28 @@ const transitions = machine.getTransitionsFrom(State.Idle);
 
 ## Testing
 
-To verify state machine behavior, you can:
+To verify state machine behavior, use `showDebug()` from `state.ts` (see CLAUDE.md for why console.log is not used):
 
 1. **Check current state:**
    ```typescript
-   console.log(stateMachine.getState());
+   import { showDebug } from './state';
+   showDebug(`State: ${stateMachine.getState()}`);
    ```
 
 2. **Check if stroke is selected:**
    ```typescript
-   console.log(isStrokeSelected());  // true if highlightedStrokes.size === 1
+   showDebug(`Selected: ${isStrokeSelected()}`);  // true if highlightedStrokes.size === 1
    ```
 
 3. **Check flags:**
    ```typescript
-   console.log(stateMachine.getFlags());
+   showDebug(`Flags: ${JSON.stringify(stateMachine.getFlags())}`);
    ```
 
 4. **Trace transitions:**
    ```typescript
    eventHandler.setEventCallback((event) => {
-     console.log(`Event: ${event}`);
      const result = stateMachine.processEvent(event);
-     console.log(`State: ${result.newState}`);
-     console.log(`Actions: ${result.actions}`);
+     showDebug(`${event} → ${result.newState} [${result.actions}]`);
    });
    ```

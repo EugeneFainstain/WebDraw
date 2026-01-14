@@ -304,7 +304,6 @@ function classifyShape(distances: number[], vertices: Point[], center: Point, nu
     const radiusVariation = range / avgDist;
 
     const radiusDebugInfo = `R:${minDist.toFixed(0)}-${maxDist.toFixed(0)} var=${(radiusVariation*100).toFixed(0)}%`;
-    console.log(`Radius analysis: min=${minDist.toFixed(1)}, max=${maxDist.toFixed(1)}, avg=${avgDist.toFixed(1)}, variation=${(radiusVariation*100).toFixed(1)}%`);
 
     // ========================================================================
     // Test for STARFISH pattern (alternating inner/outer radii)
@@ -392,7 +391,6 @@ function classifyShape(distances: number[], vertices: Point[], center: Point, nu
                 // If winding number is close to 1 (simple shape), it's a starfish
                 if (windingError < 0.5) {  // Allow winding between 0.5 and 1.5
                     starfishDebugInfo += ' ✓PASS';
-                    console.log('→ ALL TESTS PASSED: Classified as starfish');
                     return {
                         type: 'star',
                         outerRadius,
@@ -404,32 +402,25 @@ function classifyShape(distances: number[], vertices: Point[], center: Point, nu
                     };
                 } else {
                     starfishDebugInfo += ' ✗fail4';
-                    console.log(`→ FAILED test 4 (winding number ${windingNumber.toFixed(2)}, expected ~1.0)`);
                 }
             } else {
                 starfishDebugInfo += ' ✗fail2';
-                console.log('→ FAILED test 2 (groups not equal)');
             }
         } else {
             starfishDebugInfo += ' ✗fail3';
-            console.log('→ FAILED test 3 (radius difference too small)');
         }
     } else {
         starfishDebugInfo += ' ✗fail1';
-        console.log('→ FAILED test 1 (odd number of vertices)');
     }
 
     // ========================================================================
     // Default path: POLYGON or SELF-CROSSING STAR (single radius, test step patterns)
     // ========================================================================
 
-    console.log('→ Going to polygon/X-star path (testing step patterns)');
     const { bestStep, debugPatterns } = findBestPolygonStepPattern(vertices, center, avgDist, numVertices);
-    console.log('Best pattern selected:', bestStep);
 
     if (bestStep === 1) {
         // Step pattern of 1 = regular polygon
-        console.log('→ Classified as regular polygon');
         return {
             type: 'polygon',
             outerRadius: avgDist,
@@ -440,7 +431,6 @@ function classifyShape(distances: number[], vertices: Point[], center: Point, nu
         };
     } else {
         // Step pattern > 1 = self-crossing star with single radius (pentagram-like)
-        console.log('→ Classified as self-crossing star with pattern', bestStep);
         return {
             type: 'self-crossing-star',
             outerRadius: avgDist,
@@ -488,7 +478,6 @@ function findBestPolygonStepPattern(
     for (let step = 1; step < numVertices; step++) {
         // Skip patterns that don't visit all points (non-coprime with numVertices)
         if (gcd(step, numVertices) !== 1) {
-            console.log(`  Step ${step}: skipped (gcd(${step}, ${numVertices}) != 1)`);
             continue;
         }
 
@@ -504,13 +493,6 @@ function findBestPolygonStepPattern(
             bestError = error;
             bestStep = step;
         }
-    }
-
-    // Print all results
-    console.log('  All step pattern errors:');
-    for (const { step, error } of results) {
-        const marker = step === bestStep ? ' ← BEST' : '';
-        console.log(`    Step ${step}: ${error.toFixed(2)}${marker}`);
     }
 
     return { bestStep, debugPatterns: results };
