@@ -41,7 +41,7 @@ The application has **5 distinct states**:
 - **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null` (i.e., a stroke is selected)
 - When true: A stroke is selected (cursor shows green)
 - When false: No selection (normal mode)
-- The underlying `selectedStrokeIdx` is managed by actions like [FINISH_STROKE], [SELECT_CLOSEST_STROKE], and [DESELECT_STROKE]
+- The underlying `selectedStrokeIdx` is managed by actions like [FINISH_STROKE], [SELECT_CLOSEST_STROKE], and [DEHIGHLIGHT_ALL]
 
 ## Gesture Separation: 2-Finger vs 3-Finger Transform
 
@@ -99,7 +99,7 @@ The state machine maintains **2 flags**, **derived tap timestamps**, and **raw e
 All positions are in screen-space pixels (zoom-independent).
 
 **Calculated functions:**
-- **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null`. Managed by [FINISH_STROKE], [SELECT_CLOSEST_STROKE], [DESELECT_STROKE] actions.
+- **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null`. Managed by [FINISH_STROKE], [SELECT_CLOSEST_STROKE], [DEHIGHLIGHT_ALL] actions.
 - **singleTapHappenedRecently()** - Returns true if singleTapHappenedTimestamp != 0 AND (now - singleTapHappenedTimestamp) < doubleTapTimeout.
 - **singleTapJustHappened()** - Returns true if singleTapHappenedTimestamp == now. Used to detect if a single tap was set in this same state machine pass.
 - **doubleTapJustHappened()** - Returns true if doubleTapHappenedTimestamp == now. Used to detect if a double tap was set in this same state machine pass.
@@ -127,13 +127,13 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `ABANDON_STROKE` | Discard current stroke |
 | `FINISH_STROKE` | Finish drawing stroke (save and select it) |
 | `SELECT_CLOSEST_STROKE` | Select closest stroke to cursor, snap cursor to that point, update pickers |
-| `DESELECT_STROKE` | Full deselection - clears highlighting, anchor, and selection |
+| `DEHIGHLIGHT_ALL` | Clear all highlighting and anchor state |
 | `DEANCHOR_CURSOR` | Clear cursor anchor only (selectedStrokePointIdx, selectedStrokeCursorPos) - keeps stroke highlighted |
 | `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
 | `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag (also updates real-time highlighting) |
 | `APPLY_SELECTION_RECTANGLE` | Complete selection rectangle and keep strokes highlighted |
 | `CANCEL_SELECTION_RECTANGLE` | Cancel selection rectangle and clear highlighting |
-| `CLEAR_HIGHLIGHTING` | Clear all highlighted strokes |
+| `SINGLE_TAP` | Handle single tap gesture (may clear highlighting, interact with picker/menu) |
 | `INIT_TRANSFORM` | Initialize 3-finger transform |
 | `APPLY_TRANSFORM` | Apply transform (continuous) |
 | `PROCESS_DELETE` | Execute delete operation |
@@ -163,7 +163,7 @@ These flag updates happen regardless of current state, before state-specific tra
 | F1_UP | If quick single-finger tap (i.e. !cursorMovedFarHappened && FirstFingerWasTheLastFingerToGoDown() && FirstFingerWentDownRecently() && isF1UpCloseToF1Down()): if tapAndAHalfHappenedRecently() -> set doubleTapHappenedTimestamp = now, else -> set singleTapHappenedTimestamp = now |
 | CURSOR_MOVED_FAR | Set cursorMovedFarHappened = true |
 | DELETE | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, PROCESS_DELETE] |
-| CLEAR | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DESELECT_STROKE] |
+| CLEAR | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DEHIGHLIGHT_ALL] |
 
 ### FROM Any State - AFTER ALL
 
@@ -184,7 +184,7 @@ After all tables have been processed, record the timestamp and position for the 
 
 | Event | Transitions and/or Actions |
 |-------|---------------------------|
-| F1_DOWN | If tapAndAHalfHappened() -> Go to SelectionRectangle, do [START_SELECTION_RECTANGLE, DESELECT_STROKE]. Else -> Go to MovingCursor, do [SAVE_DRAG_START_CURSOR] |
+| F1_DOWN | If tapAndAHalfHappened() -> Go to SelectionRectangle, do [START_SELECTION_RECTANGLE, DEHIGHLIGHT_ALL]. Else -> Go to MovingCursor, do [SAVE_DRAG_START_CURSOR] |
 | F2_DOWN | ----- |
 | F3_DOWN | ----- |
 | FINGER_UP_COMMON | ----- |
@@ -195,8 +195,8 @@ After all tables have been processed, record the timestamp and position for the 
 | Event | Transitions and/or Actions |
 |-------|---------------------------|
 | F2_DOWN | Go to Drawing. do [CREATE_STROKE] |
-| F3_DOWN | Go to Idle. do [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE] |
-| F1_UP | If singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]. Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
+| F3_DOWN | Go to Idle. do [ABORT_TOO_MANY_FINGERS, DEHIGHLIGHT_ALL] |
+| F1_UP | If singleTapJustHappened() -> do [SINGLE_TAP]. Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
 | CURSOR_MOVED_FAR | If isStrokeSelected() -> do [DEANCHOR_CURSOR] (clears anchor but keeps stroke highlighted) |
 | PINCH_DETECTED | ----- |
 
@@ -264,11 +264,11 @@ After all tables have been processed, record the timestamp and position for the 
 - [SELECT_CLOSEST_STROKE] - On double-tap, selects the closest stroke to the cursor
 
 **Exit Conditions** (actions that clear `selectedStrokeIdx`):
-- [DESELECT_STROKE] - Full deselection, called on:
-  - Single tap (quick tap without timeout or movement) when a stroke is selected
+- [DEHIGHLIGHT_ALL] - Clears all highlighting, called on:
   - CLEAR button pressed
   - Too many fingers (F3_DOWN in MovingCursor)
   - Tap-and-a-half (entering SelectionRectangle mode)
+- [SINGLE_TAP] - Handles single tap gesture, clears highlighting if cursor is on canvas (not on picker/menu)
 - DELETE button pressed (removes selected stroke, may select another)
 
 **De-anchoring** (clears anchor but keeps stroke highlighted):

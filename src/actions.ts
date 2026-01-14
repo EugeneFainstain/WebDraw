@@ -47,6 +47,25 @@ export function initActions(dependencies: ActionDependencies): void {
 }
 
 // ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Clear all highlighting and anchor state.
+ * Called by DEHIGHLIGHT_ALL action and SINGLE_TAP action (when cursor is on canvas).
+ */
+function doDehighlightAll(): void {
+    state.selectedStrokeCursorPos = null;
+    state.selectedStrokeIdx = null;
+    state.selectedStrokePointIdx = null;
+    state.highlightedStrokes.clear();
+    // Clear transformation undo state
+    state.transformSnapshot = null;
+    state.hasUndoableTransform = false;
+    updateUI();
+}
+
+// ============================================================================
 // ACTION HANDLERS
 // ============================================================================
 
@@ -272,18 +291,9 @@ export function handleActions(actions: Action[]): void {
                 updateUI();
                 break;
 
-            case Action.DESELECT_STROKE:
-                // Full deselection - clears everything (highlighting, anchor, selection)
+            case Action.DEHIGHLIGHT_ALL:
                 // Used when: clearing canvas, aborting gesture, starting new selection rectangle
-                // No snapshot needed - this is just UI state, not a document change
-                state.selectedStrokeCursorPos = null;
-                state.selectedStrokeIdx = null;
-                state.selectedStrokePointIdx = null;
-                state.highlightedStrokes.clear();
-                // Clear transformation undo state on deselection
-                state.transformSnapshot = null;
-                state.hasUndoableTransform = false;
-                updateUI();
+                doDehighlightAll();
                 break;
 
             case Action.DEANCHOR_CURSOR:
@@ -339,11 +349,12 @@ export function handleActions(actions: Action[]): void {
                 updateUI();
                 break;
 
-            case Action.CLEAR_HIGHLIGHTING:
+            case Action.SINGLE_TAP:
+                // Handle single tap gesture - contextual behavior based on cursor location
                 // If a picker is open, handle it first and don't process further
                 if (deps.isAnyPickerOpen()) {
                     if (isCursorInMenuRegion()) {
-                        // Cursor is over one of the the picker - forward the tap to it
+                        // Cursor is over one of the pickers - forward the tap to it
                         simulateTapAtCursor();
                     } else {
                         // Cursor is outside - close the pickers
@@ -358,9 +369,8 @@ export function handleActions(actions: Action[]): void {
                     // Don't clear highlighting regardless (menu taps shouldn't affect canvas)
                     simulateTapAtCursor();
                 } else {
-                    // Cursor is in canvas region - clear highlighting as normal
-                    state.highlightedStrokes.clear();
-                    updateUI();
+                    // Cursor is in canvas region - dehighlight all
+                    doDehighlightAll();
                 }
                 break;
 

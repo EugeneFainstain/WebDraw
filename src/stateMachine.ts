@@ -120,7 +120,7 @@ export enum Action {
     // Selected stroke actions
     FINISH_STROKE = 'FINISH_STROKE',                     // Finish drawing stroke (save and select it)
     SELECT_CLOSEST_STROKE = 'SELECT_CLOSEST_STROKE',     // Select closest stroke to cursor (double-tap)
-    DESELECT_STROKE = 'DESELECT_STROKE',                 // Full deselection (clears highlighting and anchor)
+    DEHIGHLIGHT_ALL = 'DEHIGHLIGHT_ALL',                 // Clear all highlighting and anchor state
     DEANCHOR_CURSOR = 'DEANCHOR_CURSOR',                 // Clear anchor only (cursor moved far, but keep highlighting)
 
     // Selection rectangle actions
@@ -128,7 +128,9 @@ export enum Action {
     UPDATE_SELECTION_RECTANGLE = 'UPDATE_SELECTION_RECTANGLE',
     APPLY_SELECTION_RECTANGLE = 'APPLY_SELECTION_RECTANGLE',
     CANCEL_SELECTION_RECTANGLE = 'CANCEL_SELECTION_RECTANGLE',
-    CLEAR_HIGHLIGHTING = 'CLEAR_HIGHLIGHTING',
+
+    // Tap actions
+    SINGLE_TAP = 'SINGLE_TAP',                             // Handle single tap (may clear highlighting, interact with picker/menu)
 
     // Transform actions
     INIT_TRANSFORM = 'INIT_TRANSFORM',
@@ -503,7 +505,7 @@ export class StateMachine {
         if (event === Event.CLEAR) {
             return {
                 newState: State.Idle,
-                actions: [Action.CANCEL_SELECTION_RECTANGLE, Action.PROCESS_CLEAR, Action.DESELECT_STROKE]
+                actions: [Action.CANCEL_SELECTION_RECTANGLE, Action.PROCESS_CLEAR, Action.DEHIGHLIGHT_ALL]
             };
         }
 
@@ -535,7 +537,7 @@ export class StateMachine {
                 if (this.tapAndAHalfHappened()) {
                     return {
                         newState: State.SelectionRectangle,
-                        actions: [Action.START_SELECTION_RECTANGLE, Action.DESELECT_STROKE]
+                        actions: [Action.START_SELECTION_RECTANGLE, Action.DEHIGHLIGHT_ALL]
                     };
                 } else {
                     return {
@@ -574,22 +576,18 @@ export class StateMachine {
                 // Go to Idle, do [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE]
                 return {
                     newState: State.Idle,
-                    actions: [Action.ABORT_TOO_MANY_FINGERS, Action.DESELECT_STROKE]
+                    actions: [Action.ABORT_TOO_MANY_FINGERS, Action.DEHIGHLIGHT_ALL]
                 };
 
             case Event.F1_UP:
-                // If singleTapJustHappened() -> do [CLEAR_HIGHLIGHTING]; if isStrokeSelected() -> also do [DESELECT_STROKE]
+                // If singleTapJustHappened() -> do [SINGLE_TAP] (handles highlighting, picker, menu interactions)
                 // Else if isStrokeSelected() -> do [SNAP_CURSOR_TO_SELECTED_STROKE] (snap back after small movement)
                 // Finally: Go to Idle
                 // Note: doubleTapJustHappened() is handled in SelectionRectangle state, not here
                 if (this.singleTapJustHappened(now)) {
-                    const actions: Action[] = [Action.CLEAR_HIGHLIGHTING];
-                    if (this.isStrokeSelected()) {
-                        actions.push(Action.DESELECT_STROKE);
-                    }
                     return {
                         newState: State.Idle,
-                        actions
+                        actions: [Action.SINGLE_TAP]
                     };
                 } else if (this.isStrokeSelected()) {
                     // Not a tap, but stroke is selected - snap cursor back to anchor
