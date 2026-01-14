@@ -49,7 +49,6 @@ export function restoreSnapshot(snapshot: AppState): void {
     appState.strokeHistory = cloned.strokeHistory;
     appState.currentStroke = cloned.currentStroke;
     appState.cursorPos = cloned.cursorPos;
-    appState.selectedStrokeIdx = cloned.selectedStrokeIdx;
     appState.selectedStrokePointIdx = cloned.selectedStrokePointIdx;
     appState.cursorAnchorPos = cloned.cursorAnchorPos;
     appState.transformSnapshot = cloned.transformSnapshot;

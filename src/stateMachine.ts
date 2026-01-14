@@ -196,9 +196,8 @@ export class StateMachine {
     private flags: EventFlags;
     private timestamps: EventTimestamps;
 
-    // The selected stroke index - managed externally but checked via isStrokeSelected()
-    // This replaces the old StateModifier pattern
-    private selectedStrokeIdxRef: { current: number | null } = { current: null };
+    // Reference to highlightedStrokes set - used to derive isStrokeSelected()
+    private highlightedStrokesRef: { current: Set<number> } = { current: new Set() };
 
     constructor() {
         this.currentState = State.Idle;
@@ -242,11 +241,11 @@ export class StateMachine {
     }
 
     /**
-     * Set the reference to the selected stroke index (from app state)
-     * This allows isStrokeSelected() to check the actual app state
+     * Set the reference to highlightedStrokes (from app state)
+     * This allows isStrokeSelected() to check if exactly one stroke is highlighted
      */
-    public setSelectedStrokeIdxRef(ref: { current: number | null }): void {
-        this.selectedStrokeIdxRef = ref;
+    public setHighlightedStrokesRef(ref: { current: Set<number> }): void {
+        this.highlightedStrokesRef = ref;
     }
 
     // ========================================================================
@@ -254,10 +253,10 @@ export class StateMachine {
     // ========================================================================
 
     /**
-     * Returns true if a stroke is selected (selectedStrokeIdx != null)
+     * Returns true if exactly one stroke is highlighted (i.e., a stroke is "selected")
      */
     public isStrokeSelected(): boolean {
-        return this.selectedStrokeIdxRef.current !== null;
+        return this.highlightedStrokesRef.current.size === 1;
     }
 
     /**

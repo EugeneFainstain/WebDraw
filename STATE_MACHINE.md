@@ -38,10 +38,10 @@ The application has **5 distinct states**:
 
 **Selected Stroke Mode** (`isStrokeSelected()`: function)
 
-- **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null` (i.e., a stroke is selected)
+- **isStrokeSelected()** - Returns true if exactly one stroke is highlighted (i.e., `highlightedStrokes.size === 1`)
 - When true: A stroke is selected (cursor shows green)
-- When false: No selection (normal mode)
-- The underlying `selectedStrokeIdx` is managed by actions like [SAVE_STROKE], [SELECT_CLOSEST_STROKE], and [DEHIGHLIGHT_ALL]
+- When false: No selection (normal mode, or multiple strokes highlighted)
+- The selected stroke is derived from `highlightedStrokes` - when exactly one stroke is highlighted, it's the "selected" stroke
 
 ## Gesture Separation: 2-Finger vs 3-Finger Transform
 
@@ -99,7 +99,7 @@ The state machine maintains **2 flags**, **derived tap timestamps**, and **raw e
 All positions are in screen-space pixels (zoom-independent).
 
 **Calculated functions:**
-- **isStrokeSelected()** - Returns true if `selectedStrokeIdx != null`. Managed by [SAVE_STROKE], [SELECT_CLOSEST_STROKE], [DEHIGHLIGHT_ALL] actions.
+- **isStrokeSelected()** - Returns true if `highlightedStrokes.size === 1`. Derived from highlightedStrokes set.
 - **singleTapHappenedRecently()** - Returns true if singleTapHappenedTimestamp != 0 AND (now - singleTapHappenedTimestamp) < doubleTapTimeout.
 - **singleTapJustHappened()** - Returns true if singleTapHappenedTimestamp == now. Used to detect if a single tap was set in this same state machine pass.
 - **doubleTapJustHappened()** - Returns true if doubleTapHappenedTimestamp == now. Used to detect if a double tap was set in this same state machine pass.
@@ -256,24 +256,29 @@ After all tables have been processed, record the timestamp and position for the 
 
 ### Selected Stroke Mode
 
-**isStrokeSelected()** returns true when `selectedStrokeIdx != null`.
+**isStrokeSelected()** returns true when `highlightedStrokes.size === 1` (exactly one stroke is highlighted).
 
-**Entry Conditions** (actions that set `selectedStrokeIdx`):
-- [SAVE_STROKE] - Automatically when saving a stroke (selects and highlights it)
-- [SELECT_CLOSEST_STROKE] - On double-tap, selects the closest stroke to the cursor
+The "selected stroke" is derived from `highlightedStrokes`:
+- When exactly 1 stroke is highlighted → that stroke is "selected" (`getSelectedStrokeIdx()` returns its index)
+- When 0 or 2+ strokes are highlighted → no stroke is "selected" (`getSelectedStrokeIdx()` returns null)
 
-**Exit Conditions** (actions that clear `selectedStrokeIdx`):
+**Entry Conditions** (actions that result in exactly 1 highlighted stroke):
+- [SAVE_STROKE] - Automatically when saving a stroke (clears highlights and highlights the new/merged stroke)
+- [SELECT_CLOSEST_STROKE] - On double-tap, clears highlights and highlights the closest stroke
+
+**Exit Conditions** (actions that clear or change highlighting):
 - [DEHIGHLIGHT_ALL] - Clears all highlighting, called on:
   - CLEAR button pressed
   - Too many fingers (F3_DOWN in MovingCursor)
   - Tap-and-a-half (entering SelectionRectangle mode)
 - [SINGLE_TAP] - Handles single tap gesture, clears highlighting if cursor is on canvas (not on picker/menu)
-- DELETE button pressed (removes selected stroke, may select another)
+- DELETE button pressed (removes highlighted strokes)
+- Selection rectangle (can highlight multiple strokes, making `isStrokeSelected()` return false)
 
 **De-anchoring** (clears anchor but keeps stroke highlighted):
 - [DEANCHOR_CURSOR] - Called when cursor moves >3mm from `cursorAnchorPos` (CURSOR_MOVED_FAR event)
   - Clears `selectedStrokePointIdx` and `cursorAnchorPos`
-  - Keeps `selectedStrokeIdx` and `highlightedStrokes` intact
+  - Keeps `highlightedStrokes` intact
   - Cursor shows white (no longer at a specific point on the stroke)
   - No snap-back when finger is lifted
   - Stroke continuation is disabled (can't continue a stroke when not anchored to an endpoint)
@@ -284,15 +289,14 @@ After all tables have been processed, record the timestamp and position for the 
 
 **Behavior:**
 - 2-finger transform always affects the entire canvas (regardless of selection/highlighting)
-- 3-finger transform affects the selected stroke AND all highlighted strokes together (does nothing if none)
-- Visual indicator: cursor shows green when a stroke is selected, white otherwise
-- The selected stroke index is tracked in `app.ts` as `selectedStrokeIdx` (null = no selection)
+- 3-finger transform affects all highlighted strokes (does nothing if none)
+- Visual indicator: cursor shows green when exactly one stroke is highlighted, white otherwise
 
 ### Stroke Continuation
 
 When starting to draw (F2_DOWN in MovingCursor state), the `CREATE_STROKE` action checks if the cursor is positioned at either endpoint of a selected stroke. If all conditions are met:
 1. `continueExistingStroke` flag is true
-2. A stroke is selected (`selectedStrokeIdx != null`)
+2. Exactly one stroke is highlighted (`getSelectedStrokeIdx() !== null`)
 3. The cursor is at an endpoint of that stroke (`selectedStrokePointIdx == 0` OR `selectedStrokePointIdx == stroke.points.length - 1`)
 4. The stroke is not a group (has `points` array, no `strokes` array)
 
@@ -381,7 +385,7 @@ console.log(result.actions);    // []
 // Check current state
 console.log(stateMachine.getState());  // State.MovingCursor
 
-// Check if a stroke is selected (returns selectedStrokeIdx != null)
+// Check if a stroke is selected (returns highlightedStrokes.size === 1)
 console.log(isStrokeSelected());  // false
 ```
 
@@ -415,7 +419,7 @@ To verify state machine behavior, you can:
 
 2. **Check if stroke is selected:**
    ```typescript
-   console.log(isStrokeSelected());  // true if selectedStrokeIdx != null
+   console.log(isStrokeSelected());  // true if highlightedStrokes.size === 1
    ```
 
 3. **Check flags:**

@@ -9,6 +9,7 @@ import {
     Stroke,
     showDebug,
     mmToPixels,
+    getSelectedStrokeIdx,
 } from './state';
 import { pushUndoSnapshot } from './undoSystem';
 import { initActions, handleActions } from './actions';
@@ -105,7 +106,7 @@ pickers.menu = menuPicker;
 const combinedPicker = createCombinedPicker(
     dom.combinedPickerEl!,
     (color: string) => {
-        // Apply to all highlighted strokes (including groups), or to selected stroke if no highlights
+        // Apply to all highlighted strokes (including groups)
         if (state.highlightedStrokes.size > 0) {
             for (const index of state.highlightedStrokes) {
                 if (index < state.strokeHistory.length) {
@@ -116,17 +117,11 @@ const combinedPicker = createCombinedPicker(
             }
             // Snapshot AFTER color change is complete (coherent state)
             pushUndoSnapshot();
-        } else if (state.selectedStrokeIdx !== null) {
-            transformStroke(state.strokeHistory[state.selectedStrokeIdx], (stroke: Stroke) => {
-                stroke.color = color;
-            });
-            // Snapshot AFTER color change is complete (coherent state)
-            pushUndoSnapshot();
         }
         redraw();
     },
     (size: number) => {
-        // Apply to all highlighted strokes (including groups), or to selected stroke if no highlights
+        // Apply to all highlighted strokes (including groups)
         if (state.highlightedStrokes.size > 0) {
             for (const index of state.highlightedStrokes) {
                 if (index < state.strokeHistory.length) {
@@ -135,12 +130,6 @@ const combinedPicker = createCombinedPicker(
                     });
                 }
             }
-            // Snapshot AFTER size change is complete (coherent state)
-            pushUndoSnapshot();
-        } else if (state.selectedStrokeIdx !== null) {
-            transformStroke(state.strokeHistory[state.selectedStrokeIdx], (stroke: Stroke) => {
-                stroke.size = size;
-            });
             // Snapshot AFTER size change is complete (coherent state)
             pushUndoSnapshot();
         }
@@ -168,8 +157,9 @@ pickers.combined = combinedPicker;
 
 // Helper function to update color and size pickers when a stroke is selected
 function updatePickersForSelectedStroke() {
-    if (state.selectedStrokeIdx !== null) {
-        const stroke = state.strokeHistory[state.selectedStrokeIdx];
+    const selectedIdx = getSelectedStrokeIdx();
+    if (selectedIdx !== null) {
+        const stroke = state.strokeHistory[selectedIdx];
         // For groups, get the first leaf stroke's color and size
         if (isGroup(stroke)) {
             let firstColor: string | undefined;

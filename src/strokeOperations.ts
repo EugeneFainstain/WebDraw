@@ -163,23 +163,13 @@ export function updateGroupButtons(): void {
 }
 
 // Helper to get the single stroke index for fit operation
-// Returns the stroke index if exactly one stroke is selected or highlighted (or both pointing to same stroke)
+// Returns the stroke index if exactly one stroke is highlighted
 function getFitTargetStrokeIdx(): number | null {
-    const hasSelection = state.selectedStrokeIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length;
-    const hasOneHighlight = state.highlightedStrokes.size === 1;
-
-    if (hasSelection && hasOneHighlight) {
-        // Both exist - they must point to the same stroke
-        const highlightedIdx = Array.from(state.highlightedStrokes)[0];
-        if (highlightedIdx === state.selectedStrokeIdx) {
-            return state.selectedStrokeIdx;
+    if (state.highlightedStrokes.size === 1) {
+        const idx = Array.from(state.highlightedStrokes)[0];
+        if (idx < state.strokeHistory.length) {
+            return idx;
         }
-        // Different strokes - ambiguous, don't allow
-        return null;
-    } else if (hasSelection) {
-        return state.selectedStrokeIdx;
-    } else if (hasOneHighlight) {
-        return Array.from(state.highlightedStrokes)[0];
     }
     return null;
 }
@@ -228,11 +218,10 @@ export function processDelete(): void {
         }
     }
 
-    // Clear highlighted strokes
+    // Clear highlighted strokes (this also clears "selected" state since it's derived)
     state.highlightedStrokes.clear();
 
-    // Clear selection state
-    state.selectedStrokeIdx = null;
+    // Clear anchor state
     state.selectedStrokePointIdx = null;
     state.cursorAnchorPos = null;
     state.transformSnapshot = null;
@@ -333,12 +322,12 @@ export function duplicateSelectedStroke(): void {
     state.strokeHistory.push(duplicatedStroke);
 
     // Highlight the new stroke (clear previous highlights)
+    // This makes it the "selected" stroke since it's the only one highlighted
     const newIdx = state.strokeHistory.length - 1;
     state.highlightedStrokes.clear();
     state.highlightedStrokes.add(newIdx);
 
-    // Deselect any selected stroke
-    state.selectedStrokeIdx = null;
+    // Clear anchor state (duplicated stroke has no anchor)
     state.selectedStrokePointIdx = null;
     state.cursorAnchorPos = null;
 
@@ -383,10 +372,10 @@ export function groupHighlightedStrokes(): void {
     // Add the group at the position of the first stroke
     state.strokeHistory.splice(indices[0], 0, groupStroke);
 
-    // Clear highlighted strokes, select the new group, and highlight it
+    // Clear highlighted strokes and highlight the new group
+    // This makes it the "selected" stroke since it's the only one highlighted
     state.highlightedStrokes.clear();
     state.highlightedStrokes.add(indices[0]);
-    state.selectedStrokeIdx = indices[0];
 
     // Snapshot AFTER group is complete (coherent state)
     pushUndoSnapshot();
@@ -426,13 +415,13 @@ export function ungroupSelectedStroke(): void {
     state.strokeHistory.splice(insertionIndex, 0, ...children);
 
     // Highlight all the ungrouped strokes
+    // (multiple strokes highlighted = no single "selected" stroke)
     state.highlightedStrokes.clear();
     for (let i = 0; i < children.length; i++) {
         state.highlightedStrokes.add(insertionIndex + i);
     }
 
-    // Deselect
-    state.selectedStrokeIdx = null;
+    // Clear anchor state (no single selected stroke after ungroup)
     state.selectedStrokePointIdx = null;
     state.cursorAnchorPos = null;
 

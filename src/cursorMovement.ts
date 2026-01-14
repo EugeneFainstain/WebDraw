@@ -30,6 +30,7 @@ import {
     USE_BATCHED_DELTA_MECHANISM,
     getStrokeLenThreshold,
     TOOLBAR_HEIGHT,
+    getSelectedStrokeIdx,
 } from './state';
 import { State, Event } from './stateMachine';
 
@@ -344,7 +345,10 @@ export function addPointToStroke(): void {
             // Emit LONG_STROKE_DRAWN event to set the flag for stroke protection
             state.stateMachine.processEvent(Event.LONG_STROKE_DRAWN);
             // Clear highlighting - we're now committed to drawing, not zooming
-            state.highlightedStrokes.clear();
+            // BUT: keep highlighting if we're continuing an existing stroke (for merge in SAVE_STROKE)
+            if (!state.continueExistingStroke) {
+                state.highlightedStrokes.clear();
+            }
         }
     }
 }
@@ -569,8 +573,9 @@ export function updateCursorDiv(): void {
         // - lightskyblue: cursor anchored at middle point of stroke (can't continue)
         // - white: cursor not anchored to any stroke point (free-floating)
         let innerColor = 'white';
-        if (state.selectedStrokeIdx !== null && state.selectedStrokePointIdx !== null) {
-            const selectedStroke = state.strokeHistory[state.selectedStrokeIdx];
+        const selectedIdx = getSelectedStrokeIdx();
+        if (selectedIdx !== null && state.selectedStrokePointIdx !== null) {
+            const selectedStroke = state.strokeHistory[selectedIdx];
             if (selectedStroke && selectedStroke.points && !selectedStroke.strokes) {
                 const lastPointIdx = selectedStroke.points.length - 1;
                 const isAtEndpoint = state.selectedStrokePointIdx === 0 || state.selectedStrokePointIdx === lastPointIdx;

@@ -20,7 +20,7 @@
  */
 
 import { Point } from './eventHandler';
-import { state, Stroke, StrokeSnapshot } from './state';
+import { state, Stroke, StrokeSnapshot, getSelectedStrokeIdx } from './state';
 import { forEachLeafStroke, transformStroke } from './strokeOperations';
 
 // ============================================================================
@@ -215,14 +215,9 @@ export function initThreeFingerTransform(): void {
             // No strokeSnapshotsMap - 2-finger always transforms canvas
         };
     } else if (fingerCount >= 3) {
-        // Three-finger transform - transforms selected stroke AND all highlighted strokes
+        // Three-finger transform - transforms all highlighted strokes
         // Collect all stroke indices to transform
         const strokesToTransform = new Set<number>();
-
-        // Add selected stroke if any
-        if (state.selectedStrokeIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length) {
-            strokesToTransform.add(state.selectedStrokeIdx);
-        }
 
         // Add all highlighted strokes
         for (const idx of state.highlightedStrokes) {
@@ -310,8 +305,9 @@ export function initThreeFingerTransform(): void {
         };
 
         // Store transform snapshot for undo (only for selected stroke)
-        if (!state.hasUndoableTransform && state.selectedStrokeIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length) {
-            const allPoints = getAllPointsForTransform(state.strokeHistory[state.selectedStrokeIdx]);
+        const selectedIdx = getSelectedStrokeIdx();
+        if (!state.hasUndoableTransform && selectedIdx !== null && selectedIdx < state.strokeHistory.length) {
+            const allPoints = getAllPointsForTransform(state.strokeHistory[selectedIdx]);
             state.transformSnapshot = allPoints.map(p => ({ ...p }));
         }
     }
@@ -426,8 +422,9 @@ export function applyThreeFingerTransform(): void {
         }
 
         // Update cursor and cursorAnchorPos to the transformed position of the same point
-        if (state.selectedStrokeIdx !== null && state.selectedStrokePointIdx !== null && state.selectedStrokeIdx < state.strokeHistory.length) {
-            const transformedPoints = getAllPointsForTransform(state.strokeHistory[state.selectedStrokeIdx]);
+        const selectedIdx = getSelectedStrokeIdx();
+        if (selectedIdx !== null && state.selectedStrokePointIdx !== null && selectedIdx < state.strokeHistory.length) {
+            const transformedPoints = getAllPointsForTransform(state.strokeHistory[selectedIdx]);
             if (state.selectedStrokePointIdx < transformedPoints.length) {
                 const newPos = { ...transformedPoints[state.selectedStrokePointIdx] };
                 state.cursorPos = newPos;

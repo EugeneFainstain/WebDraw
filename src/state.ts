@@ -78,10 +78,8 @@ export interface AppState {
     // Cursor anchor point (in canvas coordinates)
     cursorPos: Point | null;
 
-    // Selected stroke index (null = no selection, number = index in strokeHistory)
-    selectedStrokeIdx: number | null;
-
-    // Index of the point within the selected stroke where the cursor is positioned
+    // Index of the point within the selected stroke where the cursor is anchored
+    // (only meaningful when exactly one stroke is highlighted)
     selectedStrokePointIdx: number | null;
 
     // Cursor anchor position (for snap-back and deselection distance check)
@@ -184,7 +182,6 @@ function createDefaultAppState(): AppState {
         strokeHistory: [],
         currentStroke: null,
         cursorPos: null,
-        selectedStrokeIdx: null,
         selectedStrokePointIdx: null,
         cursorAnchorPos: null,
         transformSnapshot: null,
@@ -280,9 +277,9 @@ export function initState(canvas: HTMLCanvasElement) {
     appContext.canvas = canvas;
     appContext.ctx = canvas.getContext('2d')!;
 
-    // Wire up state machine's selectedStrokeIdx reference
-    appContext.stateMachine.setSelectedStrokeIdxRef({
-        get current() { return appState.selectedStrokeIdx; }
+    // Wire up state machine's highlightedStrokes reference
+    appContext.stateMachine.setHighlightedStrokesRef({
+        get current() { return appState.highlightedStrokes; }
     });
 
     // Initialize DOM references
@@ -318,7 +315,6 @@ export function resetState() {
     appState.strokeHistory = defaults.strokeHistory;
     appState.currentStroke = defaults.currentStroke;
     appState.cursorPos = defaults.cursorPos;
-    appState.selectedStrokeIdx = defaults.selectedStrokeIdx;
     appState.selectedStrokePointIdx = defaults.selectedStrokePointIdx;
     appState.cursorAnchorPos = defaults.cursorAnchorPos;
     appState.transformSnapshot = defaults.transformSnapshot;
@@ -389,4 +385,15 @@ export function getStrokeLenThreshold(): number {
 // Get deselect distance threshold in pixels
 export function getDeselectDistanceThreshold(): number {
     return mmToPixels(DESELECT_DISTANCE_THRESHOLD_MM);
+}
+
+/**
+ * Get the selected stroke index, derived from highlightedStrokes.
+ * Returns the stroke index if exactly one stroke is highlighted, null otherwise.
+ */
+export function getSelectedStrokeIdx(): number | null {
+    if (appState.highlightedStrokes.size === 1) {
+        return Array.from(appState.highlightedStrokes)[0];
+    }
+    return null;
 }
