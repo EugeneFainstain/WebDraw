@@ -25,6 +25,7 @@ import {
     state,
     UI_DRAG_THRESHOLD,
     getDeselectDistanceThreshold,
+    resetPointerTrackingState,
 } from './state';
 
 // ============================================================================
@@ -187,10 +188,7 @@ export function handlePointerUp(e: PointerEvent): void {
 
     if (state.eventHandler.getFingerCount() <= 1) // Only 1 finger left or no fingers left
     {
-        state.lastPrimaryPos = null;
-        state.lastSecondaryPos = null;
-        state.lastDelta = null;
-        state.batchedDelta = null;
+        resetPointerTrackingState();
     }
 
     // Clean up movement tracking if all fingers are up

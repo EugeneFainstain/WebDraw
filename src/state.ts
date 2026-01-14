@@ -329,10 +329,7 @@ export function resetState() {
     appState.debugMessages = defaults.debugMessages;
 
     // Reset transient pointer-tracking state (in appContext)
-    appContext.lastPrimaryPos = null;
-    appContext.lastSecondaryPos = null;
-    appContext.lastDelta = null;
-    appContext.batchedDelta = null;
+    resetPointerTrackingState();
     appContext.pointersOnUI.clear();
     appContext.continueExistingStroke = false;
     appContext.dragStartCursorPos = null;
@@ -428,4 +425,33 @@ export function clearSelectionState(): void {
     appState.highlightedStrokes.clear();
     clearAnchorState();
     resetTransformUndoState();
+}
+
+/**
+ * Clear the selection rectangle state.
+ * Use when: selection rectangle gesture completes or is cancelled.
+ */
+export function clearSelectionRectangle(): void {
+    appState.selectionRectStart = null;
+    appState.selectionRectEnd = null;
+}
+
+/**
+ * Clear the current stroke being drawn.
+ * Use when: stroke is saved, abandoned, or aborted.
+ */
+export function clearCurrentStroke(): void {
+    appState.currentStroke = null;
+    appState.lastGridPosition = null;
+}
+
+/**
+ * Reset pointer tracking state used for multi-finger gestures.
+ * Use when: fingers are lifted and gesture tracking should reset.
+ */
+export function resetPointerTrackingState(): void {
+    appContext.lastPrimaryPos = null;
+    appContext.lastSecondaryPos = null;
+    appContext.lastDelta = null;
+    appContext.batchedDelta = null;
 }

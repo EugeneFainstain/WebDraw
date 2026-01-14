@@ -1,5 +1,5 @@
 import { Action } from './stateMachine';
-import { state, Stroke, getSelectedStrokeIdx, clearSelectionState, clearAnchorState, resetTransformUndoState } from './state';
+import { state, Stroke, getSelectedStrokeIdx, clearSelectionState, clearAnchorState, resetTransformUndoState, clearSelectionRectangle, clearCurrentStroke } from './state';
 import {
     initThreeFingerTransform,
 } from './transform';
@@ -223,8 +223,7 @@ export function handleActions(actions: Action[]): void {
                     pushUndoSnapshot();
                     updateUI();
                 }
-                state.currentStroke = null;
-                state.lastGridPosition = null;
+                clearCurrentStroke();
                 state.continueExistingStroke = false;
                 // Clear dragStartCursorPos - we completed a new stroke, so zoom restoration
                 // should not snap back to the old stroke's position
@@ -241,8 +240,7 @@ export function handleActions(actions: Action[]): void {
                 } else if (state.currentStroke && state.currentStroke.points && state.currentStroke.points.length > 0) {
                     state.cursorPos = { ...state.currentStroke.points[0] };
                 }
-                state.currentStroke = null;
-                state.lastGridPosition = null;
+                clearCurrentStroke();
                 state.continueExistingStroke = false;
                 break;
 
@@ -322,16 +320,14 @@ export function handleActions(actions: Action[]): void {
             case Action.APPLY_SELECTION_RECTANGLE:
                 // Note: No snapshot here - selection is a UI state change, not a document change
                 // Complete selection rectangle - keep strokes highlighted, don't apply colors yet
-                state.selectionRectStart = null;
-                state.selectionRectEnd = null;
+                clearSelectionRectangle();
                 // Keep highlighted strokes (don't clear them)
                 updateUI();
                 break;
 
             case Action.CANCEL_SELECTION_RECTANGLE:
-                // Cancel selection rectangle
-                state.selectionRectStart = null;
-                state.selectionRectEnd = null;
+                // Cancel selection rectangle and clear highlighted strokes
+                clearSelectionRectangle();
                 // Clear highlighted strokes
                 state.highlightedStrokes.clear();
                 updateUI();
@@ -376,8 +372,7 @@ export function handleActions(actions: Action[]): void {
 
             case Action.ABORT_TOO_MANY_FINGERS:
                 // Reset to idle
-                state.currentStroke = null;
-                state.lastGridPosition = null;
+                clearCurrentStroke();
                 break;
 
             case Action.SAVE_DRAG_START_CURSOR:
