@@ -139,7 +139,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 **Table Format:**
 - "-----" means no transition and no action
 - "Stay" means remain in current state
-- Only state changes and modifier changes are mentioned explicitly
+- Only state changes and flag changes are mentioned explicitly
 
 ### FROM Any State - BEFORE ALL
 

@@ -27,7 +27,7 @@ export interface ActionDependencies {
     getPickerColor: () => string;
     getPickerSize: () => number;
     findClosestStrokeAndPoint: (searchPos?: { x: number; y: number }) => { strokeIdx: number; pointIdx: number; point: { x: number; y: number } } | null;
-    updatePickersForSelectedStroke: () => void;
+    updatePickersBasedOnSelectedStroke: () => void;
     isAnyPickerOpen: () => boolean;
     closePickers: () => void;
 }
@@ -277,7 +277,7 @@ export function handleActions(actions: Action[]): void {
                     state.highlightedStrokes.clear();
                     state.highlightedStrokes.add(closestResult.strokeIdx);
                     // Update color and size pickers to match selected stroke
-                    deps.updatePickersForSelectedStroke();
+                    deps.updatePickersBasedOnSelectedStroke();
                     // Cursor is ready to continue this stroke (only if all fingers lifted)
                     if (state.eventHandler.getFingerCount() === 0) {
                         state.continueExistingStroke = true;

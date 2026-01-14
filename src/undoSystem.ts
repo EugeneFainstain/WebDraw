@@ -17,7 +17,7 @@
  * - Call clearUndoStack() on Clear All (page reload behavior)
  */
 
-import { appState, AppState, setClearUndoStackFn } from './state';
+import { appState, AppState, initClearUndoStackFn } from './state';
 
 // ============================================================================
 // UNDO STACK - Lives outside AppState
@@ -180,4 +180,4 @@ export function canUndo(): boolean {
 
 // Register the clearUndoStack function with state.ts
 // This allows resetState() to clear the undo stack without circular imports
-setClearUndoStackFn(clearUndoStack);
+initClearUndoStackFn(clearUndoStack);

@@ -49,9 +49,9 @@ export class EventHandler {
     private gestureLockedAsDrawing: boolean = false;
 
     /**
-     * Set the callback for state machine events
+     * Initialize the callback for state machine events
      */
-    public setEventCallback(callback: (event: Event, pos?: Point) => void): void {
+    public initEventCallback(callback: (event: Event, pos?: Point) => void): void {
         this.eventCallback = callback;
     }
 

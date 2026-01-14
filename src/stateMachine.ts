@@ -10,10 +10,10 @@
  * Keep them synchronized to avoid confusion.
  */
 
-// Debug callback - set externally to avoid circular dependency with state.ts
+// Debug callback - initialized externally to avoid circular dependency with state.ts
 let debugCallback: ((msg: string) => void) | null = null;
 
-export function setStateMachineDebugCallback(callback: (msg: string) => void): void {
+export function initStateMachineDebugCallback(callback: (msg: string) => void): void {
     debugCallback = callback;
 }
 
@@ -196,8 +196,8 @@ export class StateMachine {
     private flags: EventFlags;
     private timestamps: EventTimestamps;
 
-    // Reference to highlightedStrokes set - used to derive isOnlyOneStrokeHighlighted()
-    private highlightedStrokesRef: { current: Set<number> } = { current: new Set() };
+    // Getter for highlighted strokes count - used to derive isOnlyOneStrokeHighlighted()
+    private getHighlightedStrokesCount: () => number = () => 0;
 
     constructor() {
         this.currentState = State.Idle;
@@ -241,11 +241,11 @@ export class StateMachine {
     }
 
     /**
-     * Set the reference to highlightedStrokes (from app state)
+     * Initialize the getter for highlighted strokes count (from app state)
      * This allows isOnlyOneStrokeHighlighted() to check if exactly one stroke is highlighted
      */
-    public setHighlightedStrokesRef(ref: { current: Set<number> }): void {
-        this.highlightedStrokesRef = ref;
+    public initHighlightedStrokesCountGetter(getter: () => number): void {
+        this.getHighlightedStrokesCount = getter;
     }
 
     // ========================================================================
@@ -256,7 +256,7 @@ export class StateMachine {
      * Returns true if exactly one stroke is highlighted (i.e., a stroke is "selected")
      */
     public isOnlyOneStrokeHighlighted(): boolean {
-        return this.highlightedStrokesRef.current.size === 1;
+        return this.getHighlightedStrokesCount() === 1;
     }
 
     /**

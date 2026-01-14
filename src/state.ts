@@ -277,10 +277,10 @@ export function initState(canvas: HTMLCanvasElement) {
     appContext.canvas = canvas;
     appContext.ctx = canvas.getContext('2d')!;
 
-    // Wire up state machine's highlightedStrokes reference
-    appContext.stateMachine.setHighlightedStrokesRef({
-        get current() { return appState.highlightedStrokes; }
-    });
+    // Wire up state machine's highlightedStrokes count getter
+    appContext.stateMachine.initHighlightedStrokesCountGetter(
+        () => appState.highlightedStrokes.size
+    );
 
     // Initialize DOM references
     appContext.dom.combinedPickerEl = document.getElementById('combinedPicker') as HTMLElement;
@@ -304,7 +304,7 @@ export function initState(canvas: HTMLCanvasElement) {
 // Import will be added after undoSystem.ts is created
 let clearUndoStackFn: (() => void) | null = null;
 
-export function setClearUndoStackFn(fn: () => void) {
+export function initClearUndoStackFn(fn: () => void) {
     clearUndoStackFn = fn;
 }
 

@@ -1,7 +1,7 @@
 import '../styles.css';
 import { createCombinedPicker } from './combinedPicker';
 import { createMenuPicker } from './menuPicker';
-import { Event, setStateMachineDebugCallback } from './stateMachine';
+import { Event, initStateMachineDebugCallback } from './stateMachine';
 import { Point } from './eventHandler';
 import {
     state,
@@ -66,7 +66,7 @@ const canvas = document.getElementById('drawingCanvas') as HTMLCanvasElement;
 initState(canvas);
 
 // Wire up state machine debug callback
-setStateMachineDebugCallback(showDebug);
+initStateMachineDebugCallback(showDebug);
 
 // Aliases for frequently accessed state (for cleaner code)
 const dom = state.dom;
@@ -156,7 +156,7 @@ pickers.combined = combinedPicker;
 // ============================================================================
 
 // Helper function to update color and size pickers when a stroke is selected
-function updatePickersForSelectedStroke() {
+function updatePickersBasedOnSelectedStroke() {
     const selectedIdx = getSelectedStrokeIdx();
     if (selectedIdx !== null) {
         const stroke = state.strokeHistory[selectedIdx];
@@ -285,7 +285,7 @@ function findClosestStrokeAndPoint(searchPos?: Point): { strokeIdx: number; poin
 // STATE MACHINE EVENT CALLBACK
 // ============================================================================
 
-state.eventHandler.setEventCallback((event: Event, pos?: Point) => {
+state.eventHandler.initEventCallback((event: Event, pos?: Point) => {
     // Pass the position for F1_DOWN/F1_UP events (used for tap-and-a-half spatial proximity check)
     const posForStateMachine = pos ? { x: pos.x, y: pos.y } : null;
     const result = state.stateMachine.processEvent(event, Date.now(), posForStateMachine);
@@ -325,7 +325,7 @@ initStrokeOperations({
     panToKeepCursorInView,
     findClosestStrokeAndPoint,
     screenToCanvas,
-    updatePickersForSelectedStroke,
+    updatePickersBasedOnSelectedStroke,
     redraw,
 });
 
@@ -351,7 +351,7 @@ initActions({
     getPickerColor: () => combinedPicker.getColor(),
     getPickerSize: () => combinedPicker.getSize(),
     findClosestStrokeAndPoint,
-    updatePickersForSelectedStroke,
+    updatePickersBasedOnSelectedStroke,
     isAnyPickerOpen: () => combinedPicker.isOpen() || menuPicker.isOpen(),
     closePickers: () => { combinedPicker.close(); menuPicker.close(); },
 });
