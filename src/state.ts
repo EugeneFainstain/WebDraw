@@ -180,6 +180,11 @@ export const CONFINE_CURSOR_TO_CANVAS = true; //false;
 // - 'reticle': Crosshair/reticle cursor with activation point at center
 export const CURSOR_SHAPE: 'arrow' | 'reticle' = 'reticle';//'arrow';
 
+// Drawing cursor style:
+// - true: drawing cursor looks the same as the aiming cursor (arrow or reticle)
+// - false: drawing cursor is a simple two-ring circle (color + white outline)
+export const DRAWING_CURSOR_SAME_AS_AIMING_CURSOR = true; //false;
+
 // UI drag threshold
 export const UI_DRAG_THRESHOLD = 15; // pixels before UI touch becomes canvas drag
 

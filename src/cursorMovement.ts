@@ -32,6 +32,7 @@ import {
     TOOLBAR_HEIGHT,
     CONFINE_CURSOR_TO_CANVAS,
     CURSOR_SHAPE,
+    DRAWING_CURSOR_SAME_AS_AIMING_CURSOR,
     // getSelectedStrokeIdx,  // commented out along with inner ring color logic
 } from './state';
 import { State, Event } from './stateMachine';
@@ -550,29 +551,28 @@ export function updateCursorDiv(): void {
     const drawColor = callbacks.getPickerColor();
     const isWhite = drawColor.toUpperCase() === '#FFFFFF';
 
-    // Check if we're in Drawing state
+    // Check if we're in Drawing state and should show special drawing cursor
     const isDrawing = currentState === State.Drawing;
+    const showDrawingCursor = isDrawing && !DRAWING_CURSOR_SAME_AS_AIMING_CURSOR;
 
-    if (isDrawing) {
-        // Drawing state: show circle outline with inverse of selected color
-        // Outline thickness is 2px (screen-space, zoom independent)
-        // Circle radius = half stroke width + outline width (screen-space)
-        const outlineWidth = 2;
-        const radius = renderedSize / 2 + outlineWidth / 2;
+    if (showDrawingCursor) {
+        // Drawing state: show two concentric circle outlines
+        // Inner circle: thin outline in drawing color (same as old inverse circle)
+        // Outer circle: thick white outline behind it
+        const innerOutlineWidth = 2;
+        const innerRadius = renderedSize / 2 + innerOutlineWidth / 2;
 
-        // Calculate inverse color
-        const hex = drawColor.replace('#', '');
-        const r = parseInt(hex.substring(0, 2), 16);
-        const g = parseInt(hex.substring(2, 4), 16);
-        const b = parseInt(hex.substring(4, 6), 16);
-        const inverseColor = `#${(255 - r).toString(16).padStart(2, '0')}${(255 - g).toString(16).padStart(2, '0')}${(255 - b).toString(16).padStart(2, '0')}`;
+        // Outer (white) circle: same thickness as inner, radius larger by inner stroke width
+        const outerOutlineWidth = 2;
+        const outerRadius = innerRadius + innerOutlineWidth;
 
-        // SVG size needs to accommodate the stroke (which extends outward by half strokeWidth)
-        const totalSize = (radius + outlineWidth) * 2;
+        // SVG size needs to accommodate both circles
+        const totalSize = (outerRadius + outerOutlineWidth / 2) * 2;
         const center = totalSize / 2;
 
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalSize}" height="${totalSize}" style="display:block;">
-            <circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="${inverseColor}" stroke-width="${outlineWidth}"/>
+            <circle cx="${center}" cy="${center}" r="${outerRadius}" fill="none" stroke="white" stroke-width="${outerOutlineWidth}"/>
+            <circle cx="${center}" cy="${center}" r="${innerRadius}" fill="none" stroke="${drawColor}" stroke-width="${innerOutlineWidth}"/>
         </svg>`;
 
         state.dom.cursorDiv!.style.display = 'block';
@@ -625,28 +625,28 @@ export function updateCursorDiv(): void {
             // Filler circle (drawn behind) - same radius as outer circle, 2x stroke width
             const fillerStrokeWidth = reticleStrokeWidth * 2;
 
-            // Center circle (like drawing cursor) - shows stroke size with inverse color
-            const centerOutlineWidth = 2;
-            const centerRadius = renderedSize / 2 + centerOutlineWidth / 2;
-            // Scale center circle to viewBox units (reticleCursorSize pixels = viewSize units)
-            const centerRadiusScaled = centerRadius * (viewSize / reticleCursorSize);
-            const centerOutlineScaled = centerOutlineWidth * (viewSize / reticleCursorSize);
+            // Center circles (like drawing cursor) - thin color circle with thin white behind
+            const centerInnerOutlineWidth = 2;
+            const centerInnerRadius = renderedSize / 2 + centerInnerOutlineWidth / 2;
+            const centerOuterOutlineWidth = 2;
+            const centerOuterRadius = centerInnerRadius + centerInnerOutlineWidth;
+            // Scale center circles to viewBox units (reticleCursorSize pixels = viewSize units)
+            const scaleToView = viewSize / reticleCursorSize;
+            const centerInnerRadiusScaled = centerInnerRadius * scaleToView;
+            const centerInnerOutlineScaled = centerInnerOutlineWidth * scaleToView;
+            const centerOuterRadiusScaled = centerOuterRadius * scaleToView;
+            const centerOuterOutlineScaled = centerOuterOutlineWidth * scaleToView;
 
-            // Calculate inverse color for center circle
-            const hex = drawColor.replace('#', '');
-            const ir = parseInt(hex.substring(0, 2), 16);
-            const ig = parseInt(hex.substring(2, 4), 16);
-            const ib = parseInt(hex.substring(4, 6), 16);
-            const inverseColor = `#${(255 - ir).toString(16).padStart(2, '0')}${(255 - ig).toString(16).padStart(2, '0')}${(255 - ib).toString(16).padStart(2, '0')}`;
-
-            // Build SVG with filler behind, reticle on top, center circle in middle
+            // Build SVG with filler behind, reticle on top, center circles in middle
             const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${viewSize} ${viewSize}" width="${reticleCursorSize}" height="${reticleCursorSize}">
                 <!-- Filler circle (back) - shows anchor state, same radius as outer circle -->
                 <circle cx="${halfView}" cy="${halfView}" r="${outerRadius}" fill="none" stroke="${innerColor}" stroke-width="${fillerStrokeWidth}" stroke-linecap="round"/>
                 <!-- Reticle (front) - colored outline -->
                 <circle cx="${halfView}" cy="${halfView}" r="${outerRadius}" fill="none" stroke="${outerColor}" stroke-width="${reticleStrokeWidth}" stroke-linecap="round"/>
-                <!-- Center circle - like drawing cursor, shows stroke size -->
-                <circle cx="${halfView}" cy="${halfView}" r="${centerRadiusScaled}" fill="none" stroke="${inverseColor}" stroke-width="${centerOutlineScaled}"/>
+                <!-- Center white circle (back) - thick white outline -->
+                <circle cx="${halfView}" cy="${halfView}" r="${centerOuterRadiusScaled}" fill="none" stroke="white" stroke-width="${centerOuterOutlineScaled}"/>
+                <!-- Center color circle (front) - thin drawing color outline -->
+                <circle cx="${halfView}" cy="${halfView}" r="${centerInnerRadiusScaled}" fill="none" stroke="${drawColor}" stroke-width="${centerInnerOutlineScaled}"/>
             </svg>`;
 
             // Position with center at cursor position
