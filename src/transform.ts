@@ -214,6 +214,18 @@ export function initThreeFingerTransform(): void {
             initialTransform: { ...state.viewTransform }
             // No strokeSnapshotsMap - 2-finger always transforms canvas
         };
+
+        // Update cursor position to selected stroke point at start of transform
+        // This ensures the reticle cursor shows at the correct location during canvas transform
+        const selectedIdx = getSelectedStrokeIdx();
+        if (selectedIdx !== null && state.selectedStrokePointIdx !== null && selectedIdx < state.strokeHistory.length) {
+            const points = getAllPointsForTransform(state.strokeHistory[selectedIdx]);
+            if (state.selectedStrokePointIdx < points.length) {
+                const pos = points[state.selectedStrokePointIdx];
+                state.cursorPos = { ...pos };
+                state.cursorAnchorPos = { ...pos };
+            }
+        }
     } else if (fingerCount >= 3) {
         // Three-finger transform - transforms all highlighted strokes
         // Collect all stroke indices to transform
@@ -309,6 +321,17 @@ export function initThreeFingerTransform(): void {
         if (!state.hasUndoableTransform && selectedIdx !== null && selectedIdx < state.strokeHistory.length) {
             const allPoints = getAllPointsForTransform(state.strokeHistory[selectedIdx]);
             state.transformSnapshot = allPoints.map(p => ({ ...p }));
+        }
+
+        // Update cursor position to selected stroke point at start of transform
+        // This ensures the reticle cursor shows at the correct location during transform
+        if (selectedIdx !== null && state.selectedStrokePointIdx !== null && selectedIdx < state.strokeHistory.length) {
+            const points = getAllPointsForTransform(state.strokeHistory[selectedIdx]);
+            if (state.selectedStrokePointIdx < points.length) {
+                const pos = points[state.selectedStrokePointIdx];
+                state.cursorPos = { ...pos };
+                state.cursorAnchorPos = { ...pos };
+            }
         }
     }
 }
