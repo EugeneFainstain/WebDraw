@@ -23,6 +23,30 @@ import { state, Stroke, TOOLBAR_HEIGHT } from './state';
 import { isGroup, forEachLeafStroke } from './strokeOperations';
 
 // ============================================================================
+// BOUNDING BOX HELPERS
+// ============================================================================
+
+// Calculate bounding box for a stroke (works for both leaf strokes and groups)
+function getStrokeBoundingBox(stroke: Stroke): { minX: number; minY: number; maxX: number; maxY: number } | null {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let hasPoints = false;
+
+    forEachLeafStroke(stroke, (leafStroke: Stroke) => {
+        const points = (leafStroke.showingFitted && leafStroke.fittedPoints) ? leafStroke.fittedPoints : leafStroke.points!;
+        for (const point of points) {
+            minX = Math.min(minX, point.x);
+            minY = Math.min(minY, point.y);
+            maxX = Math.max(maxX, point.x);
+            maxY = Math.max(maxY, point.y);
+            hasPoints = true;
+        }
+    });
+
+    if (!hasPoints) return null;
+    return { minX, minY, maxX, maxY };
+}
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -237,6 +261,37 @@ function drawStroke(stroke: Stroke, isHighlighted: boolean = false): void {
     ctx.stroke();
 }
 
+// Draw thin blue rectangle around highlighted groups
+function drawGroupBoundingBoxes(): void {
+    const ctx = state.ctx!;
+
+    for (const index of state.highlightedStrokes) {
+        if (index >= state.strokeHistory.length) continue;
+
+        const stroke = state.strokeHistory[index];
+        if (!isGroup(stroke)) continue;
+
+        const bbox = getStrokeBoundingBox(stroke);
+        if (!bbox) continue;
+
+        const padding = screenLengthToCanvasLength(2);
+
+        ctx.strokeStyle = 'rgba(30, 144, 255, 0.8)'; // Blue color
+        ctx.lineWidth = screenLengthToCanvasLength(1); // Thin line (1px in screen space)
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'miter';
+
+        ctx.beginPath();
+        ctx.rect(
+            bbox.minX - padding,
+            bbox.minY - padding,
+            bbox.maxX - bbox.minX + padding * 2,
+            bbox.maxY - bbox.minY + padding * 2
+        );
+        ctx.stroke();
+    }
+}
+
 export function redraw(): void {
     const ctx = state.ctx!;
 
@@ -265,6 +320,9 @@ export function redraw(): void {
         const isHighlighted = state.highlightedStrokes.has(index);
         drawStroke(stroke, isHighlighted);
     });
+
+    // Draw bounding boxes around highlighted groups
+    drawGroupBoundingBoxes();
 
     // Draw current in-progress stroke
     if (state.currentStroke) {

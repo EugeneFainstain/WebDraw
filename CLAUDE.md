@@ -45,6 +45,20 @@ WebDraw is a browser-based multi-touch drawing application built with TypeScript
 
 No build, test, or lint commands are currently configured.
 
+### Pre-authorized Commands (always allowed)
+
+The following commands can be run without user confirmation:
+- `npx tsc --noEmit` - Type check TypeScript code
+- `dir` / `ls` - List directory contents
+- Any read-only commands for exploring the codebase
+
+### Type Checking
+
+Always run type checking after making changes:
+```bash
+npx tsc --noEmit
+```
+
 ## Architecture
 
 The application uses a state machine architecture with the following main files:
