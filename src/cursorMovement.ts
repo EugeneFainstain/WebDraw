@@ -30,6 +30,7 @@ import {
     USE_BATCHED_DELTA_MECHANISM,
     getStrokeLenThreshold,
     TOOLBAR_HEIGHT,
+    CONFINE_CURSOR_TO_CANVAS,
     getSelectedStrokeIdx,
 } from './state';
 import { State, Event } from './stateMachine';
@@ -371,8 +372,11 @@ export function setCursorToDefaultPosition(screenPos: Point): void {
 
     const margin = 10;
     const clampedX = Math.max(margin, Math.min(state.canvas!.width - margin, targetScreenPos.x));
-    // Allow cursor to go into toolbar area (negative Y in canvas space)
-    const clampedY = Math.max(-TOOLBAR_HEIGHT + margin, Math.min(state.canvas!.height - margin, targetScreenPos.y));
+    // minY depends on confinement mode:
+    // - confined: stay within canvas (margin from top)
+    // - not confined: allow into toolbar area (negative Y in canvas space)
+    const minY = CONFINE_CURSOR_TO_CANVAS ? margin : -TOOLBAR_HEIGHT + margin;
+    const clampedY = Math.max(minY, Math.min(state.canvas!.height - margin, targetScreenPos.y));
 
     state.cursorPos = callbacks.screenToCanvas({ x: clampedX, y: clampedY });
 }
@@ -383,8 +387,9 @@ export function clampCursorToView(): void {
 
     const margin = 10;
     const clampedX = Math.max(margin, Math.min(state.canvas!.width - margin, screenPos.x));
-    // Allow cursor to go into toolbar area (negative Y in canvas space)
-    const clampedY = Math.max(-TOOLBAR_HEIGHT + margin, Math.min(state.canvas!.height - margin, screenPos.y));
+    // minY depends on confinement mode
+    const minY = CONFINE_CURSOR_TO_CANVAS ? margin : -TOOLBAR_HEIGHT + margin;
+    const clampedY = Math.max(minY, Math.min(state.canvas!.height - margin, screenPos.y));
 
     if (clampedX !== screenPos.x || clampedY !== screenPos.y) {
         state.cursorPos = callbacks.screenToCanvas({ x: clampedX, y: clampedY });
@@ -396,7 +401,8 @@ export function panToKeepCursorInView(): void {
     const screenPos = callbacks.canvasToScreen(state.cursorPos);
 
     const margin = 10;
-    const minY = -TOOLBAR_HEIGHT + margin; // Allow cursor into toolbar area
+    // minY depends on confinement mode
+    const minY = CONFINE_CURSOR_TO_CANVAS ? margin : -TOOLBAR_HEIGHT + margin;
     let panDeltaX = 0;
     let panDeltaY = 0;
 
@@ -522,6 +528,13 @@ export function updateCursorDiv(): void {
     }
 
     const cursorScreenPos = getCursorScreenPos();
+
+    // In confined mode, hide cursor if it would be above the canvas (in toolbar area)
+    if (CONFINE_CURSOR_TO_CANVAS && cursorScreenPos.y < 0) {
+        state.dom.cursorDiv!.style.display = 'none';
+        return;
+    }
+
     const strokeSize = callbacks.getPickerSize();
     const renderedSize = Math.max(strokeSize * state.viewTransform.scale, 1);
     const drawColor = callbacks.getPickerColor();

@@ -170,6 +170,11 @@ export const DESELECT_DISTANCE_THRESHOLD_MM = 3;
 // Toolbar height - cursor can extend into this area
 export const TOOLBAR_HEIGHT = 60;
 
+// Cursor confinement mode:
+// - false: cursor can go above the canvas into the toolbar area (current behavior)
+// - true: cursor is confined to the canvas and won't render over the toolbar
+export const CONFINE_CURSOR_TO_CANVAS = false;
+
 // UI drag threshold
 export const UI_DRAG_THRESHOLD = 15; // pixels before UI touch becomes canvas drag
 
