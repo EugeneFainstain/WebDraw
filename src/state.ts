@@ -175,6 +175,11 @@ export const TOOLBAR_HEIGHT = 60;
 // - true: cursor is confined to the canvas and won't render over the toolbar
 export const CONFINE_CURSOR_TO_CANVAS = true; //false;
 
+// Cursor shape:
+// - 'arrow': Windows-style arrow cursor with tip at top-left
+// - 'reticle': Crosshair/reticle cursor with activation point at center
+export const CURSOR_SHAPE: 'arrow' | 'reticle' = 'reticle';//'arrow';
+
 // UI drag threshold
 export const UI_DRAG_THRESHOLD = 15; // pixels before UI touch becomes canvas drag
 

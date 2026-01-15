@@ -31,6 +31,7 @@ import {
     getStrokeLenThreshold,
     TOOLBAR_HEIGHT,
     CONFINE_CURSOR_TO_CANVAS,
+    CURSOR_SHAPE,
     getSelectedStrokeIdx,
 } from './state';
 import { State, Event } from './stateMachine';
@@ -581,7 +582,7 @@ export function updateCursorDiv(): void {
         state.dom.cursorDiv!.style.height = `${totalSize}px`;
         state.dom.cursorDiv!.innerHTML = svg;
     } else {
-        // Normal state: show arrow cursor
+        // Normal state: show arrow or reticle cursor based on CURSOR_SHAPE
         const outerColor = isWhite ? 'black' : drawColor;
 
         // Inner ring color based on anchor state:
@@ -608,29 +609,77 @@ export function updateCursorDiv(): void {
         const scale = Math.max(0.5, (renderedSize + 8) / (baseSize / 2));
         const cursorSize = baseSize * scale;
 
-        // Windows cursor arrow SVG path - tip starts at (0,0)
-        // Path draws a classic Windows pointer arrow
-        const cursorPath = 'M 0 0 L 0 18 L 4 14 L 8 22 L 11 20 L 7 12 L 13 12 Z';
+        if (CURSOR_SHAPE === 'reticle') {
+            // Reticle cursor - crosshair with activation point at center
+            // Two layers: filler circle (back) + reticle lines/circles (front)
+            // Original SVG centered at (97.83, 134.04), normalized to 124x124 viewBox with center at (62, 62)
+            // Reticle is 2x larger than arrow cursor
+            const reticleCursorSize = cursorSize * 2;
+            const viewSize = 124;
+            const halfView = viewSize / 2;
 
-        // Filled cursor with colored outline:
-        // - Fill: white/lime (inner color)
-        // - Stroke: draw color (outer color)
-        // viewBox starts at -1,-1 to accommodate stroke width around the tip
-        // Stroke width is adjusted inversely to scale so it stays fixed at 2px on screen
-        const svgScale = cursorSize / 17; // How much the SVG is scaled up
-        const strokeWidth = 2 / svgScale; // Counter-scale to keep 2px on screen
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 17 26" width="${cursorSize}" height="${cursorSize * 26/17}">
-            <path d="${cursorPath}" fill="${innerColor}" stroke="${outerColor}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
-        </svg>`;
+            // Reticle elements - outer circle with colored outline
+            const outerRadius = 50.81;
+            const reticleStrokeWidth = 8;
+            // Filler circle (drawn behind) - same radius as outer circle, 2x stroke width
+            const fillerStrokeWidth = reticleStrokeWidth * 2;
 
-        // Position accounts for toolbar offset (canvas is 60px from top)
-        // Offset by 1px (scaled) to align the tip precisely with the cursor position
-        const tipOffset = cursorSize / 17; // 1 unit in SVG coords, scaled to actual size
-        state.dom.cursorDiv!.style.display = 'block';
-        state.dom.cursorDiv!.style.left = `${cursorScreenPos.x - tipOffset}px`;
-        state.dom.cursorDiv!.style.top = `${cursorScreenPos.y + 60 - tipOffset}px`; // Add toolbar height
-        state.dom.cursorDiv!.style.width = `${cursorSize}px`;
-        state.dom.cursorDiv!.style.height = `${cursorSize * 26/17}px`;
-        state.dom.cursorDiv!.innerHTML = svg;
+            // Center circle (like drawing cursor) - shows stroke size with inverse color
+            const centerOutlineWidth = 2;
+            const centerRadius = renderedSize / 2 + centerOutlineWidth / 2;
+            // Scale center circle to viewBox units (reticleCursorSize pixels = viewSize units)
+            const centerRadiusScaled = centerRadius * (viewSize / reticleCursorSize);
+            const centerOutlineScaled = centerOutlineWidth * (viewSize / reticleCursorSize);
+
+            // Calculate inverse color for center circle
+            const hex = drawColor.replace('#', '');
+            const ir = parseInt(hex.substring(0, 2), 16);
+            const ig = parseInt(hex.substring(2, 4), 16);
+            const ib = parseInt(hex.substring(4, 6), 16);
+            const inverseColor = `#${(255 - ir).toString(16).padStart(2, '0')}${(255 - ig).toString(16).padStart(2, '0')}${(255 - ib).toString(16).padStart(2, '0')}`;
+
+            // Build SVG with filler behind, reticle on top, center circle in middle
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${viewSize} ${viewSize}" width="${reticleCursorSize}" height="${reticleCursorSize}">
+                <!-- Filler circle (back) - shows anchor state, same radius as outer circle -->
+                <circle cx="${halfView}" cy="${halfView}" r="${outerRadius}" fill="none" stroke="${innerColor}" stroke-width="${fillerStrokeWidth}" stroke-linecap="round"/>
+                <!-- Reticle (front) - colored outline -->
+                <circle cx="${halfView}" cy="${halfView}" r="${outerRadius}" fill="none" stroke="${outerColor}" stroke-width="${reticleStrokeWidth}" stroke-linecap="round"/>
+                <!-- Center circle - like drawing cursor, shows stroke size -->
+                <circle cx="${halfView}" cy="${halfView}" r="${centerRadiusScaled}" fill="none" stroke="${inverseColor}" stroke-width="${centerOutlineScaled}"/>
+            </svg>`;
+
+            // Position with center at cursor position
+            const centerOffset = reticleCursorSize / 2;
+            state.dom.cursorDiv!.style.display = 'block';
+            state.dom.cursorDiv!.style.left = `${cursorScreenPos.x - centerOffset}px`;
+            state.dom.cursorDiv!.style.top = `${cursorScreenPos.y + TOOLBAR_HEIGHT - centerOffset}px`;
+            state.dom.cursorDiv!.style.width = `${reticleCursorSize}px`;
+            state.dom.cursorDiv!.style.height = `${reticleCursorSize}px`;
+            state.dom.cursorDiv!.innerHTML = svg;
+        } else {
+            // Arrow cursor - Windows-style with tip at top-left
+            const cursorPath = 'M 0 0 L 0 18 L 4 14 L 8 22 L 11 20 L 7 12 L 13 12 Z';
+
+            // Filled cursor with colored outline:
+            // - Fill: white/lime (inner color)
+            // - Stroke: draw color (outer color)
+            // viewBox starts at -1,-1 to accommodate stroke width around the tip
+            // Stroke width is adjusted inversely to scale so it stays fixed at 2px on screen
+            const svgScale = cursorSize / 17; // How much the SVG is scaled up
+            const strokeWidth = 2 / svgScale; // Counter-scale to keep 2px on screen
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 17 26" width="${cursorSize}" height="${cursorSize * 26/17}">
+                <path d="${cursorPath}" fill="${innerColor}" stroke="${outerColor}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>
+            </svg>`;
+
+            // Position accounts for toolbar offset (canvas is 60px from top)
+            // Offset by 1px (scaled) to align the tip precisely with the cursor position
+            const tipOffset = cursorSize / 17; // 1 unit in SVG coords, scaled to actual size
+            state.dom.cursorDiv!.style.display = 'block';
+            state.dom.cursorDiv!.style.left = `${cursorScreenPos.x - tipOffset}px`;
+            state.dom.cursorDiv!.style.top = `${cursorScreenPos.y + TOOLBAR_HEIGHT - tipOffset}px`;
+            state.dom.cursorDiv!.style.width = `${cursorSize}px`;
+            state.dom.cursorDiv!.style.height = `${cursorSize * 26/17}px`;
+            state.dom.cursorDiv!.innerHTML = svg;
+        }
     }
 }
