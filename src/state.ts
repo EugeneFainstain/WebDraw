@@ -173,7 +173,7 @@ export const TOOLBAR_HEIGHT = 60;
 // Cursor confinement mode:
 // - false: cursor can go above the canvas into the toolbar area (current behavior)
 // - true: cursor is confined to the canvas and won't render over the toolbar
-export const CONFINE_CURSOR_TO_CANVAS = false;
+export const CONFINE_CURSOR_TO_CANVAS = true; //false;
 
 // UI drag threshold
 export const UI_DRAG_THRESHOLD = 15; // pixels before UI touch becomes canvas drag
@@ -300,6 +300,13 @@ export function initState(canvas: HTMLCanvasElement) {
     appContext.dom.iosTooltipClose = document.getElementById('iosTooltipClose') as HTMLButtonElement;
     appContext.dom.debugOverlay = document.getElementById('debugOverlay') as HTMLElement;
     appContext.dom.cursorDiv = document.getElementById('cursorDiv') as HTMLElement;
+
+    // Set cursor div z-index based on confinement mode:
+    // - confined: z-index 50 (below toolbar at 100, cursor stays within canvas)
+    // - not confined: z-index 9999 (above everything, cursor can go over toolbar)
+    if (appContext.dom.cursorDiv) {
+        appContext.dom.cursorDiv.style.zIndex = CONFINE_CURSOR_TO_CANVAS ? '50' : '9999';
+    }
 }
 
 // ============================================================================

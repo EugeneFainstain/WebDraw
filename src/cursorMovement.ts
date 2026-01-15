@@ -454,8 +454,12 @@ export function getCursorPagePos(): { x: number, y: number } | null {
 /**
  * Check if the cursor tip is in the menu region (above the canvas)
  * or over a UI element like an open popup.
+ * Always returns false when cursor is confined to canvas.
  */
 export function isCursorInMenuRegion(): boolean {
+    // When cursor is confined to canvas, it can never be in menu region
+    if (CONFINE_CURSOR_TO_CANVAS) return false;
+
     if (!state.cursorPos) return false;
     const cursorScreenPos = getCursorScreenPos();
 
@@ -479,8 +483,12 @@ export function isCursorInMenuRegion(): boolean {
 /**
  * Check if the cursor tip is over a clickable UI element (toolbar or popup).
  * Returns the clickable element if found, null otherwise.
+ * Always returns null when cursor is confined to canvas.
  */
 export function getClickableElementAtCursor(): HTMLElement | null {
+    // When cursor is confined to canvas, it can't be over UI elements
+    if (CONFINE_CURSOR_TO_CANVAS) return null;
+
     const pagePos = getCursorPagePos();
     if (!pagePos) return null;
 
