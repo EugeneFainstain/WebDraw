@@ -529,9 +529,10 @@ export function updateCursorDiv(): void {
         return;
     }
 
-    // Hide cursor during transform operations
     const currentState = state.stateMachine.getState();
-    if (currentState === State.Transform) {
+
+    // Hide arrow cursor during transform operations (reticle stays visible)
+    if (currentState === State.Transform && CURSOR_SHAPE === 'arrow') {
         state.dom.cursorDiv!.style.display = 'none';
         return;
     }
