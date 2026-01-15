@@ -57,6 +57,10 @@ import {
     hideIosTooltip,
     resizeCanvas,
 } from './rendering';
+import {
+    initRadialMenu,
+    RadialMenuAction,
+} from './radialMenu';
 
 // ============================================================================
 // INITIALIZATION
@@ -354,6 +358,32 @@ initActions({
     updatePickersBasedOnSelectedStroke,
     isAnyPickerOpen: () => combinedPicker.isOpen() || menuPicker.isOpen(),
     closePickers: () => { combinedPicker.close(); menuPicker.close(); },
+});
+
+// Initialize radial menu
+initRadialMenu({
+    getPickerSize: () => combinedPicker.getSize(),
+    onRadialMenuAction: (action: RadialMenuAction) => {
+        // Handle radial menu button clicks
+        switch (action) {
+            case 'colors':
+                // TODO: Open colors submenu
+                showDebug('Colors button clicked');
+                break;
+            case 'shapes':
+                // TODO: Open shapes submenu
+                showDebug('Shapes button clicked');
+                break;
+            case 'stroke':
+                // TODO: Open stroke submenu
+                showDebug('Stroke button clicked');
+                break;
+            case 'operations':
+                // TODO: Open operations submenu
+                showDebug('Operations button clicked');
+                break;
+        }
+    },
 });
 
 // Initialize and setup pointer handlers

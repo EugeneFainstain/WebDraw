@@ -18,6 +18,12 @@ import {
     updateHighlightedStrokes,
 } from './rendering';
 import { pushUndoSnapshot } from './undoSystem';
+import {
+    isTapInsideCursor,
+    toggleRadialMenu,
+    hideRadialMenu,
+    isRadialMenuVisible,
+} from './radialMenu';
 
 // ============================================================================
 // TYPES
@@ -356,8 +362,23 @@ export function handleActions(actions: Action[]): void {
                 updateUI();
                 break;
 
-            case Action.SINGLE_TAP:
+            case Action.SINGLE_TAP: {
                 // Handle single tap gesture - contextual behavior based on cursor location
+                // Get tap position from state machine timestamps
+                const tapPos = state.stateMachine.getTimestamps().F1_UP_POS;
+
+                // If radial menu is visible, close it on any tap outside
+                if (isRadialMenuVisible()) {
+                    hideRadialMenu();
+                    break;
+                }
+
+                // Check if tap is inside the cursor - show radial menu
+                if (tapPos && isTapInsideCursor(tapPos)) {
+                    toggleRadialMenu();
+                    break;
+                }
+
                 // If a picker is open, handle it first and don't process further
                 if (deps.isAnyPickerOpen()) {
                     if (isCursorInMenuRegion()) {
@@ -380,6 +401,7 @@ export function handleActions(actions: Action[]): void {
                     doDehighlightAll();
                 }
                 break;
+            }
 
             case Action.INIT_TRANSFORM:
                 initThreeFingerTransform();
