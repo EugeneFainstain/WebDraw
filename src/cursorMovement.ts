@@ -291,38 +291,23 @@ export function updateCursorPosition(): void {
 export function addPointToStroke(): void {
     if (!state.currentStroke || !state.cursorPos) return;
 
-    // In grid mode, only add points when moving a full cell size away
+    // In grid mode, defer adding points until finger is lifted
+    // Cursor moves freely, but we track the snapped grid point for the preview line
     if (state.isGridMode) {
         if (!state.lastGridPosition) return; // Should already be initialized in CREATE_STROKE
 
-        const cellSize = callbacks.getGridCellSize();
-        const threshold = cellSize * 0.9;
+        // Always update the deferred point to the nearest grid intersection from cursor
+        const gridPoint = callbacks.snapToGrid(state.cursorPos);
 
-        const deltaFromLastX = Math.abs(state.cursorPos.x - state.lastGridPosition.x);
-        const deltaFromLastY = Math.abs(state.cursorPos.y - state.lastGridPosition.y);
-
-        if (deltaFromLastX >= threshold || deltaFromLastY >= threshold) {
-            const gridPoint = callbacks.snapToGrid(state.cursorPos);
-
-            // Add 9 interpolated points between last grid position and new grid point
-            const numInterpolated = 9;
-            for (let i = 1; i <= numInterpolated; i++) {
-                const t = i / (numInterpolated + 1);
-                const interpPoint = {
-                    x: state.lastGridPosition.x + t * (gridPoint.x - state.lastGridPosition.x),
-                    y: state.lastGridPosition.y + t * (gridPoint.y - state.lastGridPosition.y)
-                };
-                state.currentStroke.points!.push(interpPoint);
-            }
-
-            // Add the actual grid point
-            state.currentStroke.points!.push(gridPoint);
-            state.lastGridPosition = gridPoint;
-            // Snap the cursor to the grid point while drawing
-            state.cursorPos = { ...gridPoint };
-            // Update anchor for deselection distance check
-            state.cursorAnchorPos = { ...gridPoint };
+        // Only set deferred point if it's different from the last committed grid position
+        if (gridPoint.x !== state.lastGridPosition.x || gridPoint.y !== state.lastGridPosition.y) {
+            state.gridDeferredPoint = gridPoint;
+        } else {
+            // Cursor snapped to the same grid point as last committed - no deferred point
+            state.gridDeferredPoint = null;
         }
+        // Don't snap cursor - let it move freely
+        // Don't update cursorAnchorPos here - we haven't actually committed the point yet
     } else {
         // Normal mode: add every point, but skip duplicates
         const points = state.currentStroke.points!;

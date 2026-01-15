@@ -269,6 +269,23 @@ export function redraw(): void {
     // Draw current in-progress stroke
     if (state.currentStroke) {
         drawStroke(state.currentStroke);
+
+        // In grid mode, draw a preview line from the last stroke point to the deferred grid point
+        // This shows where the next segment will go when finger is lifted
+        if (state.isGridMode && state.gridDeferredPoint && state.currentStroke.points && state.currentStroke.points.length > 0) {
+            const lastPoint = state.currentStroke.points[state.currentStroke.points.length - 1];
+            const minSize = screenLengthToCanvasLength(1);
+            const renderSize = Math.max(state.currentStroke.size!, minSize);
+
+            ctx.strokeStyle = state.currentStroke.color!;
+            ctx.lineWidth = renderSize;
+            ctx.setLineDash([renderSize * 2, renderSize * 2]); // Dashed line for preview
+            ctx.beginPath();
+            ctx.moveTo(lastPoint.x, lastPoint.y);
+            ctx.lineTo(state.gridDeferredPoint.x, state.gridDeferredPoint.y);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset to solid line
+        }
     }
 
     ctx.restore();

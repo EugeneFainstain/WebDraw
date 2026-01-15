@@ -96,6 +96,10 @@ export interface AppState {
     // Grid mode state
     isGridMode: boolean;
 
+    // Grid mode deferred point - the point to be added when finger is lifted
+    // In grid mode, we don't add points while dragging; we wait for finger lift
+    gridDeferredPoint: Point | null;
+
     // Selection rectangle state
     selectionRectStart: Point | null;
     selectionRectEnd: Point | null;
@@ -203,6 +207,7 @@ function createDefaultAppState(): AppState {
         hasUndoableTransform: false,
         lastGridPosition: null,
         isGridMode: false,
+        gridDeferredPoint: null,
         selectionRectStart: null,
         selectionRectEnd: null,
         highlightedStrokes: new Set<number>(),
@@ -343,6 +348,7 @@ export function resetState() {
     appState.hasUndoableTransform = defaults.hasUndoableTransform;
     appState.lastGridPosition = defaults.lastGridPosition;
     appState.isGridMode = defaults.isGridMode;
+    appState.gridDeferredPoint = defaults.gridDeferredPoint;
     appState.selectionRectStart = defaults.selectionRectStart;
     appState.selectionRectEnd = defaults.selectionRectEnd;
     appState.highlightedStrokes.clear();
@@ -465,6 +471,7 @@ export function clearSelectionRectangle(): void {
 export function clearCurrentStroke(): void {
     appState.currentStroke = null;
     appState.lastGridPosition = null;
+    appState.gridDeferredPoint = null;
 }
 
 /**

@@ -132,6 +132,29 @@ export function handleActions(actions: Action[]): void {
                 // SAVE_STROKE: Save current stroke to history and select/highlight it
                 // Handles both new strokes and stroke continuation (merging)
                 // Note: cursorAnchorPos is already set during drawing via addPointToStroke()
+
+                // In grid mode, add the deferred point (and interpolation) before saving
+                if (state.isGridMode && state.gridDeferredPoint && state.currentStroke && state.lastGridPosition) {
+                    const gridPoint = state.gridDeferredPoint;
+                    // Add 9 interpolated points between last grid position and new grid point
+                    const numInterpolated = 9;
+                    for (let i = 1; i <= numInterpolated; i++) {
+                        const t = i / (numInterpolated + 1);
+                        const interpPoint = {
+                            x: state.lastGridPosition.x + t * (gridPoint.x - state.lastGridPosition.x),
+                            y: state.lastGridPosition.y + t * (gridPoint.y - state.lastGridPosition.y)
+                        };
+                        state.currentStroke.points!.push(interpPoint);
+                    }
+                    // Add the actual grid point
+                    state.currentStroke.points!.push(gridPoint);
+                    state.lastGridPosition = gridPoint;
+                    // Update anchor for deselection distance check
+                    state.cursorAnchorPos = { ...gridPoint };
+                    // Clear the deferred point
+                    state.gridDeferredPoint = null;
+                }
+
                 if (state.currentStroke && state.currentStroke.points!.length > 0) {
                     let mergedSuccessfully = false;
                     const selectedIdx = getSelectedStrokeIdx();
