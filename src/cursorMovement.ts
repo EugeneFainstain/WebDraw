@@ -32,7 +32,7 @@ import {
     TOOLBAR_HEIGHT,
     CONFINE_CURSOR_TO_CANVAS,
     CURSOR_SHAPE,
-    getSelectedStrokeIdx,
+    // getSelectedStrokeIdx,  // commented out along with inner ring color logic
 } from './state';
 import { State, Event } from './stateMachine';
 
@@ -591,18 +591,18 @@ export function updateCursorDiv(): void {
         // - lightskyblue: cursor anchored at middle point of stroke (can't continue)
         // - white: cursor not anchored to any stroke point (free-floating)
         let innerColor = 'white';
-        const selectedIdx = getSelectedStrokeIdx();
-        if (selectedIdx !== null && state.selectedStrokePointIdx !== null) {
-            const selectedStroke = state.strokeHistory[selectedIdx];
-            if (selectedStroke && selectedStroke.points && !selectedStroke.strokes) {
-                const lastPointIdx = selectedStroke.points.length - 1;
-                const isAtEndpoint = state.selectedStrokePointIdx === 0 || state.selectedStrokePointIdx === lastPointIdx;
-                innerColor = isAtEndpoint ? 'lime' : 'lightskyblue';
-            } else {
-                // Group stroke - show as selected but can't continue
-                innerColor = 'lightskyblue';
-            }
-        }
+        // const selectedIdx = getSelectedStrokeIdx();
+        // if (selectedIdx !== null && state.selectedStrokePointIdx !== null) {
+        //     const selectedStroke = state.strokeHistory[selectedIdx];
+        //     if (selectedStroke && selectedStroke.points && !selectedStroke.strokes) {
+        //         const lastPointIdx = selectedStroke.points.length - 1;
+        //         const isAtEndpoint = state.selectedStrokePointIdx === 0 || state.selectedStrokePointIdx === lastPointIdx;
+        //         innerColor = isAtEndpoint ? 'lime' : 'lightskyblue';
+        //     } else {
+        //         // Group stroke - show as selected but can't continue
+        //         innerColor = 'lightskyblue';
+        //     }
+        // }
 
         // Scale cursor based on stroke size (base size ~48px, scales with stroke)
         // 2x larger than before
