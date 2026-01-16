@@ -123,7 +123,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag (also updates real-time highlighting) |
 | `APPLY_SELECTION_RECTANGLE` | Complete selection rectangle and keep strokes highlighted |
 | `CANCEL_SELECTION_RECTANGLE` | Cancel selection rectangle and clear highlighting |
-| `SINGLE_TAP` | Handle single tap gesture (may clear highlighting, interact with picker/menu) |
+| `HANDLE_SINGLE_TAP_ACTION` | Handle single tap gesture (may clear highlighting, interact with picker/menu) |
 | `INIT_TRANSFORM` | Initialize 3-finger transform |
 | `APPLY_TRANSFORM` | Apply transform (continuous) |
 | `PROCESS_DELETE` | Execute delete operation |
@@ -186,7 +186,7 @@ After all tables have been processed, record the timestamp and position for the 
 |-------|---------------------------|
 | F2_DOWN | Go to Drawing. do [CREATE_STROKE] |
 | F3_DOWN | Go to Idle. do [ABORT_TOO_MANY_FINGERS, DEHIGHLIGHT_ALL] |
-| F1_UP | If singleTapJustHappened() -> do [SINGLE_TAP]. Else if isOnlyOneStrokeHighlighted() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
+| F1_UP | If singleTapJustHappened() -> do [HANDLE_SINGLE_TAP_ACTION]. Else if isOnlyOneStrokeHighlighted() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
 | CURSOR_MOVED_FAR | If isOnlyOneStrokeHighlighted() -> do [DEANCHOR_CURSOR] (clears anchor but keeps stroke highlighted) |
 | PINCH_DETECTED | ----- |
 
@@ -262,7 +262,7 @@ The "selected stroke" is derived from `highlightedStrokes`:
   - CLEAR button pressed
   - Too many fingers (F3_DOWN in MovingCursor)
   - Tap-and-a-half (entering SelectionRectangle mode)
-- [SINGLE_TAP] - Handles single tap gesture, clears highlighting if cursor is on canvas (not on picker/menu)
+- [HANDLE_SINGLE_TAP_ACTION] - Handles single tap gesture, clears highlighting if cursor is on canvas (not on picker/menu)
 - DELETE button pressed (removes highlighted strokes)
 - Selection rectangle (can highlight multiple strokes, making `isOnlyOneStrokeHighlighted()` return false)
 

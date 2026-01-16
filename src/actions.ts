@@ -58,7 +58,7 @@ export function initActions(dependencies: ActionDependencies): void {
 
 /**
  * Clear all highlighting and anchor state.
- * Called by DEHIGHLIGHT_ALL action and SINGLE_TAP action (when cursor is on canvas).
+ * Called by DEHIGHLIGHT_ALL action and HANDLE_SINGLE_TAP_ACTION action (when cursor is on canvas).
  */
 function doDehighlightAll(): void {
     clearSelectionState();
@@ -362,7 +362,7 @@ export function handleActions(actions: Action[]): void {
                 updateUI();
                 break;
 
-            case Action.SINGLE_TAP: {
+            case Action.HANDLE_SINGLE_TAP_ACTION: {
                 // Handle single tap gesture - contextual behavior based on cursor location
                 // Get tap position from state machine timestamps
                 const tapPos = state.stateMachine.getTimestamps().F1_UP_POS;

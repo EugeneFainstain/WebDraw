@@ -129,7 +129,7 @@ export enum Action {
     CANCEL_SELECTION_RECTANGLE = 'CANCEL_SELECTION_RECTANGLE',
 
     // Tap actions
-    SINGLE_TAP = 'SINGLE_TAP',                             // Handle single tap (may clear highlighting, interact with picker/menu)
+    HANDLE_SINGLE_TAP_ACTION = 'HANDLE_SINGLE_TAP_ACTION',                             // Handle single tap (may clear highlighting, interact with picker/menu)
 
     // Transform actions
     INIT_TRANSFORM = 'INIT_TRANSFORM',
@@ -578,14 +578,14 @@ export class StateMachine {
                 };
 
             case Event.F1_UP:
-                // If singleTapJustHappened() -> do [SINGLE_TAP] (handles highlighting, picker, menu interactions)
+                // If singleTapJustHappened() -> do [HANDLE_SINGLE_TAP_ACTION] (handles highlighting, picker, menu interactions)
                 // Else if isOnlyOneStrokeHighlighted() -> do [SNAP_CURSOR_TO_SELECTED_STROKE] (snap back after small movement)
                 // Finally: Go to Idle
                 // Note: doubleTapJustHappened() is handled in SelectionRectangle state, not here
                 if (this.singleTapJustHappened(now)) {
                     return {
                         newState: State.Idle,
-                        actions: [Action.SINGLE_TAP]
+                        actions: [Action.HANDLE_SINGLE_TAP_ACTION]
                     };
                 } else if (this.isOnlyOneStrokeHighlighted()) {
                     // Not a tap, but stroke is selected - snap cursor back to anchor
