@@ -27,6 +27,7 @@ import {
     getDeselectDistanceThreshold,
     resetPointerTrackingState,
 } from './state';
+import { isRadialMenuVisible, updateRadialMenuPosition } from './radialMenu';
 
 // ============================================================================
 // TYPES
@@ -95,14 +96,20 @@ export function handlePointerDown(e: PointerEvent): void {
     const target = e.target as HTMLElement;
     const pos = getPointerPos(e);
 
-    // Check if this started on a UI element
-    if (target.closest('.toolbar, button, #combinedPicker, [style*="z-index: 1000"]')) {
+    // Check if this started on a UI element (including radial menu buttons)
+    if (target.closest('.toolbar, button, #combinedPicker, [style*="z-index: 1000"], #radialMenu')) {
         // Track this pointer - it might become a drag
         state.pointersOnUI.set(e.pointerId, { startX: e.clientX, startY: e.clientY });
         return;
     }
 
     e.preventDefault();
+
+    // If radial menu is open and this is NOT the first finger, ignore the event
+    // This blocks all multi-finger gestures (drawing, transform, etc.) while menu is open
+    if (isRadialMenuVisible() && state.eventHandler.getFingerCount() > 0) {
+        return;
+    }
 
     // Capture pointer on document.body - this ensures we receive all events
     // regardless of where the touch started
@@ -143,6 +150,11 @@ export function handlePointerMove(e: PointerEvent): void {
     // Handle state-specific continuous updates
     if (currentState === State.MovingCursor || currentState === State.Drawing) {
         callbacks.updateCursorPosition();
+
+        // Update radial menu position if visible (buttons follow cursor)
+        if (isRadialMenuVisible()) {
+            updateRadialMenuPosition();
+        }
 
         // Check if cursor moved far from anchor - emit CURSOR_MOVED_FAR event
         if (currentState === State.MovingCursor && state.stateMachine.isOnlyOneStrokeHighlighted()) {

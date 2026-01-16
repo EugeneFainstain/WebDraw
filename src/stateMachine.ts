@@ -137,7 +137,7 @@ export enum Action {
     CANCEL_SELECTION_RECTANGLE = 'CANCEL_SELECTION_RECTANGLE',
 
     // Tap actions
-    HANDLE_SINGLE_TAP_ACTION = 'HANDLE_SINGLE_TAP_ACTION',                             // Handle single tap (may clear highlighting, interact with picker/menu)
+    HANDLE_SINGLE_TAP_ACTION = 'HANDLE_SINGLE_TAP_ACTION', // Handle single tap (may clear highlighting, interact with picker/menu)
 
     // Transform actions
     INIT_TRANSFORM = 'INIT_TRANSFORM',
