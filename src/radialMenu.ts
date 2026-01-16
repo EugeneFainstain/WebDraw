@@ -24,6 +24,7 @@ export type RadialMenuAction = 'colors' | 'shapes' | 'stroke' | 'operations';
 export interface RadialMenuCallbacks {
     getPickerSize: () => number;
     onRadialMenuAction: (action: RadialMenuAction) => void;
+    onOpen?: () => void;  // Called when radial menu opens (to close pickers)
 }
 
 // ============================================================================
@@ -77,6 +78,11 @@ export function initRadialMenu(cb: RadialMenuCallbacks): void {
 
 export function showRadialMenu(): void {
     if (!radialMenuEl || isVisible) return;
+
+    // Notify that the radial menu is opening (to close pickers)
+    if (callbacks.onOpen) {
+        callbacks.onOpen();
+    }
 
     isVisible = true;
     radialMenuEl.classList.add('visible');

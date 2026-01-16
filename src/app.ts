@@ -60,6 +60,7 @@ import {
 import {
     initRadialMenu,
     RadialMenuAction,
+    hideRadialMenu,
 } from './radialMenu';
 
 // ============================================================================
@@ -101,8 +102,9 @@ const menuPicker = createMenuPicker(
         state.eventHandler.handleClear();
     },
     () => {
-        // Close other picker before opening
+        // Close other picker and radial menu before opening
         pickers.combined?.close();
+        hideRadialMenu();
     }
 );
 pickers.menu = menuPicker;
@@ -149,8 +151,9 @@ const combinedPicker = createCombinedPicker(
         redraw();
     },
     () => {
-        // Close other picker before opening
+        // Close other picker and radial menu before opening
         pickers.menu?.close();
+        hideRadialMenu();
     }
 );
 pickers.combined = combinedPicker;
@@ -383,6 +386,11 @@ initRadialMenu({
                 showDebug('Operations button clicked');
                 break;
         }
+    },
+    onOpen: () => {
+        // Close pickers when radial menu opens
+        combinedPicker.close();
+        menuPicker.close();
     },
 });
 

@@ -27,7 +27,7 @@ import {
     getDeselectDistanceThreshold,
     resetPointerTrackingState,
 } from './state';
-import { isRadialMenuVisible, updateRadialMenuPosition, showRadialMenu, isTapInsideCursor, recordMenuStateOnFingerDown } from './radialMenu';
+import { isRadialMenuVisible, updateRadialMenuPosition, showRadialMenu, isTapInsideCursor, recordMenuStateOnFingerDown, hideRadialMenu } from './radialMenu';
 
 // ============================================================================
 // TYPES
@@ -98,6 +98,10 @@ export function handlePointerDown(e: PointerEvent): void {
 
     // Check if this started on a UI element (including radial menu buttons)
     if (target.closest('.toolbar, button, #combinedPicker, [style*="z-index: 1000"], #radialMenu')) {
+        // Close radial menu when tapping on toolbar/menu (but not on radial menu itself)
+        if (!target.closest('#radialMenu') && isRadialMenuVisible()) {
+            hideRadialMenu();
+        }
         // Track this pointer - it might become a drag
         state.pointersOnUI.set(e.pointerId, { startX: e.clientX, startY: e.clientY });
         return;

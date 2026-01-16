@@ -449,7 +449,7 @@ button {
 .radial-menu {
     position: fixed;
     pointer-events: none;
-    z-index: 10000;
+    z-index: 50; /* Same as cursor - below toolbar (100) */
     display: none; /* Hidden until shown */
 }
 
