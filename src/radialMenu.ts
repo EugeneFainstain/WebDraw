@@ -568,9 +568,15 @@ function createSizeButtons(): void {
         btn.dataset.index = index.toString();
 
         // Create inner dot representing the size
+        // Button is 48px with 3px border, so inner area is 42px
+        // Scale dot from min (4px) to max (40px) based on size value
         const dot = document.createElement('div');
         dot.className = 'radial-size-dot';
-        const dotSize = Math.min(size, 32); // Cap display size
+        const minDot = 4;
+        const maxDot = 40;
+        const minSize = SIZE_VALUES[0];
+        const maxSize = SIZE_VALUES[SIZE_VALUES.length - 1];
+        const dotSize = minDot + ((size - minSize) / (maxSize - minSize)) * (maxDot - minDot);
         dot.style.width = `${dotSize}px`;
         dot.style.height = `${dotSize}px`;
         btn.appendChild(dot);
@@ -653,18 +659,34 @@ function positionSizeButtons(): void {
 
 /**
  * Update size button colors (border and dot) to match current selected color.
+ * For white color, shows a black outline instead of a filled dot.
+ * For the smallest size, always shows an outline instead of a filled dot.
  */
 function updateSizeButtonColors(): void {
     const currentColor = callbacks.getCurrentColor ? callbacks.getCurrentColor() : '#FF8000';
+    const isWhite = currentColor.toUpperCase() === '#FFFFFF' || currentColor.toUpperCase() === '#FFF';
+    const smallestSize = SIZE_VALUES[0];
+
     for (const btn of sizeButtons) {
         // Update border color (unless selected)
         if (!btn.classList.contains('selected')) {
             btn.style.borderColor = currentColor;
         }
-        // Update dot color
+        // Update dot appearance
         const dot = btn.querySelector('.radial-size-dot') as HTMLElement;
         if (dot) {
-            dot.style.backgroundColor = currentColor;
+            const btnSize = parseInt(btn.dataset.size || '0', 10);
+            const useOutline = isWhite || btnSize === smallestSize;
+
+            if (useOutline) {
+                // For white or smallest size: show outline, transparent fill
+                dot.style.backgroundColor = 'transparent';
+                dot.style.border = `2px solid ${isWhite ? '#000' : currentColor}`;
+            } else {
+                // For other colors/sizes: filled dot, no border
+                dot.style.backgroundColor = currentColor;
+                dot.style.border = 'none';
+            }
         }
     }
 }
