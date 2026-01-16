@@ -184,15 +184,17 @@ export function wasMenuVisibleOnFingerDown(): boolean {
 /**
  * Get the current cursor outer ring radius in screen pixels.
  * This matches the calculation in updateCursorDiv() for the reticle cursor.
+ * The cursor has a fixed outer size at zoom=1 (same as at app startup with default stroke size 6),
+ * and scales with the canvas zoom level.
  */
 function getCursorOuterRadius(): number {
-    const strokeSize = callbacks.getPickerSize();
-    const renderedSize = Math.max(strokeSize * state.viewTransform.scale, 1);
-
-    // From cursorMovement.ts: cursor size calculation
+    // Fixed cursor size at zoom=1 - matches the size at app startup (default stroke size 6)
     const baseSize = 48;
-    const scale = Math.max(0.5, (renderedSize + 8) / (baseSize / 2));
-    const cursorSize = baseSize * scale;
+    const defaultRenderedSize = 6;
+    const fixedScale = Math.max(0.5, (defaultRenderedSize + 8) / (baseSize / 2));
+    const baseCursorSize = baseSize * fixedScale;
+    // Scale cursor with canvas zoom
+    const cursorSize = baseCursorSize * state.viewTransform.scale;
 
     // Reticle cursor is 2x larger
     const reticleCursorSize = cursorSize * 2;

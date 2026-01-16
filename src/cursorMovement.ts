@@ -589,11 +589,14 @@ export function updateCursorDiv(): void {
         //     }
         // }
 
-        // Scale cursor based on stroke size (base size ~48px, scales with stroke)
-        // 2x larger than before
+        // Fixed outer cursor size at zoom=1, scales with canvas zoom
+        // Base size matches app startup (default stroke size 6)
         const baseSize = 48;
-        const scale = Math.max(0.5, (renderedSize + 8) / (baseSize / 2));
-        const cursorSize = baseSize * scale;
+        const defaultRenderedSize = 6; // Default stroke size at startup
+        const fixedScale = Math.max(0.5, (defaultRenderedSize + 8) / (baseSize / 2));
+        const baseCursorSize = baseSize * fixedScale;
+        // Scale cursor with canvas zoom
+        const cursorSize = baseCursorSize * state.viewTransform.scale;
 
         if (CURSOR_SHAPE === 'reticle') {
             // Reticle cursor - crosshair with activation point at center
@@ -610,28 +613,45 @@ export function updateCursorDiv(): void {
             // Filler circle (drawn behind) - same radius as outer circle, 2x stroke width
             const fillerStrokeWidth = reticleStrokeWidth * 2;
 
-            // Center circles (like drawing cursor) - thin color circle with thin white behind
-            const centerInnerOutlineWidth = 2;
-            const centerInnerRadius = renderedSize / 2 + centerInnerOutlineWidth / 2;
-            const centerOuterOutlineWidth = 2;
-            const centerOuterRadius = centerInnerRadius + centerInnerOutlineWidth;
-            // Scale center circles to viewBox units (reticleCursorSize pixels = viewSize units)
-            const scaleToView = viewSize / reticleCursorSize;
-            const centerInnerRadiusScaled = centerInnerRadius * scaleToView;
-            const centerInnerOutlineScaled = centerInnerOutlineWidth * scaleToView;
-            const centerOuterRadiusScaled = centerOuterRadius * scaleToView;
-            const centerOuterOutlineScaled = centerOuterOutlineWidth * scaleToView;
+            // Center dot - scales with stroke size like stroke width buttons
+            // Use strokeSize (not renderedSize) so dot scales independently of zoom
+            // Scale from min (4px) to max (40px) based on stroke size, then apply zoom
+            const minDot = 4;
+            const maxDot = 40;
+            const minSize = 1;
+            const maxSize = 40;
+            const clampedSize = Math.max(minSize, Math.min(maxSize, strokeSize));
+            const baseDotSizePixels = minDot + ((clampedSize - minSize) / (maxSize - minSize)) * (maxDot - minDot);
+            // Apply zoom to dot size
+            const dotSizePixels = baseDotSizePixels * state.viewTransform.scale;
 
-            // Build SVG with filler behind, reticle on top, center circles in middle
+            // Scale dot size to viewBox units (reticleCursorSize pixels = viewSize units)
+            const scaleToView = viewSize / reticleCursorSize;
+            const dotRadiusScaled = (dotSizePixels / 2) * scaleToView;
+
+            // Determine if dot should be outline or filled (like stroke width buttons)
+            const useOutline = isWhite || strokeSize <= minSize;
+
+            // Build center dot SVG
+            let centerDotSvg: string;
+            if (useOutline) {
+                // Outline style for white or smallest size
+                const outlineWidth = 2 * scaleToView;
+                const outlineColor = isWhite ? '#000' : drawColor;
+                centerDotSvg = `<circle cx="${halfView}" cy="${halfView}" r="${dotRadiusScaled}" fill="none" stroke="${outlineColor}" stroke-width="${outlineWidth}"/>`;
+            } else {
+                // Filled dot for other colors/sizes
+                centerDotSvg = `<circle cx="${halfView}" cy="${halfView}" r="${dotRadiusScaled}" fill="${drawColor}"/>`;
+            }
+
+            // Build SVG with filler behind, reticle on top, center dot in middle
             const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${viewSize} ${viewSize}" width="${reticleCursorSize}" height="${reticleCursorSize}">
                 <!-- Filler circle (back) - shows anchor state, same radius as outer circle -->
                 <circle cx="${halfView}" cy="${halfView}" r="${outerRadius}" fill="none" stroke="${innerColor}" stroke-width="${fillerStrokeWidth}" stroke-linecap="round"/>
                 <!-- Reticle (front) - colored outline -->
                 <circle cx="${halfView}" cy="${halfView}" r="${outerRadius}" fill="none" stroke="${outerColor}" stroke-width="${reticleStrokeWidth}" stroke-linecap="round"/>
-                <!-- Center white circle (back) - thick white outline -->
-                <circle cx="${halfView}" cy="${halfView}" r="${centerOuterRadiusScaled}" fill="none" stroke="white" stroke-width="${centerOuterOutlineScaled}"/>
-                <!-- Center color circle (front) - thin drawing color outline -->
-                <circle cx="${halfView}" cy="${halfView}" r="${centerInnerRadiusScaled}" fill="none" stroke="${drawColor}" stroke-width="${centerInnerOutlineScaled}"/>
+                <!-- Center dot - shows stroke size -->
+                ${centerDotSvg}
             </svg>`;
 
             // Position with center at cursor position
