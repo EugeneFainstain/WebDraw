@@ -397,6 +397,8 @@ initRadialMenu({
     onColorSelect: (color: string) => {
         // Update the color picker with the selected color
         combinedPicker.setColor(color);
+        // Update cursor to reflect new color
+        updateCursorDiv();
         // Apply to all highlighted strokes (including groups)
         if (state.highlightedStrokes.size > 0) {
             for (const index of state.highlightedStrokes) {
@@ -410,7 +412,26 @@ initRadialMenu({
             redraw();
         }
     },
+    onSizeSelect: (size: number) => {
+        // Update the size picker with the selected size
+        combinedPicker.setSize(size);
+        // Update cursor to reflect new size
+        updateCursorDiv();
+        // Apply to all highlighted strokes (including groups)
+        if (state.highlightedStrokes.size > 0) {
+            for (const index of state.highlightedStrokes) {
+                if (index < state.strokeHistory.length) {
+                    transformStroke(state.strokeHistory[index], (stroke: Stroke) => {
+                        stroke.size = size;
+                    });
+                }
+            }
+            pushUndoSnapshot();
+            redraw();
+        }
+    },
     getCurrentColor: () => combinedPicker.getColor(),
+    getCurrentSize: () => combinedPicker.getSize(),
 });
 
 // Initialize and setup pointer handlers

@@ -341,10 +341,10 @@ export function createCombinedPicker(
             }
         },
         setSize: (size: number) => {
-            if (SIZES.includes(size)) {
-                currentSize = size;
-                updateTrigger();
-            }
+            // Accept any valid size value, not just ones in SIZES array
+            // This allows the radial menu to use its own size values
+            currentSize = size;
+            updateTrigger();
         },
         setGridActive: (active: boolean) => {
             isGridActive = active;

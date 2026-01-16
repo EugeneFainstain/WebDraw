@@ -27,7 +27,9 @@ export interface RadialMenuCallbacks {
     onRadialMenuAction: (action: RadialMenuAction) => void;
     onOpen?: () => void;  // Called when radial menu opens (to close pickers)
     onColorSelect?: (color: string) => void;  // Called when a color is selected from radial menu
+    onSizeSelect?: (size: number) => void;  // Called when a size is selected from radial menu
     getCurrentColor?: () => string;  // Get the current selected color
+    getCurrentSize?: () => number;  // Get the current selected size
 }
 
 // ============================================================================
@@ -53,6 +55,14 @@ let isAnimating = false;
 let colorButtons: HTMLElement[] = [];
 let colorButtonsVisible = false;
 
+// Size buttons state
+let sizeButtons: HTMLElement[] = [];
+let sizeButtonsVisible = false;
+
+// Size values: 6 sizes linearly distributed from 1 to 40
+const SIZE_VALUES = Array.from({ length: 6 }, (_, i) => Math.round(1 + (i * 39) / 5));
+const SIZE_BUTTON_SIZE = 48;
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
@@ -68,8 +78,9 @@ export function initRadialMenu(cb: RadialMenuCallbacks): void {
         strokeBtn = radialMenuEl.querySelector('.radial-btn-stroke');
         operationsBtn = radialMenuEl.querySelector('.radial-btn-operations');
 
-        // Create color buttons
+        // Create color and size buttons
         createColorButtons();
+        createSizeButtons();
 
         // Set up click handlers
         radialMenuEl.addEventListener('click', (e) => {
@@ -126,6 +137,7 @@ export function hideRadialMenu(): void {
 
     // Hide any sub-menus
     hideColorButtons();
+    hideSizeButtons();
 
     // Reset selection state
     selectedAction = null;
@@ -309,6 +321,7 @@ function selectButton(action: RadialMenuAction): void {
     // Show sub-menu immediately (all animations happen together)
     if (action === 'colors') {
         showColorButtons();
+        showSizeButtons();
     }
 
     // Wait for animation to complete
@@ -334,6 +347,7 @@ function deselectButton(): void {
 
     // Hide sub-menus (animation happens simultaneously)
     hideColorButtons();
+    hideSizeButtons();
 
     // Fade in all buttons (add visible back, remove faded)
     for (const btn of getAllButtons()) {
@@ -400,6 +414,8 @@ function createColorButtons(): void {
             }
             // Update selected state
             updateColorButtonSelection(color);
+            // Update size button colors to match the new color
+            updateSizeButtonColors();
         });
 
         radialMenuEl!.appendChild(btn);
@@ -421,28 +437,71 @@ function updateColorButtonSelection(selectedColor: string): void {
 }
 
 /**
- * Position color buttons in a single circle around the cursor.
- * All 12 buttons are evenly spaced and touch each other.
+ * Calculate the radius for size buttons (inner circle).
+ * 6 buttons of SIZE_BUTTON_SIZE touching each other, plus 1/8 button padding.
+ */
+function getSizeButtonsRadius(): number {
+    const baseRadius = SIZE_BUTTON_SIZE / (2 * Math.sin(Math.PI / SIZE_VALUES.length));
+    return baseRadius + SIZE_BUTTON_SIZE / 8;
+}
+
+// Color button size - same as size buttons
+const COLOR_BUTTON_SIZE = 48;
+
+/**
+ * Calculate the radius for color buttons (outer circle).
+ * Positioned so they touch the size buttons circle, plus 1/8 button padding.
+ */
+function getColorButtonsRadius(): number {
+    const sizeRadius = getSizeButtonsRadius();
+    // Color buttons touch size buttons: color radius = size radius + half size button + half color button + 1/8 button padding
+    return sizeRadius + SIZE_BUTTON_SIZE / 2 + COLOR_BUTTON_SIZE / 2 + COLOR_BUTTON_SIZE / 8;
+}
+
+/**
+ * Position color buttons in two staggered rings around the size buttons.
+ * Odd-indexed buttons form the inner ring at a fixed radius.
+ * Even-indexed buttons (red, yellow, cyan, purple, white, 25% gray) are positioned
+ * at the average position of their two neighbors.
  */
 function positionColorButtons(): void {
     if (!colorButtons.length) return;
 
     const cursorScreenPos = getCursorScreenPos();
-    const buttonSize = 48;
-    const halfButton = buttonSize / 2;
+    const halfButton = COLOR_BUTTON_SIZE / 2;
     const centerX = cursorScreenPos.x;
     const centerY = cursorScreenPos.y + TOOLBAR_HEIGHT;
 
-    // Calculate radius so buttons touch: r = buttonSize / (2 * sin(π/n))
-    const count = colorButtons.length;
-    const radius = buttonSize / (2 * Math.sin(Math.PI / count));
+    const radius = getColorButtonsRadius();
+    // Rotate by half a size button step so color buttons sit between size buttons
+    const phaseShift = Math.PI / SIZE_VALUES.length;
 
-    for (let i = 0; i < count; i++) {
-        const angle = (i / count) * 2 * Math.PI - Math.PI / 2; // Start from top
-        const x = centerX + Math.cos(angle) * radius - halfButton;
-        const y = centerY + Math.sin(angle) * radius - halfButton;
-        colorButtons[i].style.left = `${x}px`;
-        colorButtons[i].style.top = `${y}px`;
+    // First pass: calculate positions for odd-indexed buttons (inner ring)
+    const positions: { x: number; y: number }[] = [];
+    for (let i = 0; i < colorButtons.length; i++) {
+        const angle = (i / colorButtons.length) * 2 * Math.PI - Math.PI / 2 + phaseShift;
+        positions[i] = {
+            x: centerX + Math.cos(angle) * radius,
+            y: centerY + Math.sin(angle) * radius
+        };
+    }
+
+    // Second pass: even-indexed buttons get averaged position of their neighbors
+    for (let i = 0; i < colorButtons.length; i++) {
+        let x: number, y: number;
+        if (i % 2 === 0) {
+            // Even index: average of neighbors
+            const prevIdx = (i - 1 + colorButtons.length) % colorButtons.length;
+            const nextIdx = (i + 1) % colorButtons.length;
+            x = (positions[prevIdx].x + positions[nextIdx].x) / 2;
+            y = (positions[prevIdx].y + positions[nextIdx].y) / 2;
+        } else {
+            // Odd index: use calculated position
+            x = positions[i].x;
+            y = positions[i].y;
+        }
+        colorButtons[i].style.left = `${x - halfButton}px`;
+        colorButtons[i].style.top = `${y - halfButton}px`;
     }
 }
 
@@ -487,5 +546,160 @@ function hideColorButtons(): void {
 function updateColorButtonPositions(): void {
     if (colorButtonsVisible) {
         positionColorButtons();
+        positionSizeButtons();
+    }
+}
+
+// ============================================================================
+// SIZE BUTTONS
+// ============================================================================
+
+/**
+ * Create size button elements and add them to the radial menu.
+ * Buttons are created hidden and will be shown when the colors action is selected.
+ */
+function createSizeButtons(): void {
+    if (!radialMenuEl) return;
+
+    sizeButtons = SIZE_VALUES.map((size, index) => {
+        const btn = document.createElement('div');
+        btn.className = 'radial-size-btn';
+        btn.dataset.size = size.toString();
+        btn.dataset.index = index.toString();
+
+        // Create inner dot representing the size
+        const dot = document.createElement('div');
+        dot.className = 'radial-size-dot';
+        const dotSize = Math.min(size, 32); // Cap display size
+        dot.style.width = `${dotSize}px`;
+        dot.style.height = `${dotSize}px`;
+        btn.appendChild(dot);
+
+        btn.addEventListener('pointerup', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (callbacks.onSizeSelect) {
+                callbacks.onSizeSelect(size);
+            }
+            // Update selected state
+            updateSizeButtonSelection(size);
+        });
+
+        radialMenuEl!.appendChild(btn);
+        return btn;
+    });
+}
+
+/**
+ * Find the closest size value to the given size.
+ */
+function findClosestSize(size: number): number {
+    let closest = SIZE_VALUES[0];
+    let minDiff = Math.abs(size - closest);
+    for (const val of SIZE_VALUES) {
+        const diff = Math.abs(size - val);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closest = val;
+        }
+    }
+    return closest;
+}
+
+/**
+ * Update the selected state of size buttons.
+ * Finds the closest matching size value if exact match not found.
+ */
+function updateSizeButtonSelection(selectedSize: number): void {
+    const closestSize = findClosestSize(selectedSize);
+    const currentColor = callbacks.getCurrentColor ? callbacks.getCurrentColor() : '#FF8000';
+    for (const btn of sizeButtons) {
+        if (btn.dataset.size === closestSize.toString()) {
+            btn.classList.add('selected');
+            // Override inline style with green for selected button
+            btn.style.borderColor = '#00ff00';
+        } else {
+            btn.classList.remove('selected');
+            // Restore current color for non-selected buttons
+            btn.style.borderColor = currentColor;
+        }
+    }
+}
+
+/**
+ * Position size buttons in a tight inner circle.
+ */
+function positionSizeButtons(): void {
+    if (!sizeButtons.length) return;
+
+    const cursorScreenPos = getCursorScreenPos();
+    const halfButton = SIZE_BUTTON_SIZE / 2;
+    const centerX = cursorScreenPos.x;
+    const centerY = cursorScreenPos.y + TOOLBAR_HEIGHT;
+
+    const radius = getSizeButtonsRadius();
+
+    for (let i = 0; i < sizeButtons.length; i++) {
+        const angle = (i / sizeButtons.length) * 2 * Math.PI - Math.PI / 2; // Start from top
+        const x = centerX + Math.cos(angle) * radius - halfButton;
+        const y = centerY + Math.sin(angle) * radius - halfButton;
+        sizeButtons[i].style.left = `${x}px`;
+        sizeButtons[i].style.top = `${y}px`;
+    }
+
+    // Update dot colors to match current color
+    updateSizeButtonColors();
+}
+
+/**
+ * Update size button colors (border and dot) to match current selected color.
+ */
+function updateSizeButtonColors(): void {
+    const currentColor = callbacks.getCurrentColor ? callbacks.getCurrentColor() : '#FF8000';
+    for (const btn of sizeButtons) {
+        // Update border color (unless selected)
+        if (!btn.classList.contains('selected')) {
+            btn.style.borderColor = currentColor;
+        }
+        // Update dot color
+        const dot = btn.querySelector('.radial-size-dot') as HTMLElement;
+        if (dot) {
+            dot.style.backgroundColor = currentColor;
+        }
+    }
+}
+
+/**
+ * Show size buttons with animation.
+ */
+function showSizeButtons(): void {
+    if (sizeButtonsVisible) return;
+    sizeButtonsVisible = true;
+
+    // Update selection based on current size
+    if (callbacks.getCurrentSize) {
+        updateSizeButtonSelection(callbacks.getCurrentSize());
+    }
+
+    // Position buttons first (while invisible)
+    positionSizeButtons();
+
+    // Then make them visible with animation
+    requestAnimationFrame(() => {
+        for (const btn of sizeButtons) {
+            btn.classList.add('visible');
+        }
+    });
+}
+
+/**
+ * Hide size buttons with animation.
+ */
+function hideSizeButtons(): void {
+    if (!sizeButtonsVisible) return;
+    sizeButtonsVisible = false;
+
+    for (const btn of sizeButtons) {
+        btn.classList.remove('visible');
     }
 }
