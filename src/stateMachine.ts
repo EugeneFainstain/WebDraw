@@ -40,12 +40,20 @@ export enum State {
 // ============================================================================
 
 export enum Event {
+    // Raw finger events
     F1_DOWN = 'F1_DOWN',              // First finger touches screen
     F2_DOWN = 'F2_DOWN',              // Second finger touches screen
     F3_DOWN = 'F3_DOWN',              // Third finger touches screen
     F1_UP = 'F1_UP',                  // Last finger lifted (was 1 finger, now 0)
     F2_UP = 'F2_UP',                  // One of two fingers lifted (was 2 fingers, now 1)
     F3_UP = 'F3_UP',                  // One of three fingers lifted (was 3 fingers, now 2)
+
+    // Derived tap events (converted from raw events in preprocessing)
+    SINGLE_TAP_ENDED = 'SINGLE_TAP_ENDED',           // Converted from F1_UP when quick single tap detected
+    DOUBLE_TAP_ENDED = 'DOUBLE_TAP_ENDED',           // Converted from F1_UP when quick second tap detected
+    TAP_AND_A_HALF_STARTED = 'TAP_AND_A_HALF_STARTED', // Converted from F1_DOWN when starting tap-and-a-half
+
+    // Other events
     CURSOR_MOVED_FAR = 'CURSOR_MOVED_FAR', // Cursor moved >3mm from cursorAnchorPos (deselection/snap)
     LONG_STROKE_DRAWN = 'LONG_STROKE_DRAWN', // Stroke path length exceeded threshold (gesture lock)
     PINCH_DETECTED = 'PINCH_DETECTED', // Two-finger distance changed beyond threshold
@@ -356,14 +364,19 @@ export class StateMachine {
      */
     public processEvent(event: Event, now: number = Date.now(), pos: Position | null = null): TransitionResult {
         // ====================================================================
-        // BEFORE ALL - Flag calculations and timestamp assignments
+        // EVENT PREPROCESSING - Convert raw events to derived events
         // ====================================================================
-        this.processBeforeAll(event, now, pos);
+        const preprocessedEvent = this.preprocessEvent(event, now, pos);
+
+        // ====================================================================
+        // BEFORE ALL - Timestamp assignments and flag updates
+        // ====================================================================
+        this.processBeforeAll(preprocessedEvent, now);
 
         // ====================================================================
         // STATE-SPECIFIC TRANSITIONS
         // ====================================================================
-        const result = this.transition(this.currentState, event, now);
+        const result = this.transition(this.currentState, preprocessedEvent);
 
         // Apply the state transition
         this.currentState = result.newState;
@@ -371,7 +384,7 @@ export class StateMachine {
         // ====================================================================
         // AFTER ALL - Resets and zero assignments
         // ====================================================================
-        this.processAfterAll(event);
+        this.processAfterAll(preprocessedEvent);
 
         // ====================================================================
         // POSTPROCESSING - Record event timestamps and positions
@@ -382,34 +395,60 @@ export class StateMachine {
     }
 
     /**
-     * BEFORE ALL processing - happens before state-specific transitions
-     * Rule: Calculations/checks and timestamp assignments (setting to `now`) go here.
+     * EVENT PREPROCESSING - Convert raw finger events to derived tap events.
+     * This happens before any transition tables are processed.
+     * When a conversion occurs, the converted event replaces the original.
      */
-    private processBeforeAll(event: Event, now: number, pos: Position | null): void {
+    private preprocessEvent(event: Event, now: number, pos: Position | null): Event {
         switch (event) {
             case Event.F1_DOWN:
-                // If singleTapHappenedRecently() AND F1_DOWN is close to previous F1_UP -> set tapAndAHalfHappenedTimestamp = now
+                // Convert to TAP_AND_A_HALF_STARTED if conditions are met
                 if (this.singleTapHappenedRecently(now) && this.isF1DownCloseToLastF1Up(pos)) {
-                    this.timestamps.tapAndAHalfHappenedTimestamp = now;
+                    return Event.TAP_AND_A_HALF_STARTED;
                 }
-                break;
+                return event;
 
             case Event.F1_UP:
-                // Quick tap requires: no cursor movement, F1 was last finger down, F1 went down recently,
-                // AND F1_UP is close to F1_DOWN (spatial proximity)
+                // Check if this is a quick tap
                 const isQuickTap = !this.flags.cursorMovedFarHappened &&
                                    this.firstFingerWasTheLastFingerToGoDown() &&
                                    this.firstFingerWentDownRecently(now) &&
                                    this.isF1UpCloseToF1Down(pos);
                 if (isQuickTap) {
                     if (this.tapAndAHalfHappenedRecently(now)) {
-                        // Second quick tap (tapAndAHalf was set on F1_DOWN) -> double tap
-                        this.timestamps.doubleTapHappenedTimestamp = now;
+                        // Second quick tap -> DOUBLE_TAP_ENDED
+                        return Event.DOUBLE_TAP_ENDED;
                     } else {
-                        // First quick tap -> single tap
-                        this.timestamps.singleTapHappenedTimestamp = now;
+                        // First quick tap -> SINGLE_TAP_ENDED
+                        return Event.SINGLE_TAP_ENDED;
                     }
                 }
+                return event;
+
+            default:
+                return event;
+        }
+    }
+
+    /**
+     * BEFORE ALL processing - happens before state-specific transitions
+     * Rule: Timestamp assignments (setting to `now`) and flag updates go here.
+     */
+    private processBeforeAll(event: Event, now: number): void {
+        switch (event) {
+            case Event.TAP_AND_A_HALF_STARTED:
+                // Set tapAndAHalfHappenedTimestamp = now
+                this.timestamps.tapAndAHalfHappenedTimestamp = now;
+                break;
+
+            case Event.SINGLE_TAP_ENDED:
+                // Set singleTapHappenedTimestamp = now
+                this.timestamps.singleTapHappenedTimestamp = now;
+                break;
+
+            case Event.DOUBLE_TAP_ENDED:
+                // Set doubleTapHappenedTimestamp = now
+                this.timestamps.doubleTapHappenedTimestamp = now;
                 break;
 
             case Event.CURSOR_MOVED_FAR:
@@ -424,7 +463,7 @@ export class StateMachine {
                 break;
 
             case Event.CLEAR:
-                // Go to Idle, do [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DESELECT_STROKE]
+                // Go to Idle, do [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DEHIGHLIGHT_ALL]
                 // (handled in transition, but state change happens here for "any state")
                 this.currentState = State.Idle;
                 break;
@@ -440,6 +479,7 @@ export class StateMachine {
             case Event.F1_DOWN:
             case Event.F2_DOWN:
             case Event.F3_DOWN:
+            case Event.TAP_AND_A_HALF_STARTED:
                 // FINGER_DOWN_COMMON: Reset derived tap timestamps and flags
                 this.timestamps.singleTapHappenedTimestamp = 0;
                 this.timestamps.doubleTapHappenedTimestamp = 0;
@@ -450,6 +490,8 @@ export class StateMachine {
             case Event.F1_UP:
             case Event.F2_UP:
             case Event.F3_UP:
+            case Event.SINGLE_TAP_ENDED:
+            case Event.DOUBLE_TAP_ENDED:
                 // FINGER_UP_COMMON: Reset tapAndAHalfHappenedTimestamp
                 this.timestamps.tapAndAHalfHappenedTimestamp = 0;
                 break;
@@ -492,7 +534,7 @@ export class StateMachine {
     // STATE TRANSITION LOGIC
     // ========================================================================
 
-    private transition(state: State, event: Event, now: number): TransitionResult {
+    private transition(state: State, event: Event): TransitionResult {
         // Handle global events first (DELETE, CLEAR)
         if (event === Event.DELETE) {
             return {
@@ -509,15 +551,15 @@ export class StateMachine {
 
         switch (state) {
             case State.Idle:
-                return this.transitionFromIdle(event, now);
+                return this.transitionFromIdle(event);
             case State.MovingCursor:
-                return this.transitionFromMovingCursor(event, now);
+                return this.transitionFromMovingCursor(event);
             case State.Drawing:
                 return this.transitionFromDrawing(event);
             case State.Transform:
                 return this.transitionFromTransform(event);
             case State.SelectionRectangle:
-                return this.transitionFromSelectionRectangle(event, now);
+                return this.transitionFromSelectionRectangle(event);
             default:
                 return { newState: State.Idle, actions: [] };
         }
@@ -527,28 +569,29 @@ export class StateMachine {
     // TRANSITIONS FROM IDLE STATE
     // ========================================================================
 
-    private transitionFromIdle(event: Event, now: number): TransitionResult {
+    private transitionFromIdle(event: Event): TransitionResult {
         switch (event) {
             case Event.F1_DOWN:
-                // If tapAndAHalfHappened() -> Go to SelectionRectangle
-                // Else -> Go to MovingCursor, do [SAVE_DRAG_START_CURSOR]
-                if (this.tapAndAHalfHappened()) {
-                    return {
-                        newState: State.SelectionRectangle,
-                        actions: [Action.START_SELECTION_RECTANGLE, Action.DEHIGHLIGHT_ALL]
-                    };
-                } else {
-                    return {
-                        newState: State.MovingCursor,
-                        actions: [Action.SAVE_DRAG_START_CURSOR]
-                    };
-                }
+                // Go to MovingCursor, do [SAVE_DRAG_START_CURSOR]
+                return {
+                    newState: State.MovingCursor,
+                    actions: [Action.SAVE_DRAG_START_CURSOR]
+                };
+
+            case Event.TAP_AND_A_HALF_STARTED:
+                // Go to SelectionRectangle, do [START_SELECTION_RECTANGLE, DEHIGHLIGHT_ALL]
+                return {
+                    newState: State.SelectionRectangle,
+                    actions: [Action.START_SELECTION_RECTANGLE, Action.DEHIGHLIGHT_ALL]
+                };
 
             case Event.F2_DOWN:
             case Event.F3_DOWN:
             case Event.F1_UP:
             case Event.F2_UP:
             case Event.F3_UP:
+            case Event.SINGLE_TAP_ENDED:
+            case Event.DOUBLE_TAP_ENDED:
             case Event.PINCH_DETECTED:
                 return { newState: State.Idle, actions: [] };
 
@@ -561,7 +604,7 @@ export class StateMachine {
     // TRANSITIONS FROM MOVING CURSOR STATE
     // ========================================================================
 
-    private transitionFromMovingCursor(event: Event, now: number): TransitionResult {
+    private transitionFromMovingCursor(event: Event): TransitionResult {
         switch (event) {
             case Event.F2_DOWN:
                 // Go to Drawing, do [CREATE_STROKE]
@@ -571,34 +614,32 @@ export class StateMachine {
                 };
 
             case Event.F3_DOWN:
-                // Go to Idle, do [ABORT_TOO_MANY_FINGERS, DESELECT_STROKE]
+                // Go to Idle, do [ABORT_TOO_MANY_FINGERS, DEHIGHLIGHT_ALL]
                 return {
                     newState: State.Idle,
                     actions: [Action.ABORT_TOO_MANY_FINGERS, Action.DEHIGHLIGHT_ALL]
                 };
 
+            case Event.SINGLE_TAP_ENDED:
+                // Go to Idle, do [HANDLE_SINGLE_TAP_ACTION]
+                return {
+                    newState: State.Idle,
+                    actions: [Action.HANDLE_SINGLE_TAP_ACTION]
+                };
+
             case Event.F1_UP:
-                // If singleTapJustHappened() -> do [HANDLE_SINGLE_TAP_ACTION] (handles highlighting, picker, menu interactions)
-                // Else if isOnlyOneStrokeHighlighted() -> do [SNAP_CURSOR_TO_SELECTED_STROKE] (snap back after small movement)
-                // Finally: Go to Idle
-                // Note: doubleTapJustHappened() is handled in SelectionRectangle state, not here
-                if (this.singleTapJustHappened(now)) {
-                    return {
-                        newState: State.Idle,
-                        actions: [Action.HANDLE_SINGLE_TAP_ACTION]
-                    };
-                } else if (this.isOnlyOneStrokeHighlighted()) {
-                    // Not a tap, but stroke is selected - snap cursor back to anchor
+                // If isOnlyOneStrokeHighlighted() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]
+                // Go to Idle
+                if (this.isOnlyOneStrokeHighlighted()) {
                     return {
                         newState: State.Idle,
                         actions: [Action.SNAP_CURSOR_TO_SELECTED_STROKE]
                     };
-                } else {
-                    return {
-                        newState: State.Idle,
-                        actions: []
-                    };
                 }
+                return {
+                    newState: State.Idle,
+                    actions: []
+                };
 
             case Event.CURSOR_MOVED_FAR:
                 // If isOnlyOneStrokeHighlighted() -> do [DEANCHOR_CURSOR]
@@ -711,7 +752,7 @@ export class StateMachine {
     // TRANSITIONS FROM SELECTION RECTANGLE STATE
     // ========================================================================
 
-    private transitionFromSelectionRectangle(event: Event, now: number): TransitionResult {
+    private transitionFromSelectionRectangle(event: Event): TransitionResult {
         switch (event) {
             case Event.F1_DOWN:
                 return { newState: State.SelectionRectangle, actions: [] };
@@ -724,17 +765,19 @@ export class StateMachine {
                     actions: [Action.CANCEL_SELECTION_RECTANGLE]
                 };
 
+            case Event.DOUBLE_TAP_ENDED:
+                // Go to Idle, do [CANCEL_SELECTION_RECTANGLE, SELECT_CLOSEST_STROKE]
+                return {
+                    newState: State.Idle,
+                    actions: [Action.CANCEL_SELECTION_RECTANGLE, Action.SELECT_CLOSEST_STROKE]
+                };
+
             case Event.F1_UP:
             case Event.F2_UP:
             case Event.F3_UP:
-                // FINGER_UP_COMMON: If doubleTapJustHappened() -> do [CANCEL_SELECTION_RECTANGLE, SELECT_CLOSEST_STROKE]
-                // Else -> do [APPLY_SELECTION_RECTANGLE]
-                if (this.doubleTapJustHappened(now)) {
-                    return {
-                        newState: State.Idle,
-                        actions: [Action.CANCEL_SELECTION_RECTANGLE, Action.SELECT_CLOSEST_STROKE]
-                    };
-                }
+            case Event.SINGLE_TAP_ENDED:
+                // FINGER_UP_COMMON: Go to Idle, do [APPLY_SELECTION_RECTANGLE]
+                // Note: DOUBLE_TAP_ENDED supercedes this shorthand event
                 return {
                     newState: State.Idle,
                     actions: [Action.APPLY_SELECTION_RECTANGLE]

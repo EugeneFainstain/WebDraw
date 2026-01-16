@@ -52,23 +52,31 @@ This separation allows users to:
 
 ## Events
 
-The state machine responds to **11 events**:
+The state machine responds to **14 events**:
 
+### Raw Finger Events
 1. **F1_DOWN** - First finger touches screen
 2. **F2_DOWN** - Second finger touches screen
 3. **F3_DOWN** - Third finger touches screen
 4. **F1_UP** - Last finger lifted (was 1 finger, now 0)
 5. **F2_UP** - One of two fingers lifted (was 2 fingers, now 1)
 6. **F3_UP** - One of three fingers lifted (was 3 fingers, now 2)
-7. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `cursorAnchorPos` (screen-space). Used for de-anchoring (clearing anchor while keeping stroke highlighted).
-8. **LONG_STROKE_DRAWN** - Stroke path length exceeded threshold (4mm). Used for gesture disambiguation (pinch vs draw) and stroke protection.
-9. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (4mm screen-space), indicating zoom/pan/rotate gesture
-10. **DELETE** - Delete button pressed
-11. **CLEAR** - Clear button pressed
+
+### Derived Tap Events (converted from raw events in BEFORE ALL preprocessing)
+7. **SINGLE_TAP_ENDED** - Converted from F1_UP when a quick single tap is detected (no double-tap context)
+8. **DOUBLE_TAP_ENDED** - Converted from F1_UP when a quick second tap is detected (completes double-tap)
+9. **TAP_AND_A_HALF_STARTED** - Converted from F1_DOWN when starting a tap-and-a-half gesture
+
+### Other Events
+10. **CURSOR_MOVED_FAR** - Cursor moved >3mm from `cursorAnchorPos` (screen-space). Used for de-anchoring (clearing anchor while keeping stroke highlighted).
+11. **LONG_STROKE_DRAWN** - Stroke path length exceeded threshold (4mm). Used for gesture disambiguation (pinch vs draw) and stroke protection.
+12. **PINCH_DETECTED** - Two-finger distance changed beyond threshold (4mm screen-space), indicating zoom/pan/rotate gesture
+13. **DELETE** - Delete button pressed
+14. **CLEAR** - Clear button pressed
 
 **Documentation Aliases** (not separate events, just shorthand for common logic):
-- **FINGER_DOWN_COMMON** - Refers to logic executed for ALL finger-down events (F1_DOWN, F2_DOWN, F3_DOWN)
-- **FINGER_UP_COMMON** - Refers to logic executed for ALL finger-up events (F1_UP, F2_UP, F3_UP)
+- **FINGER_DOWN_COMMON** - Refers to logic executed for ALL finger-down events (F1_DOWN, F2_DOWN, F3_DOWN, TAP_AND_A_HALF_STARTED)
+- **FINGER_UP_COMMON** - Refers to logic executed for ALL finger-up events (F1_UP, F2_UP, F3_UP, SINGLE_TAP_ENDED, DOUBLE_TAP_ENDED)
 
 ## Event Flags
 
@@ -141,16 +149,31 @@ When a state transition occurs, the state machine returns a list of **actions** 
 - "Stay" means remain in current state
 - Only state changes and flag changes are mentioned explicitly
 
+### Event Preprocessing (Event Conversion)
+
+Before any transition tables are processed, raw finger events may be converted to derived tap events. This happens first, and when a conversion occurs, the converted event replaces the original event for all subsequent processing.
+
+| Raw Event | Condition | Converted To |
+|-----------|-----------|--------------|
+| F1_DOWN | singleTapHappenedRecently() AND isF1DownCloseToLastF1Up() | TAP_AND_A_HALF_STARTED |
+| F1_UP | Quick tap AND tapAndAHalfHappenedRecently() | DOUBLE_TAP_ENDED |
+| F1_UP | Quick tap AND NOT tapAndAHalfHappenedRecently() | SINGLE_TAP_ENDED |
+
+**Quick tap criteria:** !cursorMovedFarHappened && FirstFingerWasTheLastFingerToGoDown() && FirstFingerWentDownRecently() && isF1UpCloseToF1Down()
+
+**Note:** When an event is converted, the original event (F1_DOWN or F1_UP) is NOT processed - only the converted event is processed by all subsequent tables (BEFORE ALL, state-specific, AFTER ALL).
+
 ### FROM Any State - BEFORE ALL
 
 These flag updates happen regardless of current state, before state-specific transitions are processed.
 
-**Rule of thumb:** Calculations/checks and timestamp assignments (setting to `now`) go here.
+**Rule of thumb:** Timestamp assignments (setting to `now`) and flag updates go here.
 
 | Event | Transitions and/or Actions |
 |-------|---------------------------|
-| F1_DOWN | If singleTapHappenedRecently() AND isF1DownCloseToLastF1Up() -> set tapAndAHalfHappenedTimestamp = now. |
-| F1_UP | If quick single-finger tap (i.e. !cursorMovedFarHappened && FirstFingerWasTheLastFingerToGoDown() && FirstFingerWentDownRecently() && isF1UpCloseToF1Down()): if tapAndAHalfHappenedRecently() -> set doubleTapHappenedTimestamp = now, else -> set singleTapHappenedTimestamp = now |
+| TAP_AND_A_HALF_STARTED | Set tapAndAHalfHappenedTimestamp = now |
+| SINGLE_TAP_ENDED | Set singleTapHappenedTimestamp = now |
+| DOUBLE_TAP_ENDED | Set doubleTapHappenedTimestamp = now |
 | CURSOR_MOVED_FAR | Set cursorMovedFarHappened = true |
 | DELETE | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, PROCESS_DELETE] |
 | CLEAR | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, PROCESS_CLEAR, DEHIGHLIGHT_ALL] |
@@ -174,7 +197,8 @@ After all tables have been processed, record the timestamp and position for the 
 
 | Event | Transitions and/or Actions |
 |-------|---------------------------|
-| F1_DOWN | If tapAndAHalfHappened() -> Go to SelectionRectangle, do [START_SELECTION_RECTANGLE, DEHIGHLIGHT_ALL]. Else -> Go to MovingCursor, do [SAVE_DRAG_START_CURSOR] |
+| F1_DOWN | Go to MovingCursor, do [SAVE_DRAG_START_CURSOR] |
+| TAP_AND_A_HALF_STARTED | Go to SelectionRectangle, do [START_SELECTION_RECTANGLE, DEHIGHLIGHT_ALL] |
 | F2_DOWN | ----- |
 | F3_DOWN | ----- |
 | FINGER_UP_COMMON | ----- |
@@ -186,7 +210,8 @@ After all tables have been processed, record the timestamp and position for the 
 |-------|---------------------------|
 | F2_DOWN | Go to Drawing. do [CREATE_STROKE] |
 | F3_DOWN | Go to Idle. do [ABORT_TOO_MANY_FINGERS, DEHIGHLIGHT_ALL] |
-| F1_UP | If singleTapJustHappened() -> do [HANDLE_SINGLE_TAP_ACTION]. Else if isOnlyOneStrokeHighlighted() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Finally: Go to Idle. |
+| SINGLE_TAP_ENDED | Go to Idle. do [HANDLE_SINGLE_TAP_ACTION] |
+| F1_UP | If isOnlyOneStrokeHighlighted() -> do [SNAP_CURSOR_TO_SELECTED_STROKE]. Go to Idle. |
 | CURSOR_MOVED_FAR | If isOnlyOneStrokeHighlighted() -> do [DEANCHOR_CURSOR] (clears anchor but keeps stroke highlighted) |
 | PINCH_DETECTED | ----- |
 
@@ -226,7 +251,8 @@ After all tables have been processed, record the timestamp and position for the 
 | F1_DOWN | ----- |
 | F2_DOWN | Go to Idle. do [CANCEL_SELECTION_RECTANGLE] |
 | F3_DOWN | Go to Idle. do [CANCEL_SELECTION_RECTANGLE] |
-| FINGER_UP_COMMON | If doubleTapJustHappened() -> Go to Idle. do [CANCEL_SELECTION_RECTANGLE, SELECT_CLOSEST_STROKE]. Else -> Go to Idle. do [APPLY_SELECTION_RECTANGLE] |
+| DOUBLE_TAP_ENDED | Go to Idle. do [CANCEL_SELECTION_RECTANGLE, SELECT_CLOSEST_STROKE] |
+| FINGER_UP_COMMON | Go to Idle. do [APPLY_SELECTION_RECTANGLE] (Note: The DOUBLE_TAP_ENDED event supercedes this shorthand event) |
 | PINCH_DETECTED | ----- |
 
 **Note:** SelectionRectangle state always has isOnlyOneStrokeHighlighted() = false.
