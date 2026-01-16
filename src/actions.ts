@@ -327,11 +327,15 @@ export function handleActions(actions: Action[], touchEventData?: TouchEventData
                 updateUI();
                 break;
 
-            case Action.START_SELECTION_RECTANGLE:
-                // Start selection rectangle at current cursor position
-                if (state.cursorPos) {
-                    state.selectionRectStart = { ...state.cursorPos };
-                    state.selectionRectEnd = { ...state.cursorPos };
+            case Action.START_SELECTION_RECTANGLE: {
+                // Start selection rectangle at tap-and-a-half location (not cursor position)
+                // Use F1_DOWN_POS which is where the second tap of tap-and-a-half started
+                if (touchEventData?.F1_DOWN_POS) {
+                    const startPos = deps.screenToCanvas(touchEventData.F1_DOWN_POS);
+                    // Move cursor to the tap-and-a-half location
+                    state.cursorPos = { ...startPos };
+                    state.selectionRectStart = { ...startPos };
+                    state.selectionRectEnd = { ...startPos };
                     // Initialize position tracking for cursor movement
                     const positions = state.eventHandler.getFingerPositions();
                     state.lastPrimaryPos = positions.primary ? { ...positions.primary } : null;
@@ -340,6 +344,7 @@ export function handleActions(actions: Action[], touchEventData?: TouchEventData
                     updateHighlightedStrokes();
                 }
                 break;
+            }
 
             case Action.UPDATE_SELECTION_RECTANGLE:
                 // Update selection rectangle end point to current cursor position

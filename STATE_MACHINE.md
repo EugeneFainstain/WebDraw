@@ -127,7 +127,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `SELECT_CLOSEST_STROKE` | Select closest stroke to double-tap location, snap cursor to that point, update pickers |
 | `DEHIGHLIGHT_ALL` | Clear all highlighting and anchor state |
 | `DEANCHOR_CURSOR` | Clear cursor anchor only (selectedStrokePointIdx, cursorAnchorPos) - keeps stroke highlighted |
-| `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
+| `START_SELECTION_RECTANGLE` | Start selection rectangle at tap-and-a-half location |
 | `UPDATE_SELECTION_RECTANGLE` | Update selection rectangle during drag (also updates real-time highlighting) |
 | `APPLY_SELECTION_RECTANGLE` | Complete selection rectangle and keep strokes highlighted |
 | `CANCEL_SELECTION_RECTANGLE` | Cancel selection rectangle and clear highlighting |
