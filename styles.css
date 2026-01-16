@@ -489,16 +489,6 @@ button {
     pointer-events: none;
 }
 
-.radial-btn:hover {
-    background: #357abd;
-    transform: scale(1.1);
-}
-
-.radial-btn:active {
-    background: #2a5f8f;
-    transform: scale(0.95);
-}
-
 .radial-btn svg {
     width: 20px;
     height: 20px;

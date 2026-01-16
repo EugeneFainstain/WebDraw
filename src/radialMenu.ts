@@ -167,6 +167,7 @@ function getCursorOuterRadius(): number {
 /**
  * Position the radial menu buttons around the cursor center.
  * Buttons are arranged clockwise: top (Colors), right (Shapes), bottom (Stroke), left (Operations)
+ * If a button is selected, it stays at center while others are at their normal positions.
  */
 function positionRadialMenu(): void {
     if (!radialMenuEl || !colorBtn || !shapesBtn || !strokeBtn || !operationsBtn) return;
@@ -186,22 +187,30 @@ function positionRadialMenu(): void {
     const centerX = cursorScreenPos.x;
     const centerY = cursorScreenPos.y + TOOLBAR_HEIGHT;
 
+    // Helper to position a button - selected button goes to center, others to their normal position
+    const positionButton = (btn: HTMLElement, action: RadialMenuAction, normalLeft: number, normalTop: number) => {
+        if (selectedAction === action) {
+            // Selected button stays at center
+            btn.style.left = `${centerX - halfButton}px`;
+            btn.style.top = `${centerY - halfButton}px`;
+        } else {
+            btn.style.left = `${normalLeft}px`;
+            btn.style.top = `${normalTop}px`;
+        }
+    };
+
     // Position buttons at 0, 90, 180, 270 degrees (top, right, bottom, left)
     // Top (Colors) - 0 degrees (up is negative Y)
-    colorBtn.style.left = `${centerX - halfButton}px`;
-    colorBtn.style.top = `${centerY - distanceFromCenter - halfButton}px`;
+    positionButton(colorBtn, 'colors', centerX - halfButton, centerY - distanceFromCenter - halfButton);
 
     // Right (Shapes) - 90 degrees
-    shapesBtn.style.left = `${centerX + distanceFromCenter - halfButton}px`;
-    shapesBtn.style.top = `${centerY - halfButton}px`;
+    positionButton(shapesBtn, 'shapes', centerX + distanceFromCenter - halfButton, centerY - halfButton);
 
     // Bottom (Stroke) - 180 degrees
-    strokeBtn.style.left = `${centerX - halfButton}px`;
-    strokeBtn.style.top = `${centerY + distanceFromCenter - halfButton}px`;
+    positionButton(strokeBtn, 'stroke', centerX - halfButton, centerY + distanceFromCenter - halfButton);
 
     // Left (Operations) - 270 degrees
-    operationsBtn.style.left = `${centerX - distanceFromCenter - halfButton}px`;
-    operationsBtn.style.top = `${centerY - halfButton}px`;
+    positionButton(operationsBtn, 'operations', centerX - distanceFromCenter - halfButton, centerY - halfButton);
 }
 
 /**
@@ -287,6 +296,9 @@ function deselectButton(): void {
     // Enable position transitions
     radialMenuEl.classList.add('animating');
 
+    // Clear selection BEFORE repositioning so the button goes to its normal position
+    selectedAction = null;
+
     // Fade in all buttons
     for (const btn of getAllButtons()) {
         btn.classList.remove('faded');
@@ -295,9 +307,8 @@ function deselectButton(): void {
     // Reposition all buttons to their original positions
     positionRadialMenu();
 
-    // Clear selection after animation
+    // Wait for animation to complete
     setTimeout(() => {
-        selectedAction = null;
         isAnimating = false;
         radialMenuEl?.classList.remove('animating');
     }, 250);
