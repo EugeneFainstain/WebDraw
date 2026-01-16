@@ -27,7 +27,7 @@ import {
     getDeselectDistanceThreshold,
     resetPointerTrackingState,
 } from './state';
-import { isRadialMenuVisible, updateRadialMenuPosition } from './radialMenu';
+import { isRadialMenuVisible, updateRadialMenuPosition, showRadialMenu, isTapInsideCursor, recordMenuStateOnFingerDown } from './radialMenu';
 
 // ============================================================================
 // TYPES
@@ -109,6 +109,17 @@ export function handlePointerDown(e: PointerEvent): void {
     // This blocks all multi-finger gestures (drawing, transform, etc.) while menu is open
     if (isRadialMenuVisible() && state.eventHandler.getFingerCount() > 0) {
         return;
+    }
+
+    // Record menu state before processing - used to prevent tap from closing a just-opened menu
+    if (state.eventHandler.getFingerCount() === 0) {
+        recordMenuStateOnFingerDown();
+    }
+
+    // If this is the first finger and it's inside the cursor, show the radial menu
+    // Continue processing the pointer so cursor can still be moved while menu is open
+    if (state.eventHandler.getFingerCount() === 0 && isTapInsideCursor(pos)) {
+        showRadialMenu();
     }
 
     // Capture pointer on document.body - this ensures we receive all events

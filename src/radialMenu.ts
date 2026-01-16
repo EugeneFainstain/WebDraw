@@ -33,6 +33,7 @@ export interface RadialMenuCallbacks {
 let radialMenuEl: HTMLElement | null = null;
 let callbacks: RadialMenuCallbacks;
 let isVisible = false;
+let wasVisibleOnFingerDown = false;  // Track if menu was visible when finger went down
 
 // Button elements cached for positioning
 let colorBtn: HTMLElement | null = null;
@@ -89,16 +90,24 @@ export function hideRadialMenu(): void {
     radialMenuEl.classList.remove('visible');
 }
 
-export function toggleRadialMenu(): void {
-    if (isVisible) {
-        hideRadialMenu();
-    } else {
-        showRadialMenu();
-    }
-}
-
 export function isRadialMenuVisible(): boolean {
     return isVisible;
+}
+
+/**
+ * Record the current visibility state when finger goes down.
+ * Call this at the start of a gesture to track whether the menu was already open.
+ */
+export function recordMenuStateOnFingerDown(): void {
+    wasVisibleOnFingerDown = isVisible;
+}
+
+/**
+ * Check if the menu was already visible when the finger went down.
+ * Used to decide whether a tap should close the menu.
+ */
+export function wasMenuVisibleOnFingerDown(): boolean {
+    return wasVisibleOnFingerDown;
 }
 
 // ============================================================================

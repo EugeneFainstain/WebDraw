@@ -19,10 +19,9 @@ import {
 } from './rendering';
 import { pushUndoSnapshot } from './undoSystem';
 import {
-    isTapInsideCursor,
-    toggleRadialMenu,
     hideRadialMenu,
     isRadialMenuVisible,
+    wasMenuVisibleOnFingerDown,
 } from './radialMenu';
 
 // ============================================================================
@@ -364,18 +363,16 @@ export function handleActions(actions: Action[]): void {
 
             case Action.HANDLE_SINGLE_TAP_ACTION: {
                 // Handle single tap gesture - contextual behavior based on cursor location
-                // Get tap position from state machine timestamps
-                const tapPos = state.stateMachine.getTimestamps().F1_UP_POS;
 
-                // If radial menu is visible, close it on any tap outside
-                if (isRadialMenuVisible()) {
+                // If radial menu is visible and was already visible when finger went down, close it
+                // (Don't close if the menu was just opened by this gesture)
+                if (isRadialMenuVisible() && wasMenuVisibleOnFingerDown()) {
                     hideRadialMenu();
                     break;
                 }
 
-                // Check if tap is inside the cursor - show radial menu
-                if (tapPos && isTapInsideCursor(tapPos)) {
-                    toggleRadialMenu();
+                // If menu is visible but was just opened, don't process further
+                if (isRadialMenuVisible()) {
                     break;
                 }
 
