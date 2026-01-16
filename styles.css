@@ -475,7 +475,18 @@ button {
     font-weight: bold;
     text-transform: uppercase;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: transform 0.15s ease-out, background-color 0.15s;
+    transition: opacity 0.25s ease-out, transform 0.15s ease-out, background-color 0.15s;
+    opacity: 1;
+}
+
+/* Only animate position during selection/deselection */
+.radial-menu.animating .radial-btn {
+    transition: left 0.25s ease-out, top 0.25s ease-out, opacity 0.25s ease-out, transform 0.15s ease-out, background-color 0.15s;
+}
+
+.radial-btn.faded {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .radial-btn:hover {

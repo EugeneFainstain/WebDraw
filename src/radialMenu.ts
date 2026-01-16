@@ -42,6 +42,10 @@ let shapesBtn: HTMLElement | null = null;
 let strokeBtn: HTMLElement | null = null;
 let operationsBtn: HTMLElement | null = null;
 
+// Selected button state - when a button is selected, it moves to center and others fade out
+let selectedAction: RadialMenuAction | null = null;
+let isAnimating = false;
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
@@ -59,13 +63,21 @@ export function initRadialMenu(cb: RadialMenuCallbacks): void {
 
         // Set up click handlers
         radialMenuEl.addEventListener('click', (e) => {
+            if (isAnimating) return;
+
             const target = e.target as HTMLElement;
             const btn = target.closest('.radial-btn') as HTMLElement;
             if (btn) {
                 const action = btn.dataset.action as RadialMenuAction;
                 if (action) {
-                    callbacks.onRadialMenuAction(action);
-                    hideRadialMenu();
+                    if (selectedAction === null) {
+                        // No button selected yet - select this one
+                        selectButton(action);
+                    } else if (selectedAction === action) {
+                        // Tapping on the selected button (at center) - go back
+                        deselectButton();
+                    }
+                    // If tapping on a faded button, ignore (they have pointer-events: none anyway)
                 }
             }
         });
@@ -94,6 +106,16 @@ export function hideRadialMenu(): void {
 
     isVisible = false;
     radialMenuEl.classList.remove('visible');
+    radialMenuEl.classList.remove('animating');
+
+    // Reset selection state
+    selectedAction = null;
+    isAnimating = false;
+
+    // Remove faded class from all buttons
+    for (const btn of getAllButtons()) {
+        btn.classList.remove('faded');
+    }
 }
 
 export function isRadialMenuVisible(): boolean {
@@ -190,6 +212,95 @@ export function updateRadialMenuPosition(): void {
     if (isVisible) {
         positionRadialMenu();
     }
+}
+
+// ============================================================================
+// BUTTON SELECTION (MOVE TO CENTER / BACK)
+// ============================================================================
+
+/**
+ * Get the button element for a given action.
+ */
+function getButtonForAction(action: RadialMenuAction): HTMLElement | null {
+    switch (action) {
+        case 'colors': return colorBtn;
+        case 'shapes': return shapesBtn;
+        case 'stroke': return strokeBtn;
+        case 'operations': return operationsBtn;
+    }
+}
+
+/**
+ * Get all button elements as an array.
+ */
+function getAllButtons(): HTMLElement[] {
+    return [colorBtn, shapesBtn, strokeBtn, operationsBtn].filter((btn): btn is HTMLElement => btn !== null);
+}
+
+/**
+ * Select a button - move it to center and fade out others.
+ */
+function selectButton(action: RadialMenuAction): void {
+    if (selectedAction !== null || isAnimating || !radialMenuEl) return;
+
+    const selectedBtn = getButtonForAction(action);
+    if (!selectedBtn) return;
+
+    isAnimating = true;
+    selectedAction = action;
+
+    // Enable position transitions
+    radialMenuEl.classList.add('animating');
+
+    const cursorScreenPos = getCursorScreenPos();
+    const buttonSize = 48;
+    const halfButton = buttonSize / 2;
+    const centerX = cursorScreenPos.x;
+    const centerY = cursorScreenPos.y + TOOLBAR_HEIGHT;
+
+    // Move selected button to center
+    selectedBtn.style.left = `${centerX - halfButton}px`;
+    selectedBtn.style.top = `${centerY - halfButton}px`;
+
+    // Fade out other buttons
+    for (const btn of getAllButtons()) {
+        if (btn !== selectedBtn) {
+            btn.classList.add('faded');
+        }
+    }
+
+    // Wait for animation to complete
+    setTimeout(() => {
+        isAnimating = false;
+        radialMenuEl?.classList.remove('animating');
+    }, 250);
+}
+
+/**
+ * Deselect the current button - move it back to original position and fade in others.
+ */
+function deselectButton(): void {
+    if (selectedAction === null || isAnimating || !radialMenuEl) return;
+
+    isAnimating = true;
+
+    // Enable position transitions
+    radialMenuEl.classList.add('animating');
+
+    // Fade in all buttons
+    for (const btn of getAllButtons()) {
+        btn.classList.remove('faded');
+    }
+
+    // Reposition all buttons to their original positions
+    positionRadialMenu();
+
+    // Clear selection after animation
+    setTimeout(() => {
+        selectedAction = null;
+        isAnimating = false;
+        radialMenuEl?.classList.remove('animating');
+    }, 250);
 }
 
 // ============================================================================
