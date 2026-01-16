@@ -74,11 +74,11 @@ export type Position = {
 };
 
 /**
- * Timestamps and positions for tap detection
+ * Event data for tap detection (timestamps and positions)
  * Timestamps are in milliseconds since epoch, 0 means "not set" / "never happened"
  * Positions are in screen-space pixels, null means "not set"
  */
-export type EventTimestamps = {
+export type TouchEventData = {
     // Derived tap detection timestamps
     singleTapHappenedTimestamp: number;      // Set on quick single-finger tap
     doubleTapHappenedTimestamp: number;      // Set on second quick tap within timeout
@@ -202,7 +202,7 @@ function getTapProximityThresholdPx(): number {
 export class StateMachine {
     private currentState: State;
     private flags: EventFlags;
-    private timestamps: EventTimestamps;
+    private touchEventData: TouchEventData;
 
     // Getter for highlighted strokes count - used to derive isOnlyOneStrokeHighlighted()
     private getHighlightedStrokesCount: () => number = () => 0;
@@ -213,7 +213,7 @@ export class StateMachine {
             cursorMovedFarHappened: false,
             longStrokeDrawnHappened: false
         };
-        this.timestamps = {
+        this.touchEventData = {
             singleTapHappenedTimestamp: 0,
             doubleTapHappenedTimestamp: 0,
             tapAndAHalfHappenedTimestamp: 0,
@@ -244,8 +244,8 @@ export class StateMachine {
         return { ...this.flags };
     }
 
-    public getTimestamps(): EventTimestamps {
-        return { ...this.timestamps };
+    public getTouchEventData(): TouchEventData {
+        return { ...this.touchEventData };
     }
 
     /**
@@ -271,29 +271,29 @@ export class StateMachine {
      * Returns true if a single tap happened recently (within doubleTapTimeout)
      */
     public singleTapHappenedRecently(now: number): boolean {
-        return this.timestamps.singleTapHappenedTimestamp !== 0 &&
-               (now - this.timestamps.singleTapHappenedTimestamp) < DOUBLE_TAP_TIMEOUT;
+        return this.touchEventData.singleTapHappenedTimestamp !== 0 &&
+               (now - this.touchEventData.singleTapHappenedTimestamp) < DOUBLE_TAP_TIMEOUT;
     }
 
     /**
      * Returns true if singleTapHappenedTimestamp was set in this same pass (== now)
      */
     public singleTapJustHappened(now: number): boolean {
-        return this.timestamps.singleTapHappenedTimestamp === now;
+        return this.touchEventData.singleTapHappenedTimestamp === now;
     }
 
     /**
      * Returns true if doubleTapHappenedTimestamp was set in this same pass (== now)
      */
     public doubleTapJustHappened(now: number): boolean {
-        return this.timestamps.doubleTapHappenedTimestamp === now;
+        return this.touchEventData.doubleTapHappenedTimestamp === now;
     }
 
     /**
      * Returns true if tapAndAHalfHappenedTimestamp is set (non-zero)
      */
     public tapAndAHalfHappened(): boolean {
-        return this.timestamps.tapAndAHalfHappenedTimestamp !== 0;
+        return this.touchEventData.tapAndAHalfHappenedTimestamp !== 0;
     }
 
     /**
@@ -301,15 +301,15 @@ export class StateMachine {
      * (ensures the second tap of a double-tap is quick)
      */
     public tapAndAHalfHappenedRecently(now: number): boolean {
-        return this.timestamps.tapAndAHalfHappenedTimestamp !== 0 &&
-               (now - this.timestamps.tapAndAHalfHappenedTimestamp) < SINGLE_TAP_TIMEOUT;
+        return this.touchEventData.tapAndAHalfHappenedTimestamp !== 0 &&
+               (now - this.touchEventData.tapAndAHalfHappenedTimestamp) < SINGLE_TAP_TIMEOUT;
     }
 
     /**
      * Returns true if F1_DOWN was the most recent finger-down event
      */
     public firstFingerWasTheLastFingerToGoDown(): boolean {
-        const { F1_DOWN_TIMESTAMP, F2_DOWN_TIMESTAMP, F3_DOWN_TIMESTAMP } = this.timestamps;
+        const { F1_DOWN_TIMESTAMP, F2_DOWN_TIMESTAMP, F3_DOWN_TIMESTAMP } = this.touchEventData;
         return F1_DOWN_TIMESTAMP > 0 &&
                F1_DOWN_TIMESTAMP >= F2_DOWN_TIMESTAMP &&
                F1_DOWN_TIMESTAMP >= F3_DOWN_TIMESTAMP;
@@ -319,8 +319,8 @@ export class StateMachine {
      * Returns true if the first finger went down recently (within singleTapTimeout)
      */
     public firstFingerWentDownRecently(now: number): boolean {
-        return this.timestamps.F1_DOWN_TIMESTAMP !== 0 &&
-               (now - this.timestamps.F1_DOWN_TIMESTAMP) < SINGLE_TAP_TIMEOUT;
+        return this.touchEventData.F1_DOWN_TIMESTAMP !== 0 &&
+               (now - this.touchEventData.F1_DOWN_TIMESTAMP) < SINGLE_TAP_TIMEOUT;
     }
 
     /**
@@ -342,7 +342,7 @@ export class StateMachine {
      * Used for tap-and-a-half detection (second tap must be near first tap).
      */
     private isF1DownCloseToLastF1Up(f1DownPos: Position | null): boolean {
-        return this.arePositionsClose(f1DownPos, this.timestamps.F1_UP_POS);
+        return this.arePositionsClose(f1DownPos, this.touchEventData.F1_UP_POS);
     }
 
     /**
@@ -350,7 +350,7 @@ export class StateMachine {
      * Used for single-tap detection (finger must lift close to where it landed).
      */
     private isF1UpCloseToF1Down(f1UpPos: Position | null): boolean {
-        return this.arePositionsClose(f1UpPos, this.timestamps.F1_DOWN_POS);
+        return this.arePositionsClose(f1UpPos, this.touchEventData.F1_DOWN_POS);
     }
 
     // ========================================================================
@@ -438,17 +438,17 @@ export class StateMachine {
         switch (event) {
             case Event.TAP_AND_A_HALF_STARTED:
                 // Set tapAndAHalfHappenedTimestamp = now
-                this.timestamps.tapAndAHalfHappenedTimestamp = now;
+                this.touchEventData.tapAndAHalfHappenedTimestamp = now;
                 break;
 
             case Event.SINGLE_TAP_ENDED:
                 // Set singleTapHappenedTimestamp = now
-                this.timestamps.singleTapHappenedTimestamp = now;
+                this.touchEventData.singleTapHappenedTimestamp = now;
                 break;
 
             case Event.DOUBLE_TAP_ENDED:
                 // Set doubleTapHappenedTimestamp = now
-                this.timestamps.doubleTapHappenedTimestamp = now;
+                this.touchEventData.doubleTapHappenedTimestamp = now;
                 break;
 
             case Event.CURSOR_MOVED_FAR:
@@ -481,8 +481,8 @@ export class StateMachine {
             case Event.F3_DOWN:
             case Event.TAP_AND_A_HALF_STARTED:
                 // FINGER_DOWN_COMMON: Reset derived tap timestamps and flags
-                this.timestamps.singleTapHappenedTimestamp = 0;
-                this.timestamps.doubleTapHappenedTimestamp = 0;
+                this.touchEventData.singleTapHappenedTimestamp = 0;
+                this.touchEventData.doubleTapHappenedTimestamp = 0;
                 this.flags.cursorMovedFarHappened = false;
                 this.flags.longStrokeDrawnHappened = false;
                 break;
@@ -493,7 +493,7 @@ export class StateMachine {
             case Event.SINGLE_TAP_ENDED:
             case Event.DOUBLE_TAP_ENDED:
                 // FINGER_UP_COMMON: Reset tapAndAHalfHappenedTimestamp
-                this.timestamps.tapAndAHalfHappenedTimestamp = 0;
+                this.touchEventData.tapAndAHalfHappenedTimestamp = 0;
                 break;
         }
     }
@@ -504,28 +504,28 @@ export class StateMachine {
     private recordEventTimestamp(event: Event, now: number, pos: Position | null): void {
         switch (event) {
             case Event.F1_DOWN:
-                this.timestamps.F1_DOWN_TIMESTAMP = now;
-                this.timestamps.F1_DOWN_POS = pos;
+                this.touchEventData.F1_DOWN_TIMESTAMP = now;
+                this.touchEventData.F1_DOWN_POS = pos;
                 break;
             case Event.F2_DOWN:
-                this.timestamps.F2_DOWN_TIMESTAMP = now;
-                this.timestamps.F2_DOWN_POS = pos;
+                this.touchEventData.F2_DOWN_TIMESTAMP = now;
+                this.touchEventData.F2_DOWN_POS = pos;
                 break;
             case Event.F3_DOWN:
-                this.timestamps.F3_DOWN_TIMESTAMP = now;
-                this.timestamps.F3_DOWN_POS = pos;
+                this.touchEventData.F3_DOWN_TIMESTAMP = now;
+                this.touchEventData.F3_DOWN_POS = pos;
                 break;
             case Event.F1_UP:
-                this.timestamps.F1_UP_TIMESTAMP = now;
-                this.timestamps.F1_UP_POS = pos;
+                this.touchEventData.F1_UP_TIMESTAMP = now;
+                this.touchEventData.F1_UP_POS = pos;
                 break;
             case Event.F2_UP:
-                this.timestamps.F2_UP_TIMESTAMP = now;
-                this.timestamps.F2_UP_POS = pos;
+                this.touchEventData.F2_UP_TIMESTAMP = now;
+                this.touchEventData.F2_UP_POS = pos;
                 break;
             case Event.F3_UP:
-                this.timestamps.F3_UP_TIMESTAMP = now;
-                this.timestamps.F3_UP_POS = pos;
+                this.touchEventData.F3_UP_TIMESTAMP = now;
+                this.touchEventData.F3_UP_POS = pos;
                 break;
         }
     }
@@ -801,7 +801,7 @@ export class StateMachine {
             cursorMovedFarHappened: false,
             longStrokeDrawnHappened: false
         };
-        this.timestamps = {
+        this.touchEventData = {
             singleTapHappenedTimestamp: 0,
             doubleTapHappenedTimestamp: 0,
             tapAndAHalfHappenedTimestamp: 0,

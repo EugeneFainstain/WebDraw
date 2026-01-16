@@ -297,7 +297,8 @@ state.eventHandler.initEventCallback((event: Event, pos?: Point) => {
     const posForStateMachine = pos ? { x: pos.x, y: pos.y } : null;
     const result = state.stateMachine.processEvent(event, Date.now(), posForStateMachine);
 
-    handleActions(result.actions);
+    // Pass touch event data so actions can access positions (e.g., double-tap location)
+    handleActions(result.actions, state.stateMachine.getTouchEventData());
 
     // Handle finger promotion discontinuity (on any finger-up event)
     if (event === Event.F1_UP || event === Event.F2_UP || event === Event.F3_UP) {
@@ -361,6 +362,7 @@ initActions({
     updatePickersBasedOnSelectedStroke,
     isAnyPickerOpen: () => combinedPicker.isOpen() || menuPicker.isOpen(),
     closePickers: () => { combinedPicker.close(); menuPicker.close(); },
+    screenToCanvas,
 });
 
 // Initialize radial menu

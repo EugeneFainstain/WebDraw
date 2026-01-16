@@ -1,4 +1,4 @@
-import { Action } from './stateMachine';
+import { Action, TouchEventData } from './stateMachine';
 import { state, Stroke, getSelectedStrokeIdx, clearSelectionState, clearAnchorState, resetTransformUndoState, clearSelectionRectangle, clearCurrentStroke } from './state';
 import {
     initThreeFingerTransform,
@@ -35,6 +35,7 @@ export interface ActionDependencies {
     updatePickersBasedOnSelectedStroke: () => void;
     isAnyPickerOpen: () => boolean;
     closePickers: () => void;
+    screenToCanvas: (screenPos: { x: number; y: number }) => { x: number; y: number };
 }
 
 // ============================================================================
@@ -68,7 +69,7 @@ function doDehighlightAll(): void {
 // ACTION HANDLERS
 // ============================================================================
 
-export function handleActions(actions: Action[]): void {
+export function handleActions(actions: Action[], touchEventData?: TouchEventData): void {
     for (const action of actions) {
         switch (action) {
             case Action.CREATE_STROKE:
@@ -275,14 +276,18 @@ export function handleActions(actions: Action[]): void {
             case Action.SELECT_CLOSEST_STROKE: {
                 // Note: No snapshot here - selection is a UI state change, not a document change
                 // Users don't expect "undo" to deselect a stroke they just tapped on
-                // SELECT_CLOSEST_STROKE: Manually select stroke closest to cursor
-                // Triggered by: Single tap (quick tap with no timeout or movement)
-                // Behavior: Finds closest stroke to current cursor position
+                // SELECT_CLOSEST_STROKE: Select stroke closest to double-tap location
+                // Triggered by: Double tap
+                // Behavior: Finds closest stroke to the double-tap location (not cursor position)
                 //           Cursor jumps to the closest point on that stroke
                 //           Marks as manual selection (Del button will delete it)
                 //           Updates color/size pickers to match the selected stroke
-                // Note: This is different from double-tap, which searches from tap location
-                const closestResult = deps.findClosestStrokeAndPoint();
+                // Use the double-tap position (F1_UP_POS) converted to canvas coordinates
+                let searchPos: { x: number; y: number } | undefined;
+                if (touchEventData?.F1_UP_POS) {
+                    searchPos = deps.screenToCanvas(touchEventData.F1_UP_POS);
+                }
+                const closestResult = deps.findClosestStrokeAndPoint(searchPos);
                 if (closestResult) {
                     // Move cursor to the closest point
                     state.cursorPos = closestResult.point;

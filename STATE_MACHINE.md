@@ -80,7 +80,7 @@ The state machine responds to **14 events**:
 
 ## Event Flags
 
-The state machine maintains **2 flags**, **derived tap timestamps**, and **raw event timestamps/positions**:
+The state machine maintains **2 flags** and **touch event data** (timestamps and positions stored in `TouchEventData`):
 
 **Derived Tap Timestamps** (reset on any finger down via FINGER_DOWN_COMMON):
 - **singleTapHappenedTimestamp** - Set to current time on F1_UP if quick single-finger tap (see criteria below). Reset to 0 on any finger down.
@@ -124,7 +124,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `CREATE_STROKE` | Create a new stroke, or continue an existing selected stroke if cursor is at its last point |
 | `SAVE_STROKE` | Save current stroke to history, select it, and highlight it |
 | `ABANDON_STROKE` | Discard current stroke |
-| `SELECT_CLOSEST_STROKE` | Select closest stroke to cursor, snap cursor to that point, update pickers |
+| `SELECT_CLOSEST_STROKE` | Select closest stroke to double-tap location, snap cursor to that point, update pickers |
 | `DEHIGHLIGHT_ALL` | Clear all highlighting and anchor state |
 | `DEANCHOR_CURSOR` | Clear cursor anchor only (selectedStrokePointIdx, cursorAnchorPos) - keeps stroke highlighted |
 | `START_SELECTION_RECTANGLE` | Start selection rectangle mode |
