@@ -392,8 +392,9 @@ function createColorButtons(): void {
         btn.dataset.color = color;
         btn.dataset.index = index.toString();
 
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('pointerup', (e) => {
             e.stopPropagation();
+            e.preventDefault();
             if (callbacks.onColorSelect) {
                 callbacks.onColorSelect(color);
             }
@@ -420,9 +421,8 @@ function updateColorButtonSelection(selectedColor: string): void {
 }
 
 /**
- * Position color buttons in two circles around the cursor.
- * Inner circle: 8 saturated colors
- * Outer circle: 4 grayscale colors
+ * Position color buttons in a single circle around the cursor.
+ * All 12 buttons are evenly spaced and touch each other.
  */
 function positionColorButtons(): void {
     if (!colorButtons.length) return;
@@ -433,27 +433,16 @@ function positionColorButtons(): void {
     const centerX = cursorScreenPos.x;
     const centerY = cursorScreenPos.y + TOOLBAR_HEIGHT;
 
-    // Inner circle for first 8 colors (saturated)
-    const innerRadius = 80;
-    const innerCount = 8;
-    for (let i = 0; i < innerCount && i < colorButtons.length; i++) {
-        const angle = (i / innerCount) * 2 * Math.PI - Math.PI / 2; // Start from top
-        const x = centerX + Math.cos(angle) * innerRadius - halfButton;
-        const y = centerY + Math.sin(angle) * innerRadius - halfButton;
+    // Calculate radius so buttons touch: r = buttonSize / (2 * sin(π/n))
+    const count = colorButtons.length;
+    const radius = buttonSize / (2 * Math.sin(Math.PI / count));
+
+    for (let i = 0; i < count; i++) {
+        const angle = (i / count) * 2 * Math.PI - Math.PI / 2; // Start from top
+        const x = centerX + Math.cos(angle) * radius - halfButton;
+        const y = centerY + Math.sin(angle) * radius - halfButton;
         colorButtons[i].style.left = `${x}px`;
         colorButtons[i].style.top = `${y}px`;
-    }
-
-    // Outer circle for remaining colors (grayscale)
-    const outerRadius = 140;
-    const outerCount = colorButtons.length - innerCount;
-    for (let i = 0; i < outerCount; i++) {
-        const idx = innerCount + i;
-        const angle = (i / outerCount) * 2 * Math.PI - Math.PI / 2; // Start from top
-        const x = centerX + Math.cos(angle) * outerRadius - halfButton;
-        const y = centerY + Math.sin(angle) * outerRadius - halfButton;
-        colorButtons[idx].style.left = `${x}px`;
-        colorButtons[idx].style.top = `${y}px`;
     }
 }
 

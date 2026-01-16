@@ -397,6 +397,18 @@ initRadialMenu({
     onColorSelect: (color: string) => {
         // Update the color picker with the selected color
         combinedPicker.setColor(color);
+        // Apply to all highlighted strokes (including groups)
+        if (state.highlightedStrokes.size > 0) {
+            for (const index of state.highlightedStrokes) {
+                if (index < state.strokeHistory.length) {
+                    transformStroke(state.strokeHistory[index], (stroke: Stroke) => {
+                        stroke.color = color;
+                    });
+                }
+            }
+            pushUndoSnapshot();
+            redraw();
+        }
     },
     getCurrentColor: () => combinedPicker.getColor(),
 });

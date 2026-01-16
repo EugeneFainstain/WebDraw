@@ -515,6 +515,7 @@ button {
     border: 3px solid #fff;
     cursor: pointer;
     pointer-events: auto;
+    touch-action: none;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     opacity: 0;
     transform: scale(0);
