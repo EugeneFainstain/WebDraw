@@ -109,13 +109,19 @@ export function showRadialMenu(): void {
     isVisible = true;
     radialMenuEl.classList.add('visible');
     positionRadialMenu();
+
+    // Animate buttons in with scale effect
+    requestAnimationFrame(() => {
+        for (const btn of getAllButtons()) {
+            btn.classList.add('visible');
+        }
+    });
 }
 
 export function hideRadialMenu(): void {
     if (!radialMenuEl || !isVisible) return;
 
     isVisible = false;
-    radialMenuEl.classList.remove('visible');
     radialMenuEl.classList.remove('animating');
 
     // Hide any sub-menus
@@ -125,10 +131,18 @@ export function hideRadialMenu(): void {
     selectedAction = null;
     isAnimating = false;
 
-    // Remove faded class from all buttons
+    // Animate buttons out with scale effect
     for (const btn of getAllButtons()) {
+        btn.classList.remove('visible');
         btn.classList.remove('faded');
     }
+
+    // Hide the menu container after animation completes
+    setTimeout(() => {
+        if (!isVisible) {
+            radialMenuEl?.classList.remove('visible');
+        }
+    }, 250);
 }
 
 export function isRadialMenuVisible(): boolean {
@@ -261,7 +275,7 @@ function getAllButtons(): HTMLElement[] {
 }
 
 /**
- * Select a button - move it to center and fade out others.
+ * Select a button - move it to center, fade out others, and show sub-menu all at once.
  */
 function selectButton(action: RadialMenuAction): void {
     if (selectedAction !== null || isAnimating || !radialMenuEl) return;
@@ -292,28 +306,25 @@ function selectButton(action: RadialMenuAction): void {
         }
     }
 
-    // Wait for animation to complete, then show sub-menu if applicable
+    // Show sub-menu immediately (all animations happen together)
+    if (action === 'colors') {
+        showColorButtons();
+    }
+
+    // Wait for animation to complete
     setTimeout(() => {
         isAnimating = false;
         radialMenuEl?.classList.remove('animating');
-
-        // Show sub-menu based on action
-        if (action === 'colors') {
-            showColorButtons();
-        }
     }, 250);
 }
 
 /**
- * Deselect the current button - move it back to original position and fade in others.
+ * Deselect the current button - move it back to original position, fade in others, and hide sub-menu all at once.
  */
 function deselectButton(): void {
     if (selectedAction === null || isAnimating || !radialMenuEl) return;
 
     isAnimating = true;
-
-    // Hide any sub-menus first
-    hideColorButtons();
 
     // Enable position transitions
     radialMenuEl.classList.add('animating');
@@ -321,9 +332,13 @@ function deselectButton(): void {
     // Clear selection BEFORE repositioning so the button goes to its normal position
     selectedAction = null;
 
-    // Fade in all buttons
+    // Hide sub-menus (animation happens simultaneously)
+    hideColorButtons();
+
+    // Fade in all buttons (add visible back, remove faded)
     for (const btn of getAllButtons()) {
         btn.classList.remove('faded');
+        btn.classList.add('visible');
     }
 
     // Reposition all buttons to their original positions
