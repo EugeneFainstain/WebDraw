@@ -14,6 +14,7 @@
 
 import { state, TOOLBAR_HEIGHT } from './state';
 import { getCursorScreenPos } from './cursorMovement';
+import { COLORS } from './colorPicker';
 
 // ============================================================================
 // TYPES
@@ -25,6 +26,8 @@ export interface RadialMenuCallbacks {
     getPickerSize: () => number;
     onRadialMenuAction: (action: RadialMenuAction) => void;
     onOpen?: () => void;  // Called when radial menu opens (to close pickers)
+    onColorSelect?: (color: string) => void;  // Called when a color is selected from radial menu
+    getCurrentColor?: () => string;  // Get the current selected color
 }
 
 // ============================================================================
@@ -46,6 +49,10 @@ let operationsBtn: HTMLElement | null = null;
 let selectedAction: RadialMenuAction | null = null;
 let isAnimating = false;
 
+// Color buttons state
+let colorButtons: HTMLElement[] = [];
+let colorButtonsVisible = false;
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
@@ -60,6 +67,9 @@ export function initRadialMenu(cb: RadialMenuCallbacks): void {
         shapesBtn = radialMenuEl.querySelector('.radial-btn-shapes');
         strokeBtn = radialMenuEl.querySelector('.radial-btn-stroke');
         operationsBtn = radialMenuEl.querySelector('.radial-btn-operations');
+
+        // Create color buttons
+        createColorButtons();
 
         // Set up click handlers
         radialMenuEl.addEventListener('click', (e) => {
@@ -107,6 +117,9 @@ export function hideRadialMenu(): void {
     isVisible = false;
     radialMenuEl.classList.remove('visible');
     radialMenuEl.classList.remove('animating');
+
+    // Hide any sub-menus
+    hideColorButtons();
 
     // Reset selection state
     selectedAction = null;
@@ -220,6 +233,7 @@ function positionRadialMenu(): void {
 export function updateRadialMenuPosition(): void {
     if (isVisible) {
         positionRadialMenu();
+        updateColorButtonPositions();
     }
 }
 
@@ -278,10 +292,15 @@ function selectButton(action: RadialMenuAction): void {
         }
     }
 
-    // Wait for animation to complete
+    // Wait for animation to complete, then show sub-menu if applicable
     setTimeout(() => {
         isAnimating = false;
         radialMenuEl?.classList.remove('animating');
+
+        // Show sub-menu based on action
+        if (action === 'colors') {
+            showColorButtons();
+        }
     }, 250);
 }
 
@@ -292,6 +311,9 @@ function deselectButton(): void {
     if (selectedAction === null || isAnimating || !radialMenuEl) return;
 
     isAnimating = true;
+
+    // Hide any sub-menus first
+    hideColorButtons();
 
     // Enable position transitions
     radialMenuEl.classList.add('animating');
@@ -335,4 +357,131 @@ export function isTapInsideCursor(tapScreenPos: { x: number; y: number }): boole
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     return distance <= outerRadius;
+}
+
+// ============================================================================
+// COLOR BUTTONS
+// ============================================================================
+
+/**
+ * Create color button elements and add them to the radial menu.
+ * Buttons are created hidden and will be shown when the colors action is selected.
+ */
+function createColorButtons(): void {
+    if (!radialMenuEl) return;
+
+    colorButtons = COLORS.map((color, index) => {
+        const btn = document.createElement('div');
+        btn.className = 'radial-color-btn';
+        btn.style.backgroundColor = color;
+        btn.dataset.color = color;
+        btn.dataset.index = index.toString();
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (callbacks.onColorSelect) {
+                callbacks.onColorSelect(color);
+            }
+            // Update selected state
+            updateColorButtonSelection(color);
+        });
+
+        radialMenuEl!.appendChild(btn);
+        return btn;
+    });
+}
+
+/**
+ * Update the selected state of color buttons.
+ */
+function updateColorButtonSelection(selectedColor: string): void {
+    for (const btn of colorButtons) {
+        if (btn.dataset.color === selectedColor) {
+            btn.classList.add('selected');
+        } else {
+            btn.classList.remove('selected');
+        }
+    }
+}
+
+/**
+ * Position color buttons in two circles around the cursor.
+ * Inner circle: 8 saturated colors
+ * Outer circle: 4 grayscale colors
+ */
+function positionColorButtons(): void {
+    if (!colorButtons.length) return;
+
+    const cursorScreenPos = getCursorScreenPos();
+    const buttonSize = 48;
+    const halfButton = buttonSize / 2;
+    const centerX = cursorScreenPos.x;
+    const centerY = cursorScreenPos.y + TOOLBAR_HEIGHT;
+
+    // Inner circle for first 8 colors (saturated)
+    const innerRadius = 80;
+    const innerCount = 8;
+    for (let i = 0; i < innerCount && i < colorButtons.length; i++) {
+        const angle = (i / innerCount) * 2 * Math.PI - Math.PI / 2; // Start from top
+        const x = centerX + Math.cos(angle) * innerRadius - halfButton;
+        const y = centerY + Math.sin(angle) * innerRadius - halfButton;
+        colorButtons[i].style.left = `${x}px`;
+        colorButtons[i].style.top = `${y}px`;
+    }
+
+    // Outer circle for remaining colors (grayscale)
+    const outerRadius = 140;
+    const outerCount = colorButtons.length - innerCount;
+    for (let i = 0; i < outerCount; i++) {
+        const idx = innerCount + i;
+        const angle = (i / outerCount) * 2 * Math.PI - Math.PI / 2; // Start from top
+        const x = centerX + Math.cos(angle) * outerRadius - halfButton;
+        const y = centerY + Math.sin(angle) * outerRadius - halfButton;
+        colorButtons[idx].style.left = `${x}px`;
+        colorButtons[idx].style.top = `${y}px`;
+    }
+}
+
+/**
+ * Show color buttons with animation.
+ */
+function showColorButtons(): void {
+    if (colorButtonsVisible) return;
+    colorButtonsVisible = true;
+
+    // Update selection based on current color
+    if (callbacks.getCurrentColor) {
+        updateColorButtonSelection(callbacks.getCurrentColor());
+    }
+
+    // Position buttons first (while invisible)
+    positionColorButtons();
+
+    // Then make them visible with animation
+    requestAnimationFrame(() => {
+        for (const btn of colorButtons) {
+            btn.classList.add('visible');
+        }
+    });
+}
+
+/**
+ * Hide color buttons with animation.
+ */
+function hideColorButtons(): void {
+    if (!colorButtonsVisible) return;
+    colorButtonsVisible = false;
+
+    for (const btn of colorButtons) {
+        btn.classList.remove('visible');
+    }
+}
+
+/**
+ * Update color button positions if visible.
+ */
+function updateColorButtonPositions(): void {
+    if (colorButtonsVisible) {
+        positionColorButtons();
+    }
 }

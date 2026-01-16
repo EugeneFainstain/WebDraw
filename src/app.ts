@@ -392,6 +392,11 @@ initRadialMenu({
         combinedPicker.close();
         menuPicker.close();
     },
+    onColorSelect: (color: string) => {
+        // Update the color picker with the selected color
+        combinedPicker.setColor(color);
+    },
+    getCurrentColor: () => combinedPicker.getColor(),
 });
 
 // Initialize and setup pointer handlers

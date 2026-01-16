@@ -1,4 +1,4 @@
-const COLORS = [
+export const COLORS = [
     // Color circle - saturated colors
     '#FF0000', // Red
     '#FF8000', // Orange
