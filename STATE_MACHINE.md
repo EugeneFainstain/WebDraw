@@ -123,7 +123,7 @@ When a state transition occurs, the state machine returns a list of **actions** 
 | `MOVE_CURSOR` | Move the drawing cursor |
 | `CREATE_STROKE` | Create a new stroke, or continue an existing selected stroke if cursor is at its last point |
 | `SAVE_STROKE` | Save current stroke to history, select it, and highlight it |
-| `ABANDON_STROKE` | Discard current stroke |
+| `ABANDON_STROKE` | Discard current stroke and snap cursor to original position (dragStartCursorPos > cursorAnchorPos > stroke start) |
 | `SELECT_CLOSEST_STROKE` | Select closest stroke to double-tap location, snap cursor to that point, update pickers |
 | `DEHIGHLIGHT_ALL` | Clear all highlighting and anchor state |
 | `DEANCHOR_CURSOR` | Clear cursor anchor only (selectedStrokePointIdx, cursorAnchorPos) - keeps stroke highlighted |

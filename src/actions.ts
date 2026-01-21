@@ -261,10 +261,12 @@ export function handleActions(actions: Action[], touchEventData?: TouchEventData
             }
 
             case Action.ABANDON_STROKE:
-                // Move cursor back to where the stroke started
-                // BUT: if there's a selected stroke, snap to its anchor instead
-                // (this handles the case where a potential continuation was abandoned)
-                if (state.cursorAnchorPos) {
+                // Move cursor back to the original position before any gesture movement
+                // Priority: dragStartCursorPos (set on F1_DOWN) > cursorAnchorPos > stroke start
+                // This ensures the cursor snaps immediately when pinch is detected
+                if (state.dragStartCursorPos) {
+                    state.cursorPos = { ...state.dragStartCursorPos };
+                } else if (state.cursorAnchorPos) {
                     state.cursorPos = { ...state.cursorAnchorPos };
                 } else if (state.currentStroke && state.currentStroke.points && state.currentStroke.points.length > 0) {
                     state.cursorPos = { ...state.currentStroke.points[0] };
