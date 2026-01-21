@@ -28,6 +28,7 @@ export interface RadialMenuCallbacks {
     onOpen?: () => void;  // Called when radial menu opens (to close pickers)
     onColorSelect?: (color: string) => void;  // Called when a color is selected from radial menu
     onSizeSelect?: (size: number) => void;  // Called when a size is selected from radial menu
+    onShapeSelect?: (shape: ShapeType) => void;  // Called when a shape is selected from radial menu
     getCurrentColor?: () => string;  // Get the current selected color
     getCurrentSize?: () => number;  // Get the current selected size
 }
@@ -63,6 +64,26 @@ let sizeButtonsVisible = false;
 const SIZE_VALUES = Array.from({ length: 6 }, (_, i) => Math.round(1 + (i * 39) / 5));
 const SIZE_BUTTON_SIZE = 48;
 
+// Shape buttons state
+let shapeButtons: HTMLElement[] = [];
+let shapeButtonsVisible = false;
+
+// Shape types in order (starting from up direction, clockwise)
+export type ShapeType = 'circle' | 'triangle' | 'right-triangle' | 'square' | 'pentagon' | 'hexagon' | 'octagon' | 'arrow' | 'square-brace' | 'curly-brace';
+const SHAPE_TYPES: ShapeType[] = [
+    'circle',          // 1. Circle
+    'triangle',        // 2. Equilateral triangle
+    'right-triangle',  // 3. Straight-corner triangle
+    'square',          // 4. Square
+    'pentagon',        // 5. Pentagon
+    'hexagon',         // 6. Hexagon
+    'octagon',         // 7. Octagon
+    'arrow',           // 8. Arrow (outline)
+    'square-brace',    // 9. Square brace
+    'curly-brace'      // 10. Curly brace
+];
+const SHAPE_BUTTON_SIZE = 48;
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
@@ -78,9 +99,10 @@ export function initRadialMenu(cb: RadialMenuCallbacks): void {
         strokeBtn = radialMenuEl.querySelector('.radial-btn-stroke');
         operationsBtn = radialMenuEl.querySelector('.radial-btn-operations');
 
-        // Create color and size buttons
+        // Create color, size, and shape buttons
         createColorButtons();
         createSizeButtons();
+        createShapeButtons();
 
         // Set up click handlers
         radialMenuEl.addEventListener('click', (e) => {
@@ -138,6 +160,7 @@ export function hideRadialMenu(): void {
     // Hide any sub-menus
     hideColorButtons();
     hideSizeButtons();
+    hideShapeButtons();
 
     // Reset selection state
     selectedAction = null;
@@ -262,6 +285,9 @@ export function updateRadialMenuPosition(): void {
     if (isVisible) {
         positionRadialMenu();
         updateColorButtonPositions();
+        if (shapeButtonsVisible) {
+            positionShapeButtons();
+        }
     }
 }
 
@@ -324,6 +350,8 @@ function selectButton(action: RadialMenuAction): void {
     if (action === 'colors') {
         showColorButtons();
         showSizeButtons();
+    } else if (action === 'shapes') {
+        showShapeButtons();
     }
 
     // Wait for animation to complete
@@ -350,6 +378,7 @@ function deselectButton(): void {
     // Hide sub-menus (animation happens simultaneously)
     hideColorButtons();
     hideSizeButtons();
+    hideShapeButtons();
 
     // Fade in all buttons (add visible back, remove faded)
     for (const btn of getAllButtons()) {
@@ -724,6 +753,174 @@ function hideSizeButtons(): void {
     sizeButtonsVisible = false;
 
     for (const btn of sizeButtons) {
+        btn.classList.remove('visible');
+    }
+}
+
+// ============================================================================
+// SHAPE BUTTONS
+// ============================================================================
+
+/**
+ * Get SVG icon for a shape type.
+ * All icons are designed for a 24x24 viewBox with stroke outlines.
+ */
+function getShapeSVG(shape: ShapeType): string {
+    const strokeWidth = 2;
+    const stroke = 'currentColor';
+    const fill = 'none';
+
+    switch (shape) {
+        case 'circle':
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <circle cx="12" cy="12" r="9" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}"/>
+            </svg>`;
+
+        case 'triangle':
+            // Equilateral triangle pointing up
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <polygon points="12,3 22,21 2,21" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}" stroke-linejoin="round"/>
+            </svg>`;
+
+        case 'right-triangle':
+            // Right-angle triangle (90° at bottom-left)
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <polygon points="3,21 3,3 21,21" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}" stroke-linejoin="round"/>
+            </svg>`;
+
+        case 'square':
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <rect x="3" y="3" width="18" height="18" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}"/>
+            </svg>`;
+
+        case 'pentagon':
+            // Regular pentagon pointing up
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <polygon points="12,2 22,9 19,21 5,21 2,9" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}" stroke-linejoin="round"/>
+            </svg>`;
+
+        case 'hexagon':
+            // Regular hexagon (flat top)
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <polygon points="6,3 18,3 23,12 18,21 6,21 1,12" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}" stroke-linejoin="round"/>
+            </svg>`;
+
+        case 'octagon':
+            // Regular octagon
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <polygon points="8,2 16,2 22,8 22,16 16,22 8,22 2,16 2,8" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}" stroke-linejoin="round"/>
+            </svg>`;
+
+        case 'arrow':
+            // Arrow outline pointing right
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <polygon points="2,8 14,8 14,3 22,12 14,21 14,16 2,16" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}" stroke-linejoin="round"/>
+            </svg>`;
+
+        case 'square-brace':
+            // Square bracket shape [
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <polyline points="16,3 8,3 8,21 16,21" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`;
+
+        case 'curly-brace':
+            // Curly brace shape {
+            return `<svg viewBox="0 0 24 24" width="24" height="24">
+                <path d="M16,3 C13,3 12,5 12,8 L12,10 C12,11 11,12 9,12 C11,12 12,13 12,14 L12,16 C12,19 13,21 16,21" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}" stroke-linecap="round"/>
+            </svg>`;
+    }
+}
+
+/**
+ * Create shape button elements and add them to the radial menu.
+ * Buttons are created hidden and will be shown when the shapes action is selected.
+ */
+function createShapeButtons(): void {
+    if (!radialMenuEl) return;
+
+    shapeButtons = SHAPE_TYPES.map((shape, index) => {
+        const btn = document.createElement('div');
+        btn.className = 'radial-shape-btn';
+        btn.dataset.shape = shape;
+        btn.dataset.index = index.toString();
+        btn.innerHTML = getShapeSVG(shape);
+
+        btn.addEventListener('pointerup', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (callbacks.onShapeSelect) {
+                callbacks.onShapeSelect(shape);
+            }
+            // Close the radial menu after selecting a shape
+            hideRadialMenu();
+        });
+
+        radialMenuEl!.appendChild(btn);
+        return btn;
+    });
+}
+
+/**
+ * Calculate the radius for shape buttons.
+ * 10 buttons of SHAPE_BUTTON_SIZE arranged in a circle.
+ */
+function getShapeButtonsRadius(): number {
+    // For 10 buttons, calculate radius so they don't overlap
+    // Using the formula: radius = buttonSize / (2 * sin(π / n))
+    const baseRadius = SHAPE_BUTTON_SIZE / (2 * Math.sin(Math.PI / SHAPE_TYPES.length));
+    return baseRadius + SHAPE_BUTTON_SIZE / 8;  // Add small padding
+}
+
+/**
+ * Position shape buttons in a circle around the center.
+ * Starting from the top (up direction) and going clockwise.
+ */
+function positionShapeButtons(): void {
+    if (!shapeButtons.length) return;
+
+    const cursorScreenPos = getCursorScreenPos();
+    const halfButton = SHAPE_BUTTON_SIZE / 2;
+    const centerX = cursorScreenPos.x;
+    const centerY = cursorScreenPos.y + TOOLBAR_HEIGHT;
+
+    const radius = getShapeButtonsRadius();
+
+    for (let i = 0; i < shapeButtons.length; i++) {
+        // Start from top (-π/2) and go clockwise
+        const angle = (i / shapeButtons.length) * 2 * Math.PI - Math.PI / 2;
+        const x = centerX + Math.cos(angle) * radius - halfButton;
+        const y = centerY + Math.sin(angle) * radius - halfButton;
+        shapeButtons[i].style.left = `${x}px`;
+        shapeButtons[i].style.top = `${y}px`;
+    }
+}
+
+/**
+ * Show shape buttons with animation.
+ */
+function showShapeButtons(): void {
+    if (shapeButtonsVisible) return;
+    shapeButtonsVisible = true;
+
+    // Position buttons first (while invisible)
+    positionShapeButtons();
+
+    // Then make them visible with animation
+    requestAnimationFrame(() => {
+        for (const btn of shapeButtons) {
+            btn.classList.add('visible');
+        }
+    });
+}
+
+/**
+ * Hide shape buttons with animation.
+ */
+function hideShapeButtons(): void {
+    if (!shapeButtonsVisible) return;
+    shapeButtonsVisible = false;
+
+    for (const btn of shapeButtons) {
         btn.classList.remove('visible');
     }
 }
