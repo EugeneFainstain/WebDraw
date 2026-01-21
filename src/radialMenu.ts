@@ -70,6 +70,10 @@ const SIZE_BUTTON_SIZE = 48;
 let shapeButtons: HTMLElement[] = [];
 let shapeButtonsVisible = false;
 
+// Session tracking: maps button index to stroke index for shapes added in current session
+// This allows toggling (remove on second click) within the same radial menu session
+let sessionShapeStrokes: Map<number, number> = new Map();
+
 // Shape types in order (starting from up direction, clockwise)
 export type ShapeType = 'circle' | 'triangle' | 'right-triangle' | 'square' | 'pentagon' | 'hexagon' | 'octagon' | 'arrow' | 'square-brace' | 'curly-brace';
 const SHAPE_TYPES: ShapeType[] = [
@@ -269,8 +273,9 @@ function generateShapePoints(shape: ShapeType, cx: number, cy: number, size: num
  * @param shape The shape type to create
  * @param screenX Screen X coordinate of the button center
  * @param screenY Screen Y coordinate of the button center
+ * @returns The index of the newly created stroke
  */
-function createShapeStroke(shape: ShapeType, screenX: number, screenY: number): void {
+function createShapeStroke(shape: ShapeType, screenX: number, screenY: number): number {
     // Convert screen position to canvas coordinates
     // Note: screenY needs to have toolbar height subtracted since screenToCanvas expects canvas-relative coords
     const canvasPos = screenToCanvas({ x: screenX, y: screenY - TOOLBAR_HEIGHT });
@@ -300,6 +305,49 @@ function createShapeStroke(shape: ShapeType, screenX: number, screenY: number): 
     const newStrokeIdx = state.strokeHistory.length - 1;
     state.highlightedStrokes.clear();
     state.highlightedStrokes.add(newStrokeIdx);
+
+    // Redraw the canvas
+    redraw();
+
+    return newStrokeIdx;
+}
+
+/**
+ * Remove a stroke from the stroke history by its index.
+ * Adjusts session tracking for any strokes that shift position.
+ * @param strokeIdx The index of the stroke to remove
+ */
+function removeShapeStroke(strokeIdx: number): void {
+    if (strokeIdx < 0 || strokeIdx >= state.strokeHistory.length) return;
+
+    // Remove the stroke
+    state.strokeHistory.splice(strokeIdx, 1);
+
+    // Clear highlight if this stroke was highlighted
+    state.highlightedStrokes.delete(strokeIdx);
+
+    // Adjust highlighted stroke indices for strokes after the removed one
+    const newHighlighted = new Set<number>();
+    for (const idx of state.highlightedStrokes) {
+        if (idx > strokeIdx) {
+            newHighlighted.add(idx - 1);
+        } else {
+            newHighlighted.add(idx);
+        }
+    }
+    state.highlightedStrokes = newHighlighted;
+
+    // Adjust session tracking: decrement indices for strokes after the removed one
+    const newSessionStrokes = new Map<number, number>();
+    for (const [btnIdx, sIdx] of sessionShapeStrokes) {
+        if (sIdx > strokeIdx) {
+            newSessionStrokes.set(btnIdx, sIdx - 1);
+        } else if (sIdx < strokeIdx) {
+            newSessionStrokes.set(btnIdx, sIdx);
+        }
+        // If sIdx === strokeIdx, we don't add it (it's being removed)
+    }
+    sessionShapeStrokes = newSessionStrokes;
 
     // Redraw the canvas
     redraw();
@@ -386,6 +434,9 @@ export function hideRadialMenu(): void {
     // Reset selection state
     selectedAction = null;
     isAnimating = false;
+
+    // Clear session tracking - end of radial menu session
+    sessionShapeStrokes.clear();
 
     // Animate buttons out with scale effect
     for (const btn of getAllButtons()) {
@@ -1070,13 +1121,24 @@ function createShapeButtons(): void {
             e.stopPropagation();
             e.preventDefault();
 
-            // Get the button's center position in screen coordinates
-            const rect = btn.getBoundingClientRect();
-            const buttonCenterX = rect.left + rect.width / 2;
-            const buttonCenterY = rect.top + rect.height / 2;
+            // Check if this button already added a shape in this session
+            if (sessionShapeStrokes.has(index)) {
+                // Remove the shape and clear from session
+                const strokeIdx = sessionShapeStrokes.get(index)!;
+                removeShapeStroke(strokeIdx);
+                // Note: removeShapeStroke already removes from sessionShapeStrokes
+            } else {
+                // Get the button's center position in screen coordinates
+                const rect = btn.getBoundingClientRect();
+                const buttonCenterX = rect.left + rect.width / 2;
+                const buttonCenterY = rect.top + rect.height / 2;
 
-            // Create the shape stroke at the button's position
-            createShapeStroke(shape, buttonCenterX, buttonCenterY);
+                // Create the shape stroke at the button's position
+                const strokeIdx = createShapeStroke(shape, buttonCenterX, buttonCenterY);
+
+                // Track this shape in the session
+                sessionShapeStrokes.set(index, strokeIdx);
+            }
         });
 
         radialMenuEl!.appendChild(btn);
