@@ -12,9 +12,11 @@
  * from the center matching the cursor's outer ring size.
  */
 
-import { state, TOOLBAR_HEIGHT } from './state';
+import { state, TOOLBAR_HEIGHT, Stroke } from './state';
 import { getCursorScreenPos } from './cursorMovement';
 import { COLORS } from './colorPicker';
+import { screenToCanvas, redraw } from './rendering';
+import { Point } from './eventHandler';
 
 // ============================================================================
 // TYPES
@@ -83,6 +85,225 @@ const SHAPE_TYPES: ShapeType[] = [
     'curly-brace'      // 10. Curly brace
 ];
 const SHAPE_BUTTON_SIZE = 48;
+
+// ============================================================================
+// SHAPE STROKE GENERATION
+// ============================================================================
+
+/**
+ * Generate points for a regular polygon centered at (cx, cy) with given radius.
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param radius Distance from center to vertices
+ * @param sides Number of sides
+ * @param startAngle Starting angle in radians (default: -π/2 for top)
+ * @returns Array of points forming a closed polygon
+ */
+function generatePolygonPoints(cx: number, cy: number, radius: number, sides: number, startAngle: number = -Math.PI / 2): Point[] {
+    const points: Point[] = [];
+    for (let i = 0; i <= sides; i++) {
+        const angle = startAngle + (i / sides) * 2 * Math.PI;
+        points.push({
+            x: cx + Math.cos(angle) * radius,
+            y: cy + Math.sin(angle) * radius
+        });
+    }
+    return points;
+}
+
+/**
+ * Generate points for a circle approximated by many line segments.
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param radius Circle radius
+ * @returns Array of points forming a closed circle
+ */
+function generateCirclePoints(cx: number, cy: number, radius: number): Point[] {
+    const segments = 64;  // Smooth circle
+    return generatePolygonPoints(cx, cy, radius, segments, -Math.PI / 2);
+}
+
+/**
+ * Generate points for a right-angle triangle (90° at bottom-left).
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param size Size of the bounding box
+ * @returns Array of points forming a closed triangle
+ */
+function generateRightTrianglePoints(cx: number, cy: number, size: number): Point[] {
+    const halfSize = size / 2;
+    return [
+        { x: cx - halfSize, y: cy + halfSize },  // Bottom-left (right angle)
+        { x: cx - halfSize, y: cy - halfSize },  // Top-left
+        { x: cx + halfSize, y: cy + halfSize },  // Bottom-right
+        { x: cx - halfSize, y: cy + halfSize }   // Close back to start
+    ];
+}
+
+/**
+ * Generate points for an arrow shape pointing right.
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param size Size of the bounding box
+ * @returns Array of points forming a closed arrow
+ */
+function generateArrowPoints(cx: number, cy: number, size: number): Point[] {
+    const halfSize = size / 2;
+    const shaftWidth = size * 0.35;
+    const headStart = size * 0.25;
+    return [
+        { x: cx - halfSize, y: cy - shaftWidth / 2 },  // Top-left of shaft
+        { x: cx - halfSize + headStart, y: cy - shaftWidth / 2 },  // Before arrow head top
+        { x: cx - halfSize + headStart, y: cy - halfSize },  // Arrow head top outer
+        { x: cx + halfSize, y: cy },  // Arrow tip
+        { x: cx - halfSize + headStart, y: cy + halfSize },  // Arrow head bottom outer
+        { x: cx - halfSize + headStart, y: cy + shaftWidth / 2 },  // Before arrow head bottom
+        { x: cx - halfSize, y: cy + shaftWidth / 2 },  // Bottom-left of shaft
+        { x: cx - halfSize, y: cy - shaftWidth / 2 }   // Close back to start
+    ];
+}
+
+/**
+ * Generate points for a square bracket shape [.
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param size Size of the bounding box
+ * @returns Array of points (not closed - it's a bracket)
+ */
+function generateSquareBracePoints(cx: number, cy: number, size: number): Point[] {
+    const halfSize = size / 2;
+    const bracketWidth = size * 0.3;
+    return [
+        { x: cx + bracketWidth, y: cy - halfSize },   // Top right
+        { x: cx - bracketWidth, y: cy - halfSize },   // Top left
+        { x: cx - bracketWidth, y: cy + halfSize },   // Bottom left
+        { x: cx + bracketWidth, y: cy + halfSize }    // Bottom right
+    ];
+}
+
+/**
+ * Generate points for a curly brace shape {.
+ * Uses bezier-like points for a smooth curve.
+ * @param cx Center X coordinate
+ * @param cy Center Y coordinate
+ * @param size Size of the bounding box
+ * @returns Array of points (not closed - it's a brace)
+ */
+function generateCurlyBracePoints(cx: number, cy: number, size: number): Point[] {
+    const halfSize = size / 2;
+    const points: Point[] = [];
+    const segments = 32;
+
+    // Generate the curly brace as a parametric curve
+    // Top half: from top-right curving to center-left
+    for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        let x: number, y: number;
+
+        if (t <= 0.5) {
+            // Top section - curve from top to middle
+            const localT = t * 2;
+            x = cx + halfSize * 0.3 - halfSize * 0.6 * Math.sin(localT * Math.PI / 2);
+            y = cy - halfSize + halfSize * localT;
+        } else {
+            // Bottom section - curve from middle to bottom
+            const localT = (t - 0.5) * 2;
+            x = cx - halfSize * 0.3 + halfSize * 0.6 * Math.sin(localT * Math.PI / 2);
+            y = cy + halfSize * localT;
+        }
+        points.push({ x, y });
+    }
+
+    return points;
+}
+
+/**
+ * Generate stroke points for a given shape type.
+ * @param shape The shape type
+ * @param cx Center X in canvas coordinates
+ * @param cy Center Y in canvas coordinates
+ * @param size Size of the shape's bounding box
+ * @returns Array of points for the stroke
+ */
+function generateShapePoints(shape: ShapeType, cx: number, cy: number, size: number): Point[] {
+    const radius = size / 2;
+
+    switch (shape) {
+        case 'circle':
+            return generateCirclePoints(cx, cy, radius);
+
+        case 'triangle':
+            // Equilateral triangle - 3 sides, pointing up
+            return generatePolygonPoints(cx, cy, radius, 3, -Math.PI / 2);
+
+        case 'right-triangle':
+            return generateRightTrianglePoints(cx, cy, size);
+
+        case 'square':
+            // Square - 4 sides, rotated 45° so sides are horizontal/vertical
+            return generatePolygonPoints(cx, cy, radius * Math.SQRT2, 4, -Math.PI / 4);
+
+        case 'pentagon':
+            return generatePolygonPoints(cx, cy, radius, 5, -Math.PI / 2);
+
+        case 'hexagon':
+            // Flat-top hexagon
+            return generatePolygonPoints(cx, cy, radius, 6, 0);
+
+        case 'octagon':
+            return generatePolygonPoints(cx, cy, radius, 8, -Math.PI / 8);
+
+        case 'arrow':
+            return generateArrowPoints(cx, cy, size);
+
+        case 'square-brace':
+            return generateSquareBracePoints(cx, cy, size);
+
+        case 'curly-brace':
+            return generateCurlyBracePoints(cx, cy, size);
+    }
+}
+
+/**
+ * Create a stroke from a shape and add it to the stroke history.
+ * @param shape The shape type to create
+ * @param screenX Screen X coordinate of the button center
+ * @param screenY Screen Y coordinate of the button center
+ */
+function createShapeStroke(shape: ShapeType, screenX: number, screenY: number): void {
+    // Convert screen position to canvas coordinates
+    // Note: screenY needs to have toolbar height subtracted since screenToCanvas expects canvas-relative coords
+    const canvasPos = screenToCanvas({ x: screenX, y: screenY - TOOLBAR_HEIGHT });
+
+    // Shape size is 2x the button diameter, scaled by current view transform
+    const shapeSize = (SHAPE_BUTTON_SIZE * 2) / state.viewTransform.scale;
+
+    // Get current color and size from callbacks
+    const color = callbacks.getCurrentColor ? callbacks.getCurrentColor() : '#FF8000';
+    const size = callbacks.getCurrentSize ? callbacks.getCurrentSize() : 6;
+
+    // Generate the shape points
+    const points = generateShapePoints(shape, canvasPos.x, canvasPos.y, shapeSize);
+
+    // Create the stroke
+    const stroke: Stroke = {
+        color,
+        size,
+        points,
+        originalPoints: [...points]  // Keep a copy of original points
+    };
+
+    // Add to stroke history
+    state.strokeHistory.push(stroke);
+
+    // Select the new stroke
+    const newStrokeIdx = state.strokeHistory.length - 1;
+    state.highlightedStrokes.clear();
+    state.highlightedStrokes.add(newStrokeIdx);
+
+    // Redraw the canvas
+    redraw();
+}
 
 // ============================================================================
 // INITIALIZATION
@@ -848,11 +1069,14 @@ function createShapeButtons(): void {
         btn.addEventListener('pointerup', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            if (callbacks.onShapeSelect) {
-                callbacks.onShapeSelect(shape);
-            }
-            // Close the radial menu after selecting a shape
-            hideRadialMenu();
+
+            // Get the button's center position in screen coordinates
+            const rect = btn.getBoundingClientRect();
+            const buttonCenterX = rect.left + rect.width / 2;
+            const buttonCenterY = rect.top + rect.height / 2;
+
+            // Create the shape stroke at the button's position
+            createShapeStroke(shape, buttonCenterX, buttonCenterY);
         });
 
         radialMenuEl!.appendChild(btn);
